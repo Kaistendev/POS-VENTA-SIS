@@ -18,13 +18,23 @@ export interface Client {
   updated_at?: Date | string;
 }
 
+export interface Category {
+  id?: number;
+  name: string;
+  created_at?: Date | string;
+  updated_at?: Date | string;
+}
+
 export interface Product {
   id?: number;
   sku: string;
   name: string;
   description?: string;
+  category_id?: number;
+  price_purchase: number;
   price_sale: number;
   stock?: number;
+  min_stock?: number;
   created_at?: Date | string;
   updated_at?: Date | string;
 }
@@ -53,6 +63,7 @@ export interface SaleItem {
   product_id: number;
   quantity: number;
   unit_price: number;
+  purchase_price: number;
   created_at?: Date | string;
   updated_at?: Date | string;
 }

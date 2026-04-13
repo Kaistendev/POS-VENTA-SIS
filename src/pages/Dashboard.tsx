@@ -1,30 +1,35 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { TrendingUp, Package, Users, DollarSign, AlertTriangle } from 'lucide-react';
-import { AreaChart, Area, XPath, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, XAxis } from 'recharts';
+import { TrendingUp, Package, Users, DollarSign, AlertTriangle, ShoppingBag } from 'lucide-react';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { Product } from '../common/types';
 
 export default function Dashboard() {
-  const [stats, setStats] = useState({ todayRevenue: 0, todaySalesCount: 0, activeProducts: 0, totalClients: 0 });
-  const [lowStock, setLowStock] = useState([]);
-  const [chartData, setChartData] = useState([]);
+  const [stats, setStats] = useState({ todayRevenue: 0, todayProfit: 0, todaySalesCount: 0, activeProducts: 0, totalClients: 0 });
+  const [lowStock, setLowStock] = useState<Product[]>([]);
+  const [chartData, setChartData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const loadDashboardData = async () => {
       if (window.api) {
-        const s = await window.api.getDashboardStats();
-        const ls = await window.api.getLowStock();
-        const ws = await window.api.getWeeklySales();
-        
-        setStats(s);
-        setLowStock(ls || []);
-        
-        // Formatear fechas para el gráfico (ej: 2024-04-09 -> 09 Abr)
-        const formattedChart = (ws || []).map(d => ({
-          name: new Date(d.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }),
-          total: d.total
-        }));
-        setChartData(formattedChart);
+        try {
+          const s = await window.api.getDashboardStats();
+          const ls = await window.api.getLowStock();
+          const ws = await window.api.getWeeklySales();
+          
+          setStats(s || { todayRevenue: 0, todayProfit: 0, todaySalesCount: 0, activeProducts: 0, totalClients: 0 });
+          setLowStock(ls || []);
+          
+          // Formatear fechas para el gráfico (ej: 2024-04-09 -> 09 Abr)
+          const formattedChart = (ws || []).map(d => ({
+            name: new Date(d.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }),
+            total: d.total
+          }));
+          setChartData(formattedChart);
+        } catch (error) {
+          console.error("Error loading dashboard data:", error);
+        }
       }
       setLoading(false);
     };
@@ -33,7 +38,8 @@ export default function Dashboard() {
 
   const statCards = [
     { title: 'Ingresos de Hoy', value: `$${Number(stats.todayRevenue).toFixed(2)}`, icon: DollarSign, color: 'text-green-400', bg: 'bg-green-400/10' },
-    { title: 'Ventas de Hoy', value: stats.todaySalesCount.toString(), icon: TrendingUp, color: 'text-blue-400', bg: 'bg-blue-400/10' },
+    { title: 'Ganancia de Hoy', value: `$${Number(stats.todayProfit).toFixed(2)}`, icon: TrendingUp, color: 'text-emerald-400', bg: 'bg-emerald-400/10' },
+    { title: 'Ventas de Hoy', value: stats.todaySalesCount.toString(), icon: ShoppingBag, color: 'text-blue-400', bg: 'bg-blue-400/10' },
     { title: 'Productos con Stock', value: stats.activeProducts.toString(), icon: Package, color: 'text-purple-400', bg: 'bg-purple-400/10' },
     { title: 'Clientes Totales', value: stats.totalClients.toString(), icon: Users, color: 'text-orange-400', bg: 'bg-orange-400/10' },
   ];
@@ -46,7 +52,7 @@ export default function Dashboard() {
         <h2 className="text-3xl font-bold tracking-tight text-white m-0">Resumen de Negocio</h2>
       </div>
       
-      <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {statCards.map((stat, idx) => {
           const Icon = stat.icon;
           return (
@@ -65,8 +71,8 @@ export default function Dashboard() {
         {/* Gráfico de Ventas */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="lg:col-span-2 p-6 rounded-2xl glass-panel border border-white/5">
           <h3 className="text-white font-bold mb-6 flex items-center"><TrendingUp className="w-5 h-5 mr-2 text-primary" /> Tendencia de Ventas (7 días)</h3>
-          <div className="h-[300px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="h-[300px] w-full min-h-[300px]">
+            <ResponsiveContainer width="99%" height={300}>
               <AreaChart data={chartData}>
                 <defs>
                   <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
@@ -95,8 +101,8 @@ export default function Dashboard() {
                   <span className="text-[10px] text-gray-500 uppercase tracking-tighter">{p.sku}</span>
                 </div>
                 <div className="text-right">
-                   <span className={`px-2 py-1 rounded text-[10px] font-black ${p.stock <= 5 ? 'bg-red-500/20 text-red-400' : 'bg-orange-500/20 text-orange-400'}`}>
-                    {p.stock} UNIDADES
+                   <span className={`px-2 py-1 rounded text-[10px] font-black ${(p.stock ?? 0) <= 5 ? 'bg-red-500/20 text-red-400' : 'bg-orange-500/20 text-orange-400'}`}>
+                    {p.stock ?? 0} UNIDADES
                   </span>
                 </div>
               </div>

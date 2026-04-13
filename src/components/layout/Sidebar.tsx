@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, ShoppingCart, Package, Users, Package2, Wallet } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, Package, Users, Package2, Wallet, Tags } from 'lucide-react';
 import { cn } from '../../lib/utils.ts';
 
 export default function Sidebar() {
@@ -9,6 +9,7 @@ export default function Sidebar() {
     { name: 'Terminal POS', path: '/sales', icon: ShoppingCart },
     { name: 'Caja', path: '/cash', icon: Wallet },
     { name: 'Productos', path: '/products', icon: Package },
+    { name: 'Categorías', path: '/categories', icon: Tags },
     { name: 'Clientes', path: '/clients', icon: Users },
   ];
 

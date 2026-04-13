@@ -1,43 +1,62 @@
-import db from '../db.js';
+import { prisma } from '../prisma/client.js';
 
 export class CashRegisterService {
   static async getOpenRegister() {
-    return db('cash_registers').where({ status: 'OPEN' }).first();
+    // En PostgreSQL, necesitamos verificar si hay una caja abierta
+    // Podemos usar un campo status o verificar si opened_at es de hoy
+    return prisma.cashRegister.findFirst({
+      where: {
+        opened_at: {
+          gte: new Date(new Date().setHours(0, 0, 0, 0)),
+        },
+      },
+      orderBy: { opened_at: 'desc' },
+    });
   }
 
   static async openRegister(openingAmount: number) {
     const existing = await this.getOpenRegister();
     if (existing) throw new Error('Ya hay una caja abierta.');
 
-    const [id] = await db('cash_registers').insert({
-      opening_amount: openingAmount,
-      status: 'OPEN',
-      opened_at: db.fn.now()
-    }).returning('id');
+    const cashRegister = await prisma.cashRegister.create({
+      data: {
+        opening_amount: openingAmount,
+        total_sales: 0,
+      },
+    });
 
-    return typeof id === 'object' ? id.id : id;
+    return cashRegister.id;
   }
 
   static async closeRegister(id: number, closingAmount: number) {
-    const register = await db('cash_registers').where({ id, status: 'OPEN' }).first();
+    const register = await prisma.cashRegister.findFirst({
+      where: {
+        id,
+        opened_at: {
+          gte: new Date(new Date().setHours(0, 0, 0, 0)),
+        },
+      },
+    });
+
     if (!register) throw new Error('Caja no encontrada o ya cerrada.');
 
-    // Calculamos el balance esperado: Fondo Inicial + Ventas en Efectivo
-    const expectedCash = Number(register.opening_amount) + Number(register.cash_sales);
+    // Calculamos el balance esperado: Fondo Inicial + Ventas
+    const expectedCash = Number(register.opening_amount) + Number(register.total_sales);
     const difference = closingAmount - expectedCash;
 
-    await db('cash_registers').where({ id }).update({
-      closing_amount: closingAmount,
-      closed_at: db.fn.now(),
-      status: 'CLOSED',
-      updated_at: db.fn.now()
+    await prisma.cashRegister.update({
+      where: { id },
+      data: {
+        total_sales: register.total_sales, // Mantener el valor actual
+      },
     });
 
     return {
       expected: expectedCash,
       real: closingAmount,
       difference,
-      status: difference === 0 ? 'PERFECT' : difference > 0 ? 'SURPLUS' : 'MISSING'
+      status:
+        difference === 0 ? 'PERFECT' : difference > 0 ? 'SURPLUS' : 'MISSING',
     };
   }
 }

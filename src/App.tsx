@@ -14,9 +14,11 @@ import Sales from './pages/Sales.tsx';
 import Products from './pages/Products.tsx';
 import Clients from './pages/Clients.tsx';
 import Cash from './pages/Cash.tsx';
+import Categories from './pages/Categories.tsx';
+import { useAuthStore } from './store/useStore.ts';
 
 export default function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const { isAuthenticated, login } = useAuthStore();
 
   return (
     <ThemeProvider theme={darkTheme}>
@@ -27,7 +29,7 @@ export default function App() {
           <Route 
             path="/login" 
             element={
-              isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login onLogin={() => setIsAuthenticated(true)} />
+              isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login onLogin={login} />
             } 
           />
           
@@ -42,6 +44,7 @@ export default function App() {
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="sales" element={<Sales />} />
             <Route path="products" element={<Products />} />
+            <Route path="categories" element={<Categories />} />
             <Route path="clients" element={<Clients />} />
             <Route path="cash" element={<Cash />} />
           </Route>

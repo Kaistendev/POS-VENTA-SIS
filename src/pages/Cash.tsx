@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Wallet, Lock, Unlock, Calculator, AlertCircle, CheckCircle2, TrendingUp, CreditCard, Banknote } from 'lucide-react';
+import { useCashStore } from '../store/useStore.ts';
 
 export default function Cash() {
-  const [register, setRegister] = useState(null);
+  const { activeRegister, setActiveRegister } = useCashStore();
   const [loading, setLoading] = useState(true);
   const [openingAmount, setOpeningAmount] = useState('');
   const [closingAmount, setClosingAmount] = useState('');
@@ -14,7 +15,7 @@ export default function Cash() {
     setLoading(true);
     if (window.api) {
       const active = await window.api.getOpenRegister();
-      setRegister(active || null);
+      setActiveRegister(active || null);
     }
     setLoading(false);
   };
@@ -43,12 +44,12 @@ export default function Cash() {
     const amount = parseFloat(closingAmount);
     if (isNaN(amount) || amount < 0) return setError('Ingresa el monto contado.');
 
-    const res = await window.api.closeRegister(register.id, amount);
+    const res = await window.api.closeRegister(activeRegister.id, amount);
     if (res.success === false) {
       setError(res.message);
     } else {
       setResult(res);
-      setRegister(null);
+      setActiveRegister(null);
     }
   };
 
@@ -63,16 +64,16 @@ export default function Cash() {
           <h2 className="text-3xl font-bold text-white m-0">Control de Caja</h2>
           <p className="text-gray-400 mt-1">Apertura, arqueo y cierre diario</p>
         </div>
-        <div className={`px-4 py-2 rounded-full text-xs font-bold uppercase tracking-widest flex items-center ${register ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
-          {register ? <Unlock className="w-3 h-3 mr-2" /> : <Lock className="w-3 h-3 mr-2" />}
-          {register ? 'Caja Abierta' : 'Caja Cerrada'}
+        <div className={`px-4 py-2 rounded-full text-xs font-bold uppercase tracking-widest flex items-center ${activeRegister ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
+          {activeRegister ? <Unlock className="w-3 h-3 mr-2" /> : <Lock className="w-3 h-3 mr-2" />}
+          {activeRegister ? 'Caja Abierta' : 'Caja Cerrada'}
         </div>
       </div>
 
       <AnimatePresence mode="wait">
         
         {/* RESULTADO DEL CIERRE (MOSTRAR DESPUÉS DE CERRAR) */}
-        {result && !register && (
+        {result && !activeRegister && (
           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="glass-panel p-8 rounded-3xl border border-white/5 text-center space-y-6">
             <div className={`w-20 h-20 mx-auto rounded-full flex items-center justify-center ${result.status === 'PERFECT' ? 'bg-green-500/20 text-green-500' : 'bg-orange-500/20 text-orange-500'}`}>
               {result.status === 'PERFECT' ? <CheckCircle2 className="w-12 h-12" /> : <AlertCircle className="w-12 h-12" />}
@@ -104,7 +105,7 @@ export default function Cash() {
         )}
 
         {/* MODO APERTURA */}
-        {!register && !result && (
+        {!activeRegister && !result && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-md mx-auto">
             <div className="glass-panel p-8 rounded-3xl border border-white/5 space-y-6">
               <div className="p-4 bg-primary/10 rounded-2xl w-fit mx-auto">
@@ -130,7 +131,7 @@ export default function Cash() {
         )}
 
         {/* MODO CIERRE / RESUMEN */}
-        {register && (
+        {activeRegister && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-1 lg:grid-cols-5 gap-6">
             
             {/* Resumen Izquierdo */}
@@ -139,21 +140,21 @@ export default function Cash() {
                 <div className="col-span-2 p-4 bg-black/20 rounded-2xl border border-white/5 flex justify-between items-center">
                    <div className="flex items-center">
                       <div className="p-3 bg-blue-500/10 rounded-xl mr-4"><TrendingUp className="text-blue-400 w-5 h-5" /></div>
-                      <div><span className="text-[10px] text-gray-500 uppercase block">Total Ventas</span><span className="text-2xl font-black text-white">${Number(register.total_sales).toFixed(2)}</span></div>
+                      <div><span className="text-[10px] text-gray-500 uppercase block">Total Ventas</span><span className="text-2xl font-black text-white">${Number(activeRegister.total_sales).toFixed(2)}</span></div>
                    </div>
-                   <div className="text-right"><span className="text-[10px] text-gray-500 block uppercase">Inició con</span><span className="text-sm font-medium text-gray-400">${Number(register.opening_amount).toFixed(2)}</span></div>
+                   <div className="text-right"><span className="text-[10px] text-gray-500 block uppercase">Inició con</span><span className="text-sm font-medium text-gray-400">${Number(activeRegister.opening_amount).toFixed(2)}</span></div>
                 </div>
                 
                 <div className="p-6 bg-green-500/5 border border-green-500/10 rounded-2xl text-center">
                   <Banknote className="w-8 h-8 text-green-400 mx-auto mb-2" />
                   <span className="text-[10px] text-green-400/50 uppercase block mb-1 font-bold">Ventas Efectivo</span>
-                  <span className="text-2xl font-bold text-white">${Number(register.cash_sales || 0).toFixed(2)}</span>
+                  <span className="text-2xl font-bold text-white">${Number(activeRegister.cash_sales || 0).toFixed(2)}</span>
                 </div>
 
                 <div className="p-6 bg-purple-500/5 border border-purple-500/10 rounded-2xl text-center">
                   <CreditCard className="w-8 h-8 text-purple-400 mx-auto mb-2" />
                   <span className="text-[10px] text-purple-400/50 uppercase block mb-1 font-bold">Ventas Tarjeta</span>
-                  <span className="text-2xl font-bold text-white">${Number(register.card_sales || 0).toFixed(2)}</span>
+                  <span className="text-2xl font-bold text-white">${Number(activeRegister.card_sales || 0).toFixed(2)}</span>
                 </div>
               </div>
 
@@ -186,7 +187,7 @@ export default function Cash() {
                 </form>
 
                 <div className="pt-6 border-t border-white/5 text-center">
-                   <p className="text-[10px] text-gray-500 uppercase tracking-widest">Abierto el {new Date(register.opened_at).toLocaleString()}</p>
+                   <p className="text-[10px] text-gray-500 uppercase tracking-widest">Abierto el {activeRegister.opened_at ? new Date(activeRegister.opened_at).toLocaleString() : 'N/A'}</p>
                 </div>
               </div>
             </div>

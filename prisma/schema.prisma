@@ -1,0 +1,150 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider     = "postgresql"
+  relationMode = "prisma"
+}
+
+model User {
+  id             Int        @id @default(autoincrement())
+  username       String     @unique @db.VarChar(255)
+  password_hash  String     @db.VarChar(255)
+  role           String     @db.VarChar(50)
+  created_at     DateTime   @default(now()) @map("created_at")
+  updated_at     DateTime   @updatedAt @map("updated_at")
+
+  audit_logs     AuditLog[]
+
+  @@map("users")
+}
+
+model Client {
+  id          Int      @id @default(autoincrement())
+  dni         String   @unique @db.VarChar(20)
+  name        String   @db.VarChar(255)
+  phone       String?  @db.VarChar(50)
+  code        String   @unique @db.VarChar(50)
+  tax_id      String?  @unique @db.VarChar(50)
+  created_at  DateTime @default(now()) @map("created_at")
+  updated_at  DateTime @updatedAt @map("updated_at")
+
+  sales       Sale[]
+
+  @@map("clients")
+}
+
+model Category {
+  id          Int      @id @default(autoincrement())
+  name        String   @db.VarChar(255)
+  created_at  DateTime @default(now()) @map("created_at")
+  updated_at  DateTime @updatedAt @map("updated_at")
+
+  products    Product[]
+
+  @@map("categories")
+}
+
+model Product {
+  id               Int       @id @default(autoincrement())
+  sku              String    @unique @db.VarChar(100)
+  name             String    @db.VarChar(255)
+  description      String?   @db.Text
+  category_id      Int?
+  category         Category? @relation(fields: [category_id], references: [id], onDelete: SetNull)
+  price_purchase   Float     @map("price_purchase")
+  price_sale       Float     @map("price_sale")
+  stock            Int       @default(0)
+  min_stock        Int?      @default(5)
+  created_at       DateTime  @default(now()) @map("created_at")
+  updated_at       DateTime  @updatedAt @map("updated_at")
+
+  inventory_movements InventoryMovement[]
+  sale_items       SaleItem[]
+
+  @@index([category_id])
+  @@map("products")
+}
+
+model CashRegister {
+  id             Int      @id @default(autoincrement())
+  opened_at      DateTime @default(now()) @map("opened_at")
+  opening_amount Float    @map("opening_amount")
+  total_sales    Float    @default(0) @map("total_sales")
+  created_at     DateTime @default(now()) @map("created_at")
+  updated_at     DateTime @updatedAt @map("updated_at")
+
+  sales          Sale[]
+
+  @@map("cash_registers")
+}
+
+model Sale {
+  id               Int        @id @default(autoincrement())
+  cash_register_id Int
+  cash_register    CashRegister @relation(fields: [cash_register_id], references: [id])
+  client_id        Int
+  client           Client     @relation(fields: [client_id], references: [id])
+  total            Float
+  created_at       DateTime   @default(now()) @map("created_at")
+  updated_at       DateTime   @updatedAt @map("updated_at")
+
+  items            SaleItem[]
+
+  @@index([cash_register_id])
+  @@index([client_id])
+  @@index([created_at])
+  @@map("sales")
+}
+
+model SaleItem {
+  id              Int      @id @default(autoincrement())
+  sale_id         Int
+  sale            Sale     @relation(fields: [sale_id], references: [id], onDelete: Cascade)
+  product_id      Int
+  product         Product  @relation(fields: [product_id], references: [id])
+  quantity        Int
+  unit_price      Float
+  purchase_price  Float
+  created_at      DateTime @default(now()) @map("created_at")
+  updated_at      DateTime @updatedAt @map("updated_at")
+
+  @@index([sale_id])
+  @@index([product_id])
+  @@map("sale_items")
+}
+
+model InventoryMovement {
+  id          Int      @id @default(autoincrement())
+  product_id  Int
+  product     Product  @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  type        String   @db.VarChar(10) // ENTRADA | SALIDA
+  quantity    Int
+  created_at  DateTime @default(now()) @map("created_at")
+  updated_at  DateTime @updatedAt @map("updated_at")
+
+  @@index([product_id])
+  @@index([type])
+  @@map("inventory_movements")
+}
+
+model AuditLog {
+  id          Int      @id @default(autoincrement())
+  user_id     Int
+  user        User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  action      String   @db.VarChar(100)
+  entity      String   @db.VarChar(100)
+  entity_id   Int
+  created_at  DateTime @default(now()) @map("created_at")
+  updated_at  DateTime @updatedAt @map("updated_at")
+
+  @@index([user_id])
+  @@index([entity])
+  @@index([created_at])
+  @@map("audit_logs")
+}

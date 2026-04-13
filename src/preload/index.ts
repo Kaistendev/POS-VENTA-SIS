@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('api', {
   // Products
   getAllProducts: () => ipcRenderer.invoke('products:getAll'),
   createProduct: (productData: any, userId?: number) => ipcRenderer.invoke('products:create', productData, userId),
+  deleteProduct: (id: number) => ipcRenderer.invoke('products:delete', id),
   addProductStock: (productId: number, quantity: number, userId?: number) => ipcRenderer.invoke('products:addStock', productId, quantity, userId),
 
   // Auth
@@ -27,5 +28,10 @@ contextBridge.exposeInMainWorld('api', {
   // Sales
   getAllSales: () => ipcRenderer.invoke('sales:getAll'),
   getSaleDetails: (saleId: number) => ipcRenderer.invoke('sales:getDetails', saleId),
-  registerSale: (saleData: any, itemsData: any) => ipcRenderer.invoke('sales:register', saleData, itemsData)
+  registerSale: (saleData: any, itemsData: any) => ipcRenderer.invoke('sales:register', saleData, itemsData),
+
+  // Categories
+  getAllCategories: () => ipcRenderer.invoke('categories:getAll'),
+  createCategory: (categoryData: any) => ipcRenderer.invoke('categories:create', categoryData),
+  deleteCategory: (id: number) => ipcRenderer.invoke('categories:delete', id)
 });

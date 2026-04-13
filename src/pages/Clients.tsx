@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import  { useState, useEffect } from 'react';
 import { DataGrid, GridColDef } from '@mui/x-data-grid';
 import { UserPlus, RefreshCw } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { Client } from '../common/types';
 
 export default function Clients() {
-  const [clients, setClients] = useState([]);
+  const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(false);
 
   const fetchClients = async () => {
@@ -13,13 +14,6 @@ export default function Clients() {
       if (window.api && window.api.getAllClients) {
         const data = await window.api.getAllClients();
         setClients(data || []);
-      } else {
-        // Mock data
-        setClients([
-          { id: 1, code: 'CL-001', name: 'Juan Perez', tax_id: '12345678A', phone: '555-0100' },
-          { id: 2, code: 'CL-002', name: 'Maria Garcia', tax_id: '87654321B', phone: '555-0101' },
-          { id: 3, code: 'CL-003', name: 'Empresa XYZ', tax_id: 'B1234567', phone: '555-0102' },
-        ]);
       }
     } catch (error) {
       console.error(error);

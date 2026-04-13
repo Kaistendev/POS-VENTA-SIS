@@ -3,8 +3,11 @@ import { ClientService } from "./services/ClientService.js";
 import { ProductService } from "./services/ProductService.js";
 import { SaleService } from "./services/SaleService.js";
 import { AuthService } from "./services/AuthService.js";
+import { UserService } from "./services/UserService.js";
 import { DashboardRepository } from "./repositories/DashboardRepository.js";
 import { CashRegisterService } from "./services/CashRegisterService.js";
+import { CategoryRepository } from "./repositories/CategoryRepository.js";
+import { prisma } from "./prisma/client.js";
 
 export function setupIpcHandlers() {
   /**
@@ -143,6 +146,17 @@ export function setupIpcHandlers() {
     },
   );
 
+  ipcMain.handle("products:delete", async (_, id) => {
+    try {
+      await prisma.product.delete({
+        where: { id },
+      });
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, message: error.message };
+    }
+  });
+
   /**
    * SALES
    */
@@ -175,6 +189,104 @@ export function setupIpcHandlers() {
       return {
         success: false,
         message: error.message || "Error al registrar venta",
+      };
+    }
+  });
+
+  /**
+   * CATEGORIES
+   */
+  ipcMain.handle("categories:getAll", async () => {
+    try {
+      return await CategoryRepository.findAll();
+    } catch (error: any) {
+      return [];
+    }
+  });
+
+  ipcMain.handle("categories:create", async (_, categoryData) => {
+    try {
+      return await CategoryRepository.create(categoryData);
+    } catch (error: any) {
+      return { success: false, message: error.message };
+    }
+  });
+
+  ipcMain.handle("categories:delete", async (_, id) => {
+    try {
+      return await CategoryRepository.delete(id);
+    } catch (error: any) {
+      return { success: false, message: error.message };
+    }
+  });
+
+  /**
+   * USERS
+   */
+  ipcMain.handle("users:getAll", async () => {
+    try {
+      return await UserService.getAllUsers();
+    } catch (error: any) {
+      return {
+        success: false,
+        message: error.message || "Error al obtener usuarios",
+      };
+    }
+  });
+
+  ipcMain.handle("users:getById", async (_, id) => {
+    try {
+      return await UserService.getUserById(id);
+    } catch (error: any) {
+      return {
+        success: false,
+        message: error.message || "Error al obtener usuario",
+      };
+    }
+  });
+
+  ipcMain.handle("users:create", async (_, userData, createdBy) => {
+    try {
+      const user = await UserService.createUser(userData, createdBy);
+      return { success: true, user };
+    } catch (error: any) {
+      return {
+        success: false,
+        message: error.message || "Error al crear usuario",
+      };
+    }
+  });
+
+  ipcMain.handle("users:update", async (_, id, userData, updatedBy) => {
+    try {
+      const user = await UserService.updateUser(id, userData, updatedBy);
+      return { success: true, user };
+    } catch (error: any) {
+      return {
+        success: false,
+        message: error.message || "Error al actualizar usuario",
+      };
+    }
+  });
+
+  ipcMain.handle("users:delete", async (_, id, deletedBy) => {
+    try {
+      return await UserService.deleteUser(id, deletedBy);
+    } catch (error: any) {
+      return {
+        success: false,
+        message: error.message || "Error al eliminar usuario",
+      };
+    }
+  });
+
+  ipcMain.handle("users:changePassword", async (_, userId, newPassword, changedBy) => {
+    try {
+      return await UserService.changePassword(userId, newPassword, changedBy);
+    } catch (error: any) {
+      return {
+        success: false,
+        message: error.message || "Error al cambiar contraseña",
       };
     }
   });

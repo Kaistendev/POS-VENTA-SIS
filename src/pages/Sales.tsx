@@ -1,20 +1,30 @@
-import React, { useState, useEffect } from 'react';
-import { Search, ShoppingCart, Trash2, CreditCard, Banknote, Package, User, Plus, X, CheckCircle, FileText, Lock } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Search, ShoppingCart, Trash2, CreditCard, Banknote, Package, User, CheckCircle, Lock } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
+import { useCashStore } from '../store/useStore.ts';
+import { Product, Client } from '../common/types';
+
+interface CartItem {
+  id?: number;
+  sku: string;
+  name: string;
+  price: number;
+  qty: number;
+}
 
 export default function Sales() {
-  const [products, setProducts] = useState([]);
-  const [clients, setClients] = useState([]);
-  const [activeRegister, setActiveRegister] = useState(null);
-  const [selectedClient, setSelectedClient] = useState({ id: 1, name: 'Cliente General' });
+  const [products, setProducts] = useState<Product[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const { activeRegister, setActiveRegister } = useCashStore();
+  const [selectedClient, setSelectedClient] = useState<{ id?: number; name: string }>({ id: 1, name: 'Cliente General' });
   const [customerData, setCustomerData] = useState({ name: '', dni: '' });
   const [searchTerm, setSearchTerm] = useState('');
-  const [cart, setCart] = useState([]);
+  const [cart, setCart] = useState<CartItem[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
-  const [lastSaleId, setLastSaleId] = useState(null);
+  const [lastSaleId, setLastSaleId] = useState<number | string | null>(null);
   const [message, setMessage] = useState({ text: '', type: '' });
 
   const fetchData = async () => {
@@ -34,7 +44,7 @@ export default function Sales() {
 
   const total = cart.reduce((acc, item) => acc + (item.price * item.qty), 0);
 
-  const generateTicketPDF = (saleId, cartItems, clientName) => {
+  const generateTicketPDF = (saleId: number | string, cartItems: CartItem[], clientName: string) => {
     const doc = new jsPDF({ unit: 'mm', format: [80, 150] });
     doc.setFontSize(12);
     doc.text('INVENTARIO-POS', 40, 10, { align: 'center' });
@@ -57,7 +67,7 @@ export default function Sales() {
     doc.save(`Ticket_${saleId}.pdf`);
   };
 
-  const handleProcessSale = async (method) => {
+  const handleProcessSale = async (method: 'cash' | 'card') => {
     if (cart.length === 0 || !activeRegister) return;
     setIsProcessing(true);
     try {
@@ -84,7 +94,12 @@ export default function Sales() {
         setCart([]);
         setCustomerData({ name: '', dni: '' });
         setSelectedClient({ id: 1, name: 'Cliente General' });
-        fetchData(); // Refrescar stock y estado de caja
+        
+        // Actualizar estado de caja después de la venta
+        const reg = await window.api.getOpenRegister();
+        setActiveRegister(reg || null);
+        
+        fetchData(); // Refrescar stock y clientes
       } else {
         setMessage({ text: result.message, type: 'error' });
       }
@@ -105,7 +120,7 @@ export default function Sales() {
     c.dni.includes(customerData.dni)
   );
 
-  const addToCart = (product) => {
+  const addToCart = (product: Product) => {
     setCart(prev => {
       const existing = prev.find(item => item.id === product.id);
       if (existing) {
@@ -174,7 +189,7 @@ export default function Sales() {
                 <div className="aspect-square bg-black/40 rounded-lg mb-3 flex items-center justify-center"><Package className="w-10 h-10 text-primary/40" /></div>
                 <h4 className="text-sm font-medium text-gray-200 truncate">{product.name || product.sku}</h4>
                 <p className="text-primary font-bold mt-1">$ {product.price_sale.toFixed(2)}</p>
-                <span className="absolute top-2 right-2 text-[10px] bg-white/5 px-1.5 py-0.5 rounded text-gray-500">Stock: {product.stock}</span>
+                <span className="absolute top-2 right-2 text-[10px] bg-white/5 px-1.5 py-0.5 rounded text-gray-500">Stock: {product.stock ?? 0}</span>
               </div>
             ))}
           </div>

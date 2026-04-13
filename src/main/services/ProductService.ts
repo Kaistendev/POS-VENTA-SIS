@@ -1,95 +1,151 @@
-import { ProductRepository } from '../repositories/ProductRepository.js';
-import { InventoryRepository } from '../repositories/InventoryRepository.js';
-import { AuditRepository } from '../repositories/AuditRepository.js';
-import { Product } from '../../common/types.js';
+import { prisma } from '../prisma/client.js';
+import { productSchema } from '../../common/schemas.js';
 
 export class ProductService {
   static async getAllProducts() {
-    return ProductRepository.findAll();
+    return prisma.product.findMany({
+      include: {
+        category: true,
+      },
+      orderBy: { created_at: 'desc' },
+    });
   }
 
-  static async createProduct(productData: Omit<Product, 'id' | 'created_at' | 'updated_at'>, userId: number = 1) {
+  static async createProduct(productData: any, userId: number = 1) {
     try {
-      if (!productData.sku || productData.sku.trim() === '') throw new Error('El SKU es obligatorio.');
-      if (!productData.name || productData.name.trim() === '') throw new Error('El nombre es obligatorio.');
-      if (productData.price_sale < 0) throw new Error('El precio no puede ser negativo.');
+      // Validar con Zod
+      const validated = productSchema.parse(productData);
 
-      const existing = await ProductRepository.findBySku(productData.sku);
+      const existing = await prisma.product.findUnique({
+        where: { sku: validated.sku },
+      });
+
       let productId: number;
       let isUpdate = false;
 
       if (existing) {
         // ACTUALIZAR PRODUCTO EXISTENTE
-        productId = existing.id!;
+        productId = existing.id;
         isUpdate = true;
-        await ProductRepository.update(productId, {
-          name: productData.name,
-          price_sale: productData.price_sale
+
+        await prisma.product.update({
+          where: { id: productId },
+          data: {
+            name: validated.name,
+            price_sale: validated.price_sale,
+            price_purchase: validated.price_purchase,
+            description: validated.description,
+            category_id: validated.category_id,
+            min_stock: validated.min_stock,
+          },
         });
       } else {
         // CREAR NUEVO PRODUCTO
-        const [idRow] = await ProductRepository.create({
-          sku: productData.sku,
-          name: productData.name,
-          price_sale: productData.price_sale
+        const product = await prisma.product.create({
+          data: {
+            sku: validated.sku,
+            name: validated.name,
+            price_sale: validated.price_sale,
+            price_purchase: validated.price_purchase,
+            description: validated.description,
+            category_id: validated.category_id,
+            min_stock: validated.min_stock,
+            stock: validated.stock || 0,
+          },
         });
-        productId = typeof idRow === 'object' ? (idRow as any).id : idRow;
+
+        productId = product.id;
       }
 
       // Procesar Stock (siempre como ENTRADA si es > 0)
-      const quantityToAdd = productData.stock || 0;
-      if (quantityToAdd > 0) {
-        await InventoryRepository.createMovement({
-          product_id: productId,
-          type: 'ENTRADA',
-          quantity: quantityToAdd
+      const quantityToAdd = validated.stock || 0;
+      if (quantityToAdd > 0 && !isUpdate) {
+        await prisma.inventoryMovement.create({
+          data: {
+            product_id: productId,
+            type: 'ENTRADA',
+            quantity: quantityToAdd,
+          },
         });
       }
 
-      await AuditRepository.create({
-        user_id: userId,
-        action: isUpdate ? 'UPDATE_PRODUCT_UPSERT' : 'CREATE_PRODUCT_UPSERT',
-        entity: 'products',
-        entity_id: productId
+      await prisma.auditLog.create({
+        data: {
+          user_id: userId,
+          action: isUpdate ? 'UPDATE_PRODUCT_UPSERT' : 'CREATE_PRODUCT_UPSERT',
+          entity: 'products',
+          entity_id: productId,
+        },
       });
 
-      return { success: true, id: productId, message: isUpdate ? 'Producto actualizado correctamente' : 'Producto creado correctamente' };
+      return {
+        success: true,
+        id: productId,
+        message: isUpdate
+          ? 'Producto actualizado correctamente'
+          : 'Producto creado correctamente',
+      };
     } catch (error: any) {
       console.error('Error en upsert de producto:', error);
-      return { success: false, message: error.message || 'Error al procesar producto' };
+
+      if (error.name === 'ZodError') {
+        return {
+          success: false,
+          message: error.errors.map((e: any) => e.message).join('. '),
+        };
+      }
+
+      return {
+        success: false,
+        message: error.message || 'Error al procesar producto',
+      };
     }
   }
 
-  static async addInitialStock(productId: number, quantity: number, userId: number = 1) {
+  static async addInitialStock(
+    productId: number,
+    quantity: number,
+    userId: number = 1,
+  ) {
     try {
       if (quantity <= 0) {
         throw new Error('La cantidad a añadir debe ser mayor a cero.');
       }
 
       // 1. Verificar existencia del producto
-      const product = await ProductRepository.findById(productId);
+      const product = await prisma.product.findUnique({
+        where: { id: productId },
+      });
+
       if (!product) {
         throw new Error('El producto no existe.');
       }
 
-      // 2. Mueve el inventario en 'ENTRADA'. El DB trigger actualizará Product.stock auto
-      await InventoryRepository.createMovement({
-        product_id: productId,
-        type: 'ENTRADA',
-        quantity
+      // 2. Mueve el inventario en 'ENTRADA'
+      await prisma.inventoryMovement.create({
+        data: {
+          product_id: productId,
+          type: 'ENTRADA',
+          quantity,
+        },
       });
 
-      await AuditRepository.create({
-        user_id: userId,
-        action: 'STOCK_ENTRADA',
-        entity: 'products',
-        entity_id: productId
+      await prisma.auditLog.create({
+        data: {
+          user_id: userId,
+          action: 'STOCK_ENTRADA',
+          entity: 'products',
+          entity_id: productId,
+        },
       });
 
       return { success: true };
     } catch (error: any) {
       console.error('Error al añadir stock:', error);
-      return { success: false, message: error.message || 'Error al añadir stock' };
+      return {
+        success: false,
+        message: error.message || 'Error al añadir stock',
+      };
     }
   }
 }

@@ -26,3 +26,7 @@ dev.sqlite3
 dist-electron/index.mjs
 ROADMAP_MEJORAS.md
 GEMINI.md
+
+/src/generated/prisma
+.env
+QWEN.md

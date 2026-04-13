@@ -12,7 +12,7 @@ export default defineConfig({
         vite: {
           build: {
             rollupOptions: {
-              external: ['knex', 'sqlite3'],
+              external: ['@prisma/adapter-pg', 'pg'],
             },
           },
         },

@@ -1,7 +1,17 @@
 interface Window {
   api: {
     // Auth
-    login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
+    login: (username: string, password: string) => Promise<{ success: boolean; user?: any; error?: string; message?: string }>;
+
+    // Cash Registers
+    getOpenRegister: () => Promise<any>;
+    openRegister: (amount: number) => Promise<any>;
+    closeRegister: (id: number, amount: number) => Promise<any>;
+
+    // Dashboard
+    getDashboardStats: () => Promise<any>;
+    getWeeklySales: () => Promise<any[]>;
+    getLowStock: () => Promise<any[]>;
 
     // Clients
     getAllClients: () => Promise<any[]>;
@@ -16,5 +26,10 @@ interface Window {
     getAllSales: () => Promise<any[]>;
     getSaleDetails: (saleId: number) => Promise<any>;
     registerSale: (saleData: any, itemsData: any) => Promise<any>;
+
+    // Categories
+    getAllCategories: () => Promise<any[]>;
+    createCategory: (categoryData: any) => Promise<any>;
+    deleteCategory: (id: number) => Promise<any>;
   };
 }

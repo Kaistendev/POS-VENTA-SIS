@@ -1,32 +1,120 @@
-import db from '../db.js';
-import { User } from '../../common/types.js';
+import { prisma } from '../prisma/client.js';
+
+export interface UserCreateData {
+  username: string;
+  password_hash: string;
+  role: string;
+}
+
+export interface UserUpdateData {
+  username?: string;
+  password_hash?: string;
+  role?: string;
+}
 
 export class UserRepository {
-  private static tableName = 'users';
-
-  static async findAll(): Promise<User[]> {
-    return db(this.tableName).select('*');
+  /**
+   * Find all users (without password hash)
+   */
+  static async findAll() {
+    return prisma.user.findMany({
+      select: {
+        id: true,
+        username: true,
+        role: true,
+        created_at: true,
+        updated_at: true,
+      },
+      orderBy: { created_at: 'desc' },
+    });
   }
 
-  static async findById(id: number): Promise<User | undefined> {
-    return db(this.tableName).where({ id }).first();
+  /**
+   * Find user by ID (without password hash)
+   */
+  static async findById(id: number) {
+    return prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        username: true,
+        role: true,
+        created_at: true,
+        updated_at: true,
+      },
+    });
   }
 
-  static async findByUsername(username: string): Promise<User | undefined> {
-    return db(this.tableName).where({ username }).first();
+  /**
+   * Find user by username (with password hash for authentication)
+   */
+  static async findByUsername(username: string) {
+    return prisma.user.findUnique({
+      where: { username },
+    });
   }
 
-  static async create(user: Omit<User, 'id' | 'created_at' | 'updated_at'>): Promise<number[]> {
-    return db(this.tableName).insert(user).returning('id');
+  /**
+   * Create a new user
+   */
+  static async create(data: UserCreateData) {
+    return prisma.user.create({
+      data,
+      select: {
+        id: true,
+        username: true,
+        role: true,
+        created_at: true,
+        updated_at: true,
+      },
+    });
   }
 
-  static async update(id: number, user: Partial<Omit<User, 'id' | 'created_at' | 'updated_at'>>): Promise<number> {
-    return db(this.tableName)
-      .where({ id })
-      .update({ ...user, updated_at: db.fn.now() });
+  /**
+   * Update an existing user
+   */
+  static async update(id: number, data: UserUpdateData) {
+    return prisma.user.update({
+      where: { id },
+      data,
+      select: {
+        id: true,
+        username: true,
+        role: true,
+        created_at: true,
+        updated_at: true,
+      },
+    });
   }
 
-  static async delete(id: number): Promise<number> {
-    return db(this.tableName).where({ id }).delete();
+  /**
+   * Delete a user by ID
+   */
+  static async delete(id: number) {
+    return prisma.user.delete({
+      where: { id },
+    });
+  }
+
+  /**
+   * Check if username exists
+   */
+  static async exists(username: string, excludeId?: number) {
+    const user = await prisma.user.findFirst({
+      where: {
+        username,
+        ...(excludeId && { id: { not: excludeId } }),
+      },
+      select: { id: true },
+    });
+
+    return !!user;
+  }
+
+  /**
+   * Count total users
+   */
+  static async count() {
+    return prisma.user.count();
   }
 }

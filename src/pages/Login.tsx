@@ -3,8 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { Package2, Lock, User, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
+import { User as UserType } from '../common/types';
+
 interface LoginProps {
-  onLogin: () => void;
+  onLogin: (user: UserType) => void;
 }
 
 export default function Login({ onLogin }: LoginProps) {
@@ -24,16 +26,16 @@ export default function Login({ onLogin }: LoginProps) {
       if (window.api && window.api.login) {
         const result = await window.api.login(username, password);
         if (result.success) {
-          onLogin();
+          onLogin(result.user);
           navigate('/dashboard');
         } else {
-          setError(result.error || 'Credenciales inválidas');
+          setError(result.error || result.message || 'Credenciales inválidas');
         }
       } else {
         // Mock de autenticación para desarrollo UI
         setTimeout(() => {
           if (username === 'admin' && password === 'admin') {
-            onLogin();
+            onLogin({ id: 1, username: 'admin', role: 'ADMIN', password_hash: '' } as UserType);
             navigate('/dashboard');
           } else {
             setError('Usuario o contraseña incorrectos (Mock: admin/admin)');

@@ -2,7 +2,7 @@ import { app, BrowserWindow } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { setupIpcHandlers } from "./ipc.js";
-import db from "./db.js";
+import { prisma } from "./prisma/client.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -48,13 +48,12 @@ app.on("window-all-closed", () => {
 });
 
 app.whenReady().then(async () => {
-  // 1. Run migrations
+  // 1. Test Prisma connection
   try {
-    console.log("Running database migrations...");
-    await db.migrate.latest();
-    console.log("Database migrations completed successfully.");
+    await prisma.$connect();
+    console.log("✅ Prisma connected to PostgreSQL successfully.");
   } catch (err) {
-    console.error("Failed to run database migrations:", err);
+    console.error("❌ Failed to connect to PostgreSQL:", err);
   }
 
   // 2. Setup IPC Handlers
