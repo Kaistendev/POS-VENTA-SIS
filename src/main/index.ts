@@ -1,6 +1,9 @@
+// ⚠️ Must be the very first import — loads .env before any module side-effects run
+import 'dotenv/config';
+
 import { app, BrowserWindow } from "electron";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import path from "path";
+import { fileURLToPath } from "url";
 import { setupIpcHandlers } from "./ipc.js";
 import { prisma } from "./prisma/client.js";
 
@@ -24,7 +27,7 @@ async function createWindow() {
     minHeight: 600,
     icon: path.join(process.env.VITE_PUBLIC!, "favicon.ico"),
     webPreferences: {
-      preload: path.join(__dirname, "index.mjs"), // Según el log, el preload es index.mjs en dist-electron
+      preload: path.join(__dirname, "index.mjs"),
       contextIsolation: true,
       nodeIntegration: false,
     },

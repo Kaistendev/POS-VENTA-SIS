@@ -82,8 +82,26 @@
   .glass {
     @apply bg-white/10 backdrop-blur-lg border border-white/20 shadow-lg dark:bg-black/40 dark:border-white/10;
   }
-  
+
   .glass-panel {
     @apply bg-white/70 backdrop-blur-md border border-white/40 shadow-sm dark:bg-[#1f2028]/80 dark:border-[#2e303a]/50;
+  }
+}
+
+/* Animations */
+@layer utilities {
+  @keyframes slide-in {
+    from {
+      transform: translateX(100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateX(0);
+      opacity: 1;
+    }
+  }
+
+  .animate-slide-in {
+    animation: slide-in 0.3s ease-out;
   }
 }

@@ -8,7 +8,7 @@ export default function Cash() {
   const [loading, setLoading] = useState(true);
   const [openingAmount, setOpeningAmount] = useState('');
   const [closingAmount, setClosingAmount] = useState('');
-  const [result, setResult] = useState(null);
+  const [result, setResult] = useState<any>(null);
   const [error, setError] = useState('');
 
   const loadRegister = async () => {
@@ -43,6 +43,7 @@ export default function Cash() {
     setError('');
     const amount = parseFloat(closingAmount);
     if (isNaN(amount) || amount < 0) return setError('Ingresa el monto contado.');
+    if (!activeRegister || !activeRegister.id) return setError('No hay una caja abierta.');
 
     const res = await window.api.closeRegister(activeRegister.id, amount);
     if (res.success === false) {
@@ -86,15 +87,15 @@ export default function Cash() {
             <div className="grid grid-cols-3 gap-4 max-w-lg mx-auto">
               <div className="p-4 bg-black/20 rounded-2xl border border-white/5">
                 <span className="text-[10px] text-gray-500 block uppercase">Esperado</span>
-                <span className="text-lg font-bold text-white">${result.expected.toFixed(2)}</span>
+                <span className="text-lg font-bold text-white">${Number(result.expected ?? 0).toFixed(2)}</span>
               </div>
               <div className="p-4 bg-black/20 rounded-2xl border border-white/5">
                 <span className="text-[10px] text-gray-500 block uppercase">Real</span>
-                <span className="text-lg font-bold text-white">${result.real.toFixed(2)}</span>
+                <span className="text-lg font-bold text-white">${Number(result.real ?? 0).toFixed(2)}</span>
               </div>
-              <div className={`p-4 rounded-2xl border ${result.difference >= 0 ? 'bg-green-500/10 border-green-500/20 text-green-400' : 'bg-red-500/10 border-red-500/20 text-red-400'}`}>
+              <div className={`p-4 rounded-2xl border ${Number(result.difference ?? 0) >= 0 ? 'bg-green-500/10 border-green-500/20 text-green-400' : 'bg-red-500/10 border-red-500/20 text-red-400'}`}>
                 <span className="text-[10px] block uppercase">Diferencia</span>
-                <span className="text-lg font-bold">${result.difference.toFixed(2)}</span>
+                <span className="text-lg font-bold">${Number(result.difference ?? 0).toFixed(2)}</span>
               </div>
             </div>
 

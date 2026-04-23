@@ -1,31 +1,25 @@
 import { useState, useEffect } from 'react';
-import { Search, ShoppingCart, Trash2, CreditCard, Banknote, Package, User, CheckCircle, Lock } from 'lucide-react';
+import { Search, ShoppingCart, Trash2, CreditCard, Banknote, Package, User, UserPlus, CheckCircle, Lock } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
-import { useCashStore } from '../store/useStore.ts';
+import { useCashStore, useCartStore } from '../store/useStore.ts';
+import { useToast } from '../hooks/useToast.ts';
 import { Product, Client } from '../common/types';
-
-interface CartItem {
-  id?: number;
-  sku: string;
-  name: string;
-  price: number;
-  qty: number;
-}
 
 export default function Sales() {
   const [products, setProducts] = useState<Product[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const { activeRegister, setActiveRegister } = useCashStore();
+  const { items: cart, addItem, removeItem, updateQty, clearCart, getTotal } = useCartStore();
+  const { success, error: toastError } = useToast();
+  
   const [selectedClient, setSelectedClient] = useState<{ id?: number; name: string }>({ id: 1, name: 'Cliente General' });
   const [customerData, setCustomerData] = useState({ name: '', dni: '' });
   const [searchTerm, setSearchTerm] = useState('');
-  const [cart, setCart] = useState<CartItem[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [lastSaleId, setLastSaleId] = useState<number | string | null>(null);
-  const [message, setMessage] = useState({ text: '', type: '' });
 
   const fetchData = async () => {
     if (window.api) {
@@ -42,9 +36,9 @@ export default function Sales() {
     fetchData();
   }, []);
 
-  const total = cart.reduce((acc, item) => acc + (item.price * item.qty), 0);
+  const total = getTotal();
 
-  const generateTicketPDF = (saleId: number | string, cartItems: CartItem[], clientName: string) => {
+  const generateTicketPDF = (saleId: number | string, cartItems: any[], clientName: string) => {
     const doc = new jsPDF({ unit: 'mm', format: [80, 150] });
     doc.setFontSize(12);
     doc.text('INVENTARIO-POS', 40, 10, { align: 'center' });
@@ -91,7 +85,7 @@ export default function Sales() {
         setLastSaleId(result.id);
         generateTicketPDF(result.id, cart, finalClientName);
         setShowSuccess(true);
-        setCart([]);
+        clearCart();
         setCustomerData({ name: '', dni: '' });
         setSelectedClient({ id: 1, name: 'Cliente General' });
         
@@ -99,14 +93,51 @@ export default function Sales() {
         const reg = await window.api.getOpenRegister();
         setActiveRegister(reg || null);
         
+        success('Venta procesada correctamente');
         fetchData(); // Refrescar stock y clientes
       } else {
-        setMessage({ text: result.message, type: 'error' });
+        toastError(result.message || 'Error al procesar venta');
       }
     } catch (err) {
-      setMessage({ text: 'Error de comunicación', type: 'error' });
+      toastError('Error de comunicación con el sistema');
     } finally {
       setIsProcessing(false);
+    }
+  };
+
+  const [isCreatingClient, setIsCreatingClient] = useState(false);
+
+  const handleCreateQuickClient = async () => {
+    if (!customerData.name || !customerData.dni) {
+      toastError('Nombre y DNI son obligatorios para registrar');
+      return;
+    }
+
+    setIsCreatingClient(true);
+    try {
+      const newClient = {
+        code: `CLI-${customerData.dni}`,
+        name: customerData.name,
+        dni: customerData.dni,
+        phone: ''
+      };
+
+      const result = await window.api.createClient(newClient);
+      if (result.success) {
+        success('Cliente registrado y seleccionado');
+        const updatedClients = await window.api.getAllClients();
+        setClients(updatedClients || []);
+        
+        // Seleccionar el nuevo cliente
+        const created = updatedClients.find((c: any) => c.dni === customerData.dni);
+        if (created) setSelectedClient(created);
+      } else {
+        toastError(result.message || 'Error al registrar cliente');
+      }
+    } catch (err) {
+      toastError('Error al crear cliente rápido');
+    } finally {
+      setIsCreatingClient(false);
     }
   };
 
@@ -119,16 +150,6 @@ export default function Sales() {
     c.name.toLowerCase().includes(customerData.name.toLowerCase()) || 
     c.dni.includes(customerData.dni)
   );
-
-  const addToCart = (product: Product) => {
-    setCart(prev => {
-      const existing = prev.find(item => item.id === product.id);
-      if (existing) {
-        return prev.map(item => item.id === product.id ? { ...item, qty: item.qty + 1 } : item);
-      }
-      return [...prev, { id: product.id, sku: product.sku, name: product.name, price: product.price_sale, qty: 1 }];
-    });
-  };
 
   if (!activeRegister && !isProcessing) {
     return (
@@ -165,14 +186,27 @@ export default function Sales() {
                 <input type="text" placeholder="DNI / ID..." value={customerData.dni} onChange={(e) => { setCustomerData({...customerData, dni: e.target.value}); if (selectedClient.id !== 1) setSelectedClient({ id: 1, name: 'Cliente General' }); }} className="w-full bg-black/20 border border-white/10 rounded-lg py-2.5 pl-10 pr-4 text-sm text-white outline-none focus:border-primary transition-all" />
              </div>
           </div>
-          {customerData.name.length > 1 && filteredClients.length > 0 && selectedClient.id === 1 && (
-            <div className="bg-[#1f2028] border border-[#2e303a] rounded-xl overflow-hidden shadow-xl">
-               {filteredClients.slice(0, 3).map(c => (
-                 <div key={c.id} onClick={() => { setCustomerData({ name: c.name, dni: c.dni }); setSelectedClient(c); }} className="p-3 hover:bg-primary/10 cursor-pointer text-xs text-gray-300 flex justify-between items-center border-b border-white/5 last:border-0">
-                    <span>{c.name}</span>
-                    <span>{c.dni}</span>
-                 </div>
-               ))}
+          {customerData.dni.length > 3 && selectedClient.id === 1 && (
+            <div className="mt-1">
+              {filteredClients.length > 0 ? (
+                <div className="bg-[#1f2028] border border-[#2e303a] rounded-xl overflow-hidden shadow-xl">
+                  {filteredClients.slice(0, 3).map(c => (
+                    <div key={c.id} onClick={() => { setCustomerData({ name: c.name, dni: c.dni }); setSelectedClient(c); }} className="p-3 hover:bg-primary/10 cursor-pointer text-xs text-gray-300 flex justify-between items-center border-b border-white/5 last:border-0">
+                        <span>{c.name}</span>
+                        <span>{c.dni}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <button 
+                  onClick={handleCreateQuickClient}
+                  disabled={isCreatingClient || !customerData.name}
+                  className="w-full py-2 bg-green-500/10 hover:bg-green-500/20 text-green-400 border border-green-500/20 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  {isCreatingClient ? 'Registrando...' : `Registrar "${customerData.name || 'Nuevo Cliente'}"`}
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -184,8 +218,8 @@ export default function Sales() {
 
         <div className="flex-1 bg-[#16171d] rounded-2xl border border-[#2e303a] overflow-hidden p-4">
           <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 overflow-y-auto max-h-[calc(100vh-360px)]">
-            {filteredProducts.map((product) => (
-              <div key={product.id} onClick={() => addToCart(product)} className="bg-[#1f2028] border border-[#2e303a] rounded-xl p-4 cursor-pointer hover:border-primary/50 hover:bg-[#252630] transition-colors group relative">
+            {(filteredProducts || []).map((product) => (
+              <div key={product.id} onClick={() => addItem(product)} className="bg-[#1f2028] border border-[#2e303a] rounded-xl p-4 cursor-pointer hover:border-primary/50 hover:bg-[#252630] transition-colors group relative">
                 <div className="aspect-square bg-black/40 rounded-lg mb-3 flex items-center justify-center"><Package className="w-10 h-10 text-primary/40" /></div>
                 <h4 className="text-sm font-medium text-gray-200 truncate">{product.name || product.sku}</h4>
                 <p className="text-primary font-bold mt-1">$ {product.price_sale.toFixed(2)}</p>
@@ -207,13 +241,13 @@ export default function Sales() {
                <div key={item.id} className="p-3 rounded-xl bg-[#16171d] border border-[#2e303a]">
                  <div className="flex justify-between items-start">
                    <span className="text-sm font-medium text-gray-200">{item.name || item.sku}</span>
-                   <button onClick={() => setCart(cart.filter(i => i.id !== item.id))} className="text-gray-500 hover:text-red-400 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                   <button onClick={() => removeItem(item.id)} className="text-gray-500 hover:text-red-400 transition-colors"><Trash2 className="w-4 h-4" /></button>
                  </div>
                  <div className="flex justify-between items-center mt-3">
                    <div className="flex items-center space-x-2 bg-[#1f2028] rounded-lg border border-[#2e303a]">
-                     <button onClick={() => setCart(cart.map(i => i.id === item.id ? {...i, qty: Math.max(1, i.qty - 1)} : i))} className="px-3 py-1 text-gray-400">-</button>
+                     <button onClick={() => updateQty(item.id, item.qty - 1)} className="px-3 py-1 text-gray-400">-</button>
                      <span className="text-sm font-medium w-4 text-center">{item.qty}</span>
-                     <button onClick={() => setCart(cart.map(i => i.id === item.id ? {...i, qty: i.qty + 1} : i))} className="px-3 py-1 text-gray-400">+</button>
+                     <button onClick={() => updateQty(item.id, item.qty + 1)} className="px-3 py-1 text-gray-400">+</button>
                    </div>
                    <span className="text-sm font-bold text-white">${(item.price * item.qty).toFixed(2)}</span>
                  </div>

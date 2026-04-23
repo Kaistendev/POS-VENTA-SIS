@@ -44,6 +44,8 @@ export interface CashRegister {
   opened_at?: Date | string;
   opening_amount: number;
   total_sales?: number;
+  cash_sales?: number;
+  card_sales?: number;
   created_at?: Date | string;
   updated_at?: Date | string;
 }

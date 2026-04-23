@@ -36,6 +36,8 @@ model Client {
 
   sales       Sale[]
 
+  @@index([name])
+  @@index([dni])
   @@map("clients")
 }
 
@@ -68,6 +70,9 @@ model Product {
   sale_items       SaleItem[]
 
   @@index([category_id])
+  @@index([stock, min_stock])
+  @@index([name])
+  @@index([sku])
   @@map("products")
 }
 
@@ -91,6 +96,7 @@ model Sale {
   client_id        Int
   client           Client     @relation(fields: [client_id], references: [id])
   total            Float
+  payment_method   String?    @default("CASH") @db.VarChar(10) @map("payment_method")
   created_at       DateTime   @default(now()) @map("created_at")
   updated_at       DateTime   @updatedAt @map("updated_at")
 
@@ -99,6 +105,9 @@ model Sale {
   @@index([cash_register_id])
   @@index([client_id])
   @@index([created_at])
+  @@index([cash_register_id, created_at])
+  @@index([client_id, created_at])
+  @@index([payment_method])
   @@map("sales")
 }
 
@@ -130,6 +139,8 @@ model InventoryMovement {
 
   @@index([product_id])
   @@index([type])
+  @@index([product_id, created_at])
+  @@index([product_id, type])
   @@map("inventory_movements")
 }
 

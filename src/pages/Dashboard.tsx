@@ -18,7 +18,13 @@ export default function Dashboard() {
           const ls = await window.api.getLowStock();
           const ws = await window.api.getWeeklySales();
           
-          setStats(s || { todayRevenue: 0, todayProfit: 0, todaySalesCount: 0, activeProducts: 0, totalClients: 0 });
+          setStats({
+            todayRevenue:    Number(s?.todayRevenue    ?? 0),
+            todayProfit:     Number(s?.todayProfit     ?? 0),
+            todaySalesCount: Number(s?.todaySalesCount ?? 0),
+            activeProducts:  Number(s?.activeProducts  ?? 0),
+            totalClients:    Number(s?.totalClients    ?? 0),
+          });
           setLowStock(ls || []);
           
           // Formatear fechas para el gráfico (ej: 2024-04-09 -> 09 Abr)
@@ -36,15 +42,17 @@ export default function Dashboard() {
     loadDashboardData();
   }, []);
 
-  const statCards = [
-    { title: 'Ingresos de Hoy', value: `$${Number(stats.todayRevenue).toFixed(2)}`, icon: DollarSign, color: 'text-green-400', bg: 'bg-green-400/10' },
-    { title: 'Ganancia de Hoy', value: `$${Number(stats.todayProfit).toFixed(2)}`, icon: TrendingUp, color: 'text-emerald-400', bg: 'bg-emerald-400/10' },
-    { title: 'Ventas de Hoy', value: stats.todaySalesCount.toString(), icon: ShoppingBag, color: 'text-blue-400', bg: 'bg-blue-400/10' },
-    { title: 'Productos con Stock', value: stats.activeProducts.toString(), icon: Package, color: 'text-purple-400', bg: 'bg-purple-400/10' },
-    { title: 'Clientes Totales', value: stats.totalClients.toString(), icon: Users, color: 'text-orange-400', bg: 'bg-orange-400/10' },
-  ];
+
 
   if (loading) return <div className="text-white p-10 flex items-center justify-center h-full">Cargando dashboard dinámico...</div>;
+
+  const statCards = [
+    { title: 'Ingresos de Hoy',     value: `$${stats.todayRevenue.toFixed(2)}`,    icon: DollarSign, color: 'text-green-400',   bg: 'bg-green-400/10'   },
+    { title: 'Ganancia de Hoy',     value: `$${stats.todayProfit.toFixed(2)}`,     icon: TrendingUp, color: 'text-emerald-400', bg: 'bg-emerald-400/10' },
+    { title: 'Ventas de Hoy',       value: String(stats.todaySalesCount),          icon: ShoppingBag, color: 'text-blue-400',   bg: 'bg-blue-400/10'   },
+    { title: 'Productos con Stock', value: String(stats.activeProducts),           icon: Package,    color: 'text-purple-400', bg: 'bg-purple-400/10' },
+    { title: 'Clientes Totales',    value: String(stats.totalClients),             icon: Users,      color: 'text-orange-400', bg: 'bg-orange-400/10' },
+  ];
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
