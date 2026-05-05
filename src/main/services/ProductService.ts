@@ -1,5 +1,6 @@
 import { prisma } from '../prisma/client.js';
 import { productSchema } from '../../common/schemas.js';
+import { createAuditLog } from '../utils/auditLog.js';
 
 export class ProductService {
   /**
@@ -24,8 +25,20 @@ export class ProductService {
 
     return prisma.product.findMany({
       where,
-      include: {
-        category: true,
+      select: {
+        id: true,
+        sku: true,
+        name: true,
+        description: true,
+        price_sale: true,
+        price_purchase: true,
+        stock: true,
+        min_stock: true,
+        created_at: true,
+        updated_at: true,
+        category: {
+          select: { id: true, name: true },
+        },
       },
       orderBy: { created_at: 'desc' },
     });
@@ -118,18 +131,17 @@ export class ProductService {
           product_id: product.id,
           type: 'ENTRADA',
           quantity: initialStock,
+          reason: 'INICIAL',
         },
       });
     }
 
     // Registrar en auditoría
-    await prisma.auditLog.create({
-      data: {
-        user_id: userId,
-        action: 'CREATE_PRODUCT',
-        entity: 'products',
-        entity_id: product.id,
-      },
+    await createAuditLog({
+      userId,
+      action: 'CREATE_PRODUCT',
+      entity: 'products',
+      entity_id: product.id,
     });
 
     return { success: true, id: product.id };
@@ -188,13 +200,11 @@ export class ProductService {
     });
 
     // Registrar en auditoría
-    await prisma.auditLog.create({
-      data: {
-        user_id: userId,
-        action: 'UPDATE_PRODUCT',
-        entity: 'products',
-        entity_id: product.id,
-      },
+    await createAuditLog({
+      userId,
+      action: 'UPDATE_PRODUCT',
+      entity: 'products',
+      entity_id: product.id,
     });
 
     return { success: true, product };
@@ -230,13 +240,11 @@ export class ProductService {
     });
 
     // Registrar en auditoría
-    await prisma.auditLog.create({
-      data: {
-        user_id: userId,
-        action: 'DELETE_PRODUCT',
-        entity: 'products',
-        entity_id: id,
-      },
+    await createAuditLog({
+      userId,
+      action: 'DELETE_PRODUCT',
+      entity: 'products',
+      entity_id: id,
     });
 
     return { success: true };
@@ -245,7 +253,7 @@ export class ProductService {
   /**
    * Añade stock inicial o adicional (ENTRADA)
    */
-  static async addStock(productId: number, quantity: number, userId: number = 1) {
+  static async addStock(productId: number, quantity: number, userId: number = 1, reason: string = 'AJUSTE') {
     // Verificar existencia del producto
     const product = await prisma.product.findUnique({
       where: { id: productId },
@@ -275,17 +283,16 @@ export class ProductService {
         product_id: productId,
         type: 'ENTRADA',
         quantity,
+        reason,
       },
     });
 
     // Registrar en auditoría
-    await prisma.auditLog.create({
-      data: {
-        user_id: userId,
-        action: 'STOCK_ENTRADA',
-        entity: 'products',
-        entity_id: productId,
-      },
+    await createAuditLog({
+      userId,
+      action: 'STOCK_ENTRADA',
+      entity: 'products',
+      entity_id: productId,
     });
 
     return { success: true };
@@ -294,7 +301,7 @@ export class ProductService {
   /**
    * Reduce stock (SALIDA) - Para devoluciones o ajustes
    */
-  static async removeStock(productId: number, quantity: number, userId: number = 1) {
+  static async removeStock(productId: number, quantity: number, userId: number = 1, reason: string = 'AJUSTE') {
     // Verificar existencia del producto
     const product = await prisma.product.findUnique({
       where: { id: productId },
@@ -331,17 +338,16 @@ export class ProductService {
         product_id: productId,
         type: 'SALIDA',
         quantity,
+        reason,
       },
     });
 
     // Registrar en auditoría
-    await prisma.auditLog.create({
-      data: {
-        user_id: userId,
-        action: 'STOCK_SALIDA',
-        entity: 'products',
-        entity_id: productId,
-      },
+    await createAuditLog({
+      userId,
+      action: 'STOCK_SALIDA',
+      entity: 'products',
+      entity_id: productId,
     });
 
     return { success: true };

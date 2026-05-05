@@ -1,102 +1,26 @@
 import "dotenv/config";
-import { BrowserWindow, app, ipcMain } from "electron";
+import { BrowserWindow, app, dialog, ipcMain } from "electron";
 import path from "path";
 import { fileURLToPath } from "url";
-import * as path$1 from "node:path";
-import { fileURLToPath as fileURLToPath$1 } from "node:url";
-import * as runtime from "@prisma/client/runtime/client";
-import { PrismaPg } from "@prisma/adapter-pg";
-import pkg from "pg";
+import { PrismaClient } from "@prisma/client";
 import { ZodError, z } from "zod";
 import bcrypt from "bcryptjs";
-//#region src/generated/prisma/internal/class.ts
-var config = {
-	"previewFeatures": [],
-	"clientVersion": "7.7.0",
-	"engineVersion": "75cbdc1eb7150937890ad5465d861175c6624711",
-	"activeProvider": "postgresql",
-	"inlineSchema": "// This is your Prisma schema file,\n// learn more about it in the docs: https://pris.ly/d/prisma-schema\n\ngenerator client {\n  provider = \"prisma-client\"\n  output   = \"../src/generated/prisma\"\n}\n\ndatasource db {\n  provider     = \"postgresql\"\n  relationMode = \"prisma\"\n}\n\nmodel User {\n  id            Int      @id @default(autoincrement())\n  username      String   @unique @db.VarChar(255)\n  password_hash String   @db.VarChar(255)\n  role          String   @db.VarChar(50)\n  created_at    DateTime @default(now()) @map(\"created_at\")\n  updated_at    DateTime @updatedAt @map(\"updated_at\")\n\n  audit_logs AuditLog[]\n\n  @@map(\"users\")\n}\n\nmodel Client {\n  id         Int      @id @default(autoincrement())\n  dni        String   @unique @db.VarChar(20)\n  name       String   @db.VarChar(255)\n  phone      String?  @db.VarChar(50)\n  code       String   @unique @db.VarChar(50)\n  tax_id     String?  @unique @db.VarChar(50)\n  created_at DateTime @default(now()) @map(\"created_at\")\n  updated_at DateTime @updatedAt @map(\"updated_at\")\n\n  sales Sale[]\n\n  @@map(\"clients\")\n}\n\nmodel Category {\n  id         Int      @id @default(autoincrement())\n  name       String   @db.VarChar(255)\n  created_at DateTime @default(now()) @map(\"created_at\")\n  updated_at DateTime @updatedAt @map(\"updated_at\")\n\n  products Product[]\n\n  @@map(\"categories\")\n}\n\nmodel Product {\n  id             Int       @id @default(autoincrement())\n  sku            String    @unique @db.VarChar(100)\n  name           String    @db.VarChar(255)\n  description    String?   @db.Text\n  category_id    Int?\n  category       Category? @relation(fields: [category_id], references: [id], onDelete: SetNull)\n  price_purchase Float     @map(\"price_purchase\")\n  price_sale     Float     @map(\"price_sale\")\n  stock          Int       @default(0)\n  min_stock      Int?      @default(5)\n  created_at     DateTime  @default(now()) @map(\"created_at\")\n  updated_at     DateTime  @updatedAt @map(\"updated_at\")\n\n  inventory_movements InventoryMovement[]\n  sale_items          SaleItem[]\n\n  @@index([category_id])\n  @@map(\"products\")\n}\n\nmodel CashRegister {\n  id             Int      @id @default(autoincrement())\n  opened_at      DateTime @default(now()) @map(\"opened_at\")\n  opening_amount Float    @map(\"opening_amount\")\n  total_sales    Float    @default(0) @map(\"total_sales\")\n  created_at     DateTime @default(now()) @map(\"created_at\")\n  updated_at     DateTime @updatedAt @map(\"updated_at\")\n\n  sales Sale[]\n\n  @@map(\"cash_registers\")\n}\n\nmodel Sale {\n  id               Int          @id @default(autoincrement())\n  cash_register_id Int\n  cash_register    CashRegister @relation(fields: [cash_register_id], references: [id])\n  client_id        Int\n  client           Client       @relation(fields: [client_id], references: [id])\n  total            Float\n  created_at       DateTime     @default(now()) @map(\"created_at\")\n  updated_at       DateTime     @updatedAt @map(\"updated_at\")\n\n  items SaleItem[]\n\n  @@index([cash_register_id])\n  @@index([client_id])\n  @@index([created_at])\n  @@map(\"sales\")\n}\n\nmodel SaleItem {\n  id             Int      @id @default(autoincrement())\n  sale_id        Int\n  sale           Sale     @relation(fields: [sale_id], references: [id], onDelete: Cascade)\n  product_id     Int\n  product        Product  @relation(fields: [product_id], references: [id])\n  quantity       Int\n  unit_price     Float\n  purchase_price Float\n  created_at     DateTime @default(now()) @map(\"created_at\")\n  updated_at     DateTime @updatedAt @map(\"updated_at\")\n\n  @@index([sale_id])\n  @@index([product_id])\n  @@map(\"sale_items\")\n}\n\nmodel InventoryMovement {\n  id         Int      @id @default(autoincrement())\n  product_id Int\n  product    Product  @relation(fields: [product_id], references: [id], onDelete: Cascade)\n  type       String   @db.VarChar(10) // ENTRADA | SALIDA\n  quantity   Int\n  created_at DateTime @default(now()) @map(\"created_at\")\n  updated_at DateTime @updatedAt @map(\"updated_at\")\n\n  @@index([product_id])\n  @@index([type])\n  @@map(\"inventory_movements\")\n}\n\nmodel AuditLog {\n  id         Int      @id @default(autoincrement())\n  user_id    Int\n  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)\n  action     String   @db.VarChar(100)\n  entity     String   @db.VarChar(100)\n  entity_id  Int\n  created_at DateTime @default(now()) @map(\"created_at\")\n  updated_at DateTime @updatedAt @map(\"updated_at\")\n\n  @@index([user_id])\n  @@index([entity])\n  @@index([created_at])\n  @@map(\"audit_logs\")\n}\n",
-	"runtimeDataModel": {
-		"models": {},
-		"enums": {},
-		"types": {}
-	},
-	"parameterizationSchema": {
-		"strings": [],
-		"graph": ""
-	}
-};
-config.runtimeDataModel = JSON.parse("{\"models\":{\"User\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"Int\"},{\"name\":\"username\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"password_hash\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"role\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"created_at\",\"kind\":\"scalar\",\"type\":\"DateTime\",\"dbName\":\"created_at\"},{\"name\":\"updated_at\",\"kind\":\"scalar\",\"type\":\"DateTime\",\"dbName\":\"updated_at\"},{\"name\":\"audit_logs\",\"kind\":\"object\",\"type\":\"AuditLog\",\"relationName\":\"AuditLogToUser\"}],\"dbName\":\"users\"},\"Client\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"Int\"},{\"name\":\"dni\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"name\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"phone\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"code\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"tax_id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"created_at\",\"kind\":\"scalar\",\"type\":\"DateTime\",\"dbName\":\"created_at\"},{\"name\":\"updated_at\",\"kind\":\"scalar\",\"type\":\"DateTime\",\"dbName\":\"updated_at\"},{\"name\":\"sales\",\"kind\":\"object\",\"type\":\"Sale\",\"relationName\":\"ClientToSale\"}],\"dbName\":\"clients\"},\"Category\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"Int\"},{\"name\":\"name\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"created_at\",\"kind\":\"scalar\",\"type\":\"DateTime\",\"dbName\":\"created_at\"},{\"name\":\"updated_at\",\"kind\":\"scalar\",\"type\":\"DateTime\",\"dbName\":\"updated_at\"},{\"name\":\"products\",\"kind\":\"object\",\"type\":\"Product\",\"relationName\":\"CategoryToProduct\"}],\"dbName\":\"categories\"},\"Product\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"Int\"},{\"name\":\"sku\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"name\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"description\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"category_id\",\"kind\":\"scalar\",\"type\":\"Int\"},{\"name\":\"category\",\"kind\":\"object\",\"type\":\"Category\",\"relationName\":\"CategoryToProduct\"},{\"name\":\"price_purchase\",\"kind\":\"scalar\",\"type\":\"Float\",\"dbName\":\"price_purchase\"},{\"name\":\"price_sale\",\"kind\":\"scalar\",\"type\":\"Float\",\"dbName\":\"price_sale\"},{\"name\":\"stock\",\"kind\":\"scalar\",\"type\":\"Int\"},{\"name\":\"min_stock\",\"kind\":\"scalar\",\"type\":\"Int\"},{\"name\":\"created_at\",\"kind\":\"scalar\",\"type\":\"DateTime\",\"dbName\":\"created_at\"},{\"name\":\"updated_at\",\"kind\":\"scalar\",\"type\":\"DateTime\",\"dbName\":\"updated_at\"},{\"name\":\"inventory_movements\",\"kind\":\"object\",\"type\":\"InventoryMovement\",\"relationName\":\"InventoryMovementToProduct\"},{\"name\":\"sale_items\",\"kind\":\"object\",\"type\":\"SaleItem\",\"relationName\":\"ProductToSaleItem\"}],\"dbName\":\"products\"},\"CashRegister\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"Int\"},{\"name\":\"opened_at\",\"kind\":\"scalar\",\"type\":\"DateTime\",\"dbName\":\"opened_at\"},{\"name\":\"opening_amount\",\"kind\":\"scalar\",\"type\":\"Float\",\"dbName\":\"opening_amount\"},{\"name\":\"total_sales\",\"kind\":\"scalar\",\"type\":\"Float\",\"dbName\":\"total_sales\"},{\"name\":\"created_at\",\"kind\":\"scalar\",\"type\":\"DateTime\",\"dbName\":\"created_at\"},{\"name\":\"updated_at\",\"kind\":\"scalar\",\"type\":\"DateTime\",\"dbName\":\"updated_at\"},{\"name\":\"sales\",\"kind\":\"object\",\"type\":\"Sale\",\"relationName\":\"CashRegisterToSale\"}],\"dbName\":\"cash_registers\"},\"Sale\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"Int\"},{\"name\":\"cash_register_id\",\"kind\":\"scalar\",\"type\":\"Int\"},{\"name\":\"cash_register\",\"kind\":\"object\",\"type\":\"CashRegister\",\"relationName\":\"CashRegisterToSale\"},{\"name\":\"client_id\",\"kind\":\"scalar\",\"type\":\"Int\"},{\"name\":\"client\",\"kind\":\"object\",\"type\":\"Client\",\"relationName\":\"ClientToSale\"},{\"name\":\"total\",\"kind\":\"scalar\",\"type\":\"Float\"},{\"name\":\"created_at\",\"kind\":\"scalar\",\"type\":\"DateTime\",\"dbName\":\"created_at\"},{\"name\":\"updated_at\",\"kind\":\"scalar\",\"type\":\"DateTime\",\"dbName\":\"updated_at\"},{\"name\":\"items\",\"kind\":\"object\",\"type\":\"SaleItem\",\"relationName\":\"SaleToSaleItem\"}],\"dbName\":\"sales\"},\"SaleItem\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"Int\"},{\"name\":\"sale_id\",\"kind\":\"scalar\",\"type\":\"Int\"},{\"name\":\"sale\",\"kind\":\"object\",\"type\":\"Sale\",\"relationName\":\"SaleToSaleItem\"},{\"name\":\"product_id\",\"kind\":\"scalar\",\"type\":\"Int\"},{\"name\":\"product\",\"kind\":\"object\",\"type\":\"Product\",\"relationName\":\"ProductToSaleItem\"},{\"name\":\"quantity\",\"kind\":\"scalar\",\"type\":\"Int\"},{\"name\":\"unit_price\",\"kind\":\"scalar\",\"type\":\"Float\"},{\"name\":\"purchase_price\",\"kind\":\"scalar\",\"type\":\"Float\"},{\"name\":\"created_at\",\"kind\":\"scalar\",\"type\":\"DateTime\",\"dbName\":\"created_at\"},{\"name\":\"updated_at\",\"kind\":\"scalar\",\"type\":\"DateTime\",\"dbName\":\"updated_at\"}],\"dbName\":\"sale_items\"},\"InventoryMovement\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"Int\"},{\"name\":\"product_id\",\"kind\":\"scalar\",\"type\":\"Int\"},{\"name\":\"product\",\"kind\":\"object\",\"type\":\"Product\",\"relationName\":\"InventoryMovementToProduct\"},{\"name\":\"type\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"quantity\",\"kind\":\"scalar\",\"type\":\"Int\"},{\"name\":\"created_at\",\"kind\":\"scalar\",\"type\":\"DateTime\",\"dbName\":\"created_at\"},{\"name\":\"updated_at\",\"kind\":\"scalar\",\"type\":\"DateTime\",\"dbName\":\"updated_at\"}],\"dbName\":\"inventory_movements\"},\"AuditLog\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"Int\"},{\"name\":\"user_id\",\"kind\":\"scalar\",\"type\":\"Int\"},{\"name\":\"user\",\"kind\":\"object\",\"type\":\"User\",\"relationName\":\"AuditLogToUser\"},{\"name\":\"action\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"entity\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"entity_id\",\"kind\":\"scalar\",\"type\":\"Int\"},{\"name\":\"created_at\",\"kind\":\"scalar\",\"type\":\"DateTime\",\"dbName\":\"created_at\"},{\"name\":\"updated_at\",\"kind\":\"scalar\",\"type\":\"DateTime\",\"dbName\":\"updated_at\"}],\"dbName\":\"audit_logs\"}},\"enums\":{},\"types\":{}}");
-config.parameterizationSchema = {
-	strings: JSON.parse("[\"where\",\"orderBy\",\"cursor\",\"user\",\"audit_logs\",\"_count\",\"User.findUnique\",\"User.findUniqueOrThrow\",\"User.findFirst\",\"User.findFirstOrThrow\",\"User.findMany\",\"data\",\"User.createOne\",\"User.createMany\",\"User.createManyAndReturn\",\"User.updateOne\",\"User.updateMany\",\"User.updateManyAndReturn\",\"create\",\"update\",\"User.upsertOne\",\"User.deleteOne\",\"User.deleteMany\",\"having\",\"_avg\",\"_sum\",\"_min\",\"_max\",\"User.groupBy\",\"User.aggregate\",\"sales\",\"cash_register\",\"client\",\"sale\",\"products\",\"category\",\"product\",\"inventory_movements\",\"sale_items\",\"items\",\"Client.findUnique\",\"Client.findUniqueOrThrow\",\"Client.findFirst\",\"Client.findFirstOrThrow\",\"Client.findMany\",\"Client.createOne\",\"Client.createMany\",\"Client.createManyAndReturn\",\"Client.updateOne\",\"Client.updateMany\",\"Client.updateManyAndReturn\",\"Client.upsertOne\",\"Client.deleteOne\",\"Client.deleteMany\",\"Client.groupBy\",\"Client.aggregate\",\"Category.findUnique\",\"Category.findUniqueOrThrow\",\"Category.findFirst\",\"Category.findFirstOrThrow\",\"Category.findMany\",\"Category.createOne\",\"Category.createMany\",\"Category.createManyAndReturn\",\"Category.updateOne\",\"Category.updateMany\",\"Category.updateManyAndReturn\",\"Category.upsertOne\",\"Category.deleteOne\",\"Category.deleteMany\",\"Category.groupBy\",\"Category.aggregate\",\"Product.findUnique\",\"Product.findUniqueOrThrow\",\"Product.findFirst\",\"Product.findFirstOrThrow\",\"Product.findMany\",\"Product.createOne\",\"Product.createMany\",\"Product.createManyAndReturn\",\"Product.updateOne\",\"Product.updateMany\",\"Product.updateManyAndReturn\",\"Product.upsertOne\",\"Product.deleteOne\",\"Product.deleteMany\",\"Product.groupBy\",\"Product.aggregate\",\"CashRegister.findUnique\",\"CashRegister.findUniqueOrThrow\",\"CashRegister.findFirst\",\"CashRegister.findFirstOrThrow\",\"CashRegister.findMany\",\"CashRegister.createOne\",\"CashRegister.createMany\",\"CashRegister.createManyAndReturn\",\"CashRegister.updateOne\",\"CashRegister.updateMany\",\"CashRegister.updateManyAndReturn\",\"CashRegister.upsertOne\",\"CashRegister.deleteOne\",\"CashRegister.deleteMany\",\"CashRegister.groupBy\",\"CashRegister.aggregate\",\"Sale.findUnique\",\"Sale.findUniqueOrThrow\",\"Sale.findFirst\",\"Sale.findFirstOrThrow\",\"Sale.findMany\",\"Sale.createOne\",\"Sale.createMany\",\"Sale.createManyAndReturn\",\"Sale.updateOne\",\"Sale.updateMany\",\"Sale.updateManyAndReturn\",\"Sale.upsertOne\",\"Sale.deleteOne\",\"Sale.deleteMany\",\"Sale.groupBy\",\"Sale.aggregate\",\"SaleItem.findUnique\",\"SaleItem.findUniqueOrThrow\",\"SaleItem.findFirst\",\"SaleItem.findFirstOrThrow\",\"SaleItem.findMany\",\"SaleItem.createOne\",\"SaleItem.createMany\",\"SaleItem.createManyAndReturn\",\"SaleItem.updateOne\",\"SaleItem.updateMany\",\"SaleItem.updateManyAndReturn\",\"SaleItem.upsertOne\",\"SaleItem.deleteOne\",\"SaleItem.deleteMany\",\"SaleItem.groupBy\",\"SaleItem.aggregate\",\"InventoryMovement.findUnique\",\"InventoryMovement.findUniqueOrThrow\",\"InventoryMovement.findFirst\",\"InventoryMovement.findFirstOrThrow\",\"InventoryMovement.findMany\",\"InventoryMovement.createOne\",\"InventoryMovement.createMany\",\"InventoryMovement.createManyAndReturn\",\"InventoryMovement.updateOne\",\"InventoryMovement.updateMany\",\"InventoryMovement.updateManyAndReturn\",\"InventoryMovement.upsertOne\",\"InventoryMovement.deleteOne\",\"InventoryMovement.deleteMany\",\"InventoryMovement.groupBy\",\"InventoryMovement.aggregate\",\"AuditLog.findUnique\",\"AuditLog.findUniqueOrThrow\",\"AuditLog.findFirst\",\"AuditLog.findFirstOrThrow\",\"AuditLog.findMany\",\"AuditLog.createOne\",\"AuditLog.createMany\",\"AuditLog.createManyAndReturn\",\"AuditLog.updateOne\",\"AuditLog.updateMany\",\"AuditLog.updateManyAndReturn\",\"AuditLog.upsertOne\",\"AuditLog.deleteOne\",\"AuditLog.deleteMany\",\"AuditLog.groupBy\",\"AuditLog.aggregate\",\"AND\",\"OR\",\"NOT\",\"id\",\"user_id\",\"action\",\"entity\",\"entity_id\",\"created_at\",\"updated_at\",\"equals\",\"in\",\"notIn\",\"lt\",\"lte\",\"gt\",\"gte\",\"not\",\"contains\",\"startsWith\",\"endsWith\",\"product_id\",\"type\",\"quantity\",\"sale_id\",\"unit_price\",\"purchase_price\",\"cash_register_id\",\"client_id\",\"total\",\"opened_at\",\"opening_amount\",\"total_sales\",\"every\",\"some\",\"none\",\"sku\",\"name\",\"description\",\"category_id\",\"price_purchase\",\"price_sale\",\"stock\",\"min_stock\",\"dni\",\"phone\",\"code\",\"tax_id\",\"username\",\"password_hash\",\"role\",\"is\",\"isNot\",\"connectOrCreate\",\"upsert\",\"createMany\",\"set\",\"disconnect\",\"delete\",\"connect\",\"updateMany\",\"deleteMany\",\"increment\",\"decrement\",\"multiply\",\"divide\"]"),
-	graph: "-wNhkAEKBAAApgIAIKgBAAClAgAwqQEAAAkAEKoBAAClAgAwqwECAAAAAbABQACGAgAhsQFAAIYCACHYAQEAAAAB2QEBAJMCACHaAQEAkwIAIQEAAAABACALAwAAqAIAIKgBAACnAgAwqQEAAAMAEKoBAACnAgAwqwECAIUCACGsAQIAhQIAIa0BAQCTAgAhrgEBAJMCACGvAQIAhQIAIbABQACGAgAhsQFAAIYCACEBAwAA0QMAIAsDAACoAgAgqAEAAKcCADCpAQAAAwAQqgEAAKcCADCrAQIAAAABrAECAIUCACGtAQEAkwIAIa4BAQCTAgAhrwECAIUCACGwAUAAhgIAIbEBQACGAgAhAwAAAAMAIAEAAAQAMAIAAAUAIAEAAAADACABAAAAAQAgCgQAAKYCACCoAQAApQIAMKkBAAAJABCqAQAApQIAMKsBAgCFAgAhsAFAAIYCACGxAUAAhgIAIdgBAQCTAgAh2QEBAJMCACHaAQEAkwIAIQEEAADQAwAgAwAAAAkAIAEAAAoAMAIAAAEAIAMAAAAJACABAAAKADACAAABACADAAAACQAgAQAACgAwAgAAAQAgBwQAAM8DACCrAQIAAAABsAFAAAAAAbEBQAAAAAHYAQEAAAAB2QEBAAAAAdoBAQAAAAEBCwAADgAgBqsBAgAAAAGwAUAAAAABsQFAAAAAAdgBAQAAAAHZAQEAAAAB2gEBAAAAAQELAAAQADABCwAAEAAwBwQAAMIDACCrAQIArwIAIbABQACwAgAhsQFAALACACHYAQEArgIAIdkBAQCuAgAh2gEBAK4CACECAAAAAQAgCwAAEwAgBqsBAgCvAgAhsAFAALACACGxAUAAsAIAIdgBAQCuAgAh2QEBAK4CACHaAQEArgIAIQIAAAAJACALAAAVACACAAAACQAgCwAAFQAgAwAAAAEAIBIAAA4AIBMAABMAIAEAAAABACABAAAACQAgBQUAAL0DACAYAAC-AwAgGQAAwQMAIBoAAMADACAbAAC_AwAgCagBAACkAgAwqQEAABwAEKoBAACkAgAwqwECAPQBACGwAUAA9gEAIbEBQAD2AQAh2AEBAPUBACHZAQEA9QEAIdoBAQD1AQAhAwAAAAkAIAEAABsAMBcAABwAIAMAAAAJACABAAAKADACAAABACAMHgAAiAIAIKgBAACWAgAwqQEAADwAEKoBAACWAgAwqwECAAAAAbABQACGAgAhsQFAAIYCACHNAQEAkwIAIdQBAQAAAAHVAQEAlwIAIdYBAQAAAAHXAQEAAAABAQAAAB8AIAwfAACiAgAgIAAAowIAICcAAJ4CACCoAQAAoQIAMKkBAAAhABCqAQAAoQIAMKsBAgCFAgAhsAFAAIYCACGxAUAAhgIAIcMBAgCFAgAhxAECAIUCACHFAQgAhwIAIQMfAAC7AwAgIAAAvAMAICcAALkDACAMHwAAogIAICAAAKMCACAnAACeAgAgqAEAAKECADCpAQAAIQAQqgEAAKECADCrAQIAAAABsAFAAIYCACGxAUAAhgIAIcMBAgCFAgAhxAECAIUCACHFAQgAhwIAIQMAAAAhACABAAAiADACAAAjACADAAAAIQAgAQAAIgAwAgAAIwAgAQAAACEAIA0hAACgAgAgJAAAmQIAIKgBAACfAgAwqQEAACcAEKoBAACfAgAwqwECAIUCACGwAUAAhgIAIbEBQACGAgAhvQECAIUCACG_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_AgAh0QEIAL8CACHSAQIArwIAIdMBAgD2AgAhAgAAAC8AIAsAAHUAIAurAQIArwIAIbABQACwAgAhsQFAALACACHMAQEArgIAIc0BAQCuAgAhzgEBAPUCACHPAQIA9gIAIdABCAC_AgAh0QEIAL8CACHSAQIArwIAIdMBAgD2AgAhAgAAAC0AIAsAAHcAIAIAAAAtACALAAB3ACABAAAAKwAgAwAAAC8AIBIAAG8AIBMAAHUAIAEAAAAvACABAAAALQAgCAUAAPACACAYAADxAgAgGQAA9AIAIBoAAPMCACAbAADyAgAgzgEAAO8CACDPAQAA7wIAINMBAADvAgAgDqgBAACJAgAwqQEAAH8AEKoBAACJAgAwqwECAPQBACGwAUAA9gEAIbEBQAD2AQAhzAEBAPUBACHNAQEA9QEAIc4BAQCKAgAhzwECAIsCACHQAQgAgAIAIdEBCACAAgAh0gECAPQBACHTAQIAiwIAIQMAAAAtACABAAB-ADAXAAB_ACADAAAALQAgAQAALgAwAgAALwAgCh4AAIgCACCoAQAAhAIAMKkBAACFAQAQqgEAAIQCADCrAQIAAAABsAFAAIYCACGxAUAAhgIAIcYBQACGAgAhxwEIAIcCACHIAQgAhwIAIQEAAACCAQAgAQAAAIIBACAKHgAAiAIAIKgBAACEAgAwqQEAAIUBABCqAQAAhAIAMKsBAgCFAgAhsAFAAIYCACGxAUAAhgIAIcYBQACGAgAhxwEIAIcCACHIAQgAhwIAIQEeAADuAgAgAwAAAIUBACABAACGAQAwAgAAggEAIAMAAACFAQAgAQAAhgEAMAIAAIIBACADAAAAhQEAIAEAAIYBADACAACCAQAgBx4AAO0CACCrAQIAAAABsAFAAAAAAbEBQAAAAAHGAUAAAAABxwEIAAAAAcgBCAAAAAEBCwAAigEAIAarAQIAAAABsAFAAAAAAbEBQAAAAAHGAUAAAAABxwEIAAAAAcgBCAAAAAEBCwAAjAEAMAELAACMAQAwBx4AAOACACCrAQIArwIAIbABQACwAgAhsQFAALACACHGAUAAsAIAIccBCAC_AgAhyAEIAL8CACECAAAAggEAIAsAAI8BACAGqwECAK8CACGwAUAAsAIAIbEBQACwAgAhxgFAALACACHHAQgAvwIAIcgBCAC_AgAhAgAAAIUBACALAACRAQAgAgAAAIUBACALAACRAQAgAwAAAIIBACASAACKAQAgEwAAjwEAIAEAAACCAQAgAQAAAIUBACAFBQAA2wIAIBgAANwCACAZAADfAgAgGgAA3gIAIBsAAN0CACAJqAEAAIMCADCpAQAAmAEAEKoBAACDAgAwqwECAPQBACGwAUAA9gEAIbEBQAD2AQAhxgFAAPYBACHHAQgAgAIAIcgBCACAAgAhAwAAAIUBACABAACXAQAwFwAAmAEAIAMAAACFAQAgAQAAhgEAMAIAAIIBACABAAAAIwAgAQAAACMAIAMAAAAhACABAAAiADACAAAjACADAAAAIQAgAQAAIgAwAgAAIwAgAwAAACEAIAEAACIAMAIAACMAIAkfAADYAgAgIAAA2QIAICcAANoCACCrAQIAAAABsAFAAAAAAbEBQAAAAAHDAQIAAAABxAECAAAAAcUBCAAAAAEBCwAAoAEAIAarAQIAAAABsAFAAAAAAbEBQAAAAAHDAQIAAAABxAECAAAAAcUBCAAAAAEBCwAAogEAMAELAACiAQAwCR8AAMkCACAgAADKAgAgJwAAywIAIKsBAgCvAgAhsAFAALACACGxAUAAsAIAIcMBAgCvAgAhxAECAK8CACHFAQgAvwIAIQIAAAAjACALAAClAQAgBqsBAgCvAgAhsAFAALACACGxAUAAsAIAIcMBAgCvAgAhxAECAK8CACHFAQgAvwIAIQIAAAAhACALAACnAQAgAgAAACEAIAsAAKcBACADAAAAIwAgEgAAoAEAIBMAAKUBACABAAAAIwAgAQAAACEAIAUFAADEAgAgGAAAxQIAIBkAAMgCACAaAADHAgAgGwAAxgIAIAmoAQAAggIAMKkBAACuAQAQqgEAAIICADCrAQIA9AEAIbABQAD2AQAhsQFAAPYBACHDAQIA9AEAIcQBAgD0AQAhxQEIAIACACEDAAAAIQAgAQAArQEAMBcAAK4BACADAAAAIQAgAQAAIgAwAgAAIwAgAQAAACkAIAEAAAApACADAAAAJwAgAQAAKAAwAgAAKQAgAwAAACcAIAEAACgAMAIAACkAIAMAAAAnACABAAAoADACAAApACAKIQAAwgIAICQAAMMCACCrAQIAAAABsAFAAAAAAbEBQAAAAAG9AQIAAAABvwECAAAAAcABAgAAAAHBAQgAAAABwgEIAAAAAQELAAC2AQAgCKsBAgAAAAGwAUAAAAABsQFAAAAAAb0BAgAAAAG_AQIAAAABwAECAAAAAcEBCAAAAAHCAQgAAAABAQsAALgBADABCwAAuAEAMAohAADAAgAgJAAAwQIAIKsBAgCvAgAhsAFAALACACGxAUAAsAIAIb0BAgCvAgAhvwECAK8CACHAAQIArwIAIcEBCAC_AgAhwgEIAL8CACECAAAAKQAgCwAAuwEAIAirAQIArwIAIbABQACwAgAhsQFAALACACG9AQIArwIAIb8BAgCvAgAhwAECAK8CACHBAQgAvwIAIcIBCAC_AgAhAgAAACcAIAsAAL0BACACAAAAJwAgCwAAvQEAIAMAAAApACASAAC2AQAgEwAAuwEAIAEAAAApACABAAAAJwAgBQUAALoCACAYAAC7AgAgGQAAvgIAIBoAAL0CACAbAAC8AgAgC6gBAAD_AQAwqQEAAMQBABCqAQAA_wEAMKsBAgD0AQAhsAFAAPYBACGxAUAA9gEAIb0BAgD0AQAhvwECAPQBACHAAQIA9AEAIcEBCACAAgAhwgEIAIACACEDAAAAJwAgAQAAwwEAMBcAAMQBACADAAAAJwAgAQAAKAAwAgAAKQAgAQAAADQAIAEAAAA0ACADAAAAMgAgAQAAMwAwAgAANAAgAwAAADIAIAEAADMAMAIAADQAIAMAAAAyACABAAAzADACAAA0ACAHJAAAuQIAIKsBAgAAAAGwAUAAAAABsQFAAAAAAb0BAgAAAAG-AQEAAAABvwECAAAAAQELAADMAQAgBqsBAgAAAAGwAUAAAAABsQFAAAAAAb0BAgAAAAG-AQEAAAABvwECAAAAAQELAADOAQAwAQsAAM4BADAHJAAAuAIAIKsBAgCvAgAhsAFAALACACGxAUAAsAIAIb0BAgCvAgAhvgEBAK4CACG_AQIArwIAIQIAAAA0ACALAADRAQAgBqsBAgCvAgAhsAFAALACACGxAUAAsAIAIb0BAgCvAgAhvgEBAK4CACG_AQIArwIAIQIAAAAyACALAADTAQAgAgAAADIAIAsAANMBACADAAAANAAgEgAAzAEAIBMAANEBACABAAAANAAgAQAAADIAIAUFAACzAgAgGAAAtAIAIBkAALcCACAaAAC2AgAgGwAAtQIAIAmoAQAA_gEAMKkBAADaAQAQqgEAAP4BADCrAQIA9AEAIbABQAD2AQAhsQFAAPYBACG9AQIA9AEAIb4BAQD1AQAhvwECAPQBACEDAAAAMgAgAQAA2QEAMBcAANoBACADAAAAMgAgAQAAMwAwAgAANAAgAQAAAAUAIAEAAAAFACADAAAAAwAgAQAABAAwAgAABQAgAwAAAAMAIAEAAAQAMAIAAAUAIAMAAAADACABAAAEADACAAAFACAIAwAAsgIAIKsBAgAAAAGsAQIAAAABrQEBAAAAAa4BAQAAAAGvAQIAAAABsAFAAAAAAbEBQAAAAAEBCwAA4gEAIAerAQIAAAABrAECAAAAAa0BAQAAAAGuAQEAAAABrwECAAAAAbABQAAAAAGxAUAAAAABAQsAAOQBADABCwAA5AEAMAgDAACxAgAgqwECAK8CACGsAQIArwIAIa0BAQCuAgAhrgEBAK4CACGvAQIArwIAIbABQACwAgAhsQFAALACACECAAAABQAgCwAA5wEAIAerAQIArwIAIawBAgCvAgAhrQEBAK4CACGuAQEArgIAIa8BAgCvAgAhsAFAALACACGxAUAAsAIAIQIAAAADACALAADpAQAgAgAAAAMAIAsAAOkBACADAAAABQAgEgAA4gEAIBMAAOcBACABAAAABQAgAQAAAAMAIAUFAACpAgAgGAAAqgIAIBkAAK0CACAaAACsAgAgGwAAqwIAIAqoAQAA8wEAMKkBAADwAQAQqgEAAPMBADCrAQIA9AEAIawBAgD0AQAhrQEBAPUBACGuAQEA9QEAIa8BAgD0AQAhsAFAAPYBACGxAUAA9gEAIQMAAAADACABAADvAQAwFwAA8AEAIAMAAAADACABAAAEADACAAAFACAKqAEAAPMBADCpAQAA8AEAEKoBAADzAQAwqwECAPQBACGsAQIA9AEAIa0BAQD1AQAhrgEBAPUBACGvAQIA9AEAIbABQAD2AQAhsQFAAPYBACENBQAA-AEAIBgAAP0BACAZAAD4AQAgGgAA-AEAIBsAAPgBACCyAQIAAAABswECAAAABLQBAgAAAAS1AQIAAAABtgECAAAAAbcBAgAAAAG4AQIAAAABuQECAPwBACEOBQAA-AEAIBoAAPsBACAbAAD7AQAgsgEBAAAAAbMBAQAAAAS0AQEAAAAEtQEBAAAAAbYBAQAAAAG3AQEAAAABuAEBAAAAAbkBAQD6AQAhugEBAAAAAbsBAQAAAAG8AQEAAAABCwUAAPgBACAaAAD5AQAgGwAA-QEAILIBQAAAAAGzAUAAAAAEtAFAAAAABLUBQAAAAAG2AUAAAAABtwFAAAAAAbgBQAAAAAG5AUAA9wEAIQsFAAD4AQAgGgAA-QEAIBsAAPkBACCyAUAAAAABswFAAAAABLQBQAAAAAS1AUAAAAABtgFAAAAAAbcBQAAAAAG4AUAAAAABuQFAAPcBACEIsgECAAAAAbMBAgAAAAS0AQIAAAAEtQECAAAAAbYBAgAAAAG3AQIAAAABuAECAAAAAbkBAgD4AQAhCLIBQAAAAAGzAUAAAAAEtAFAAAAABLUBQAAAAAG2AUAAAAABtwFAAAAAAbgBQAAAAAG5AUAA-QEAIQ4FAAD4AQAgGgAA-wEAIBsAAPsBACCyAQEAAAABswEBAAAABLQBAQAAAAS1AQEAAAABtgEBAAAAAbcBAQAAAAG4AQEAAAABuQEBAPoBACG6AQEAAAABuwEBAAAAAbwBAQAAAAELsgEBAAAAAbMBAQAAAAS0AQEAAAAEtQEBAAAAAbYBAQAAAAG3AQEAAAABuAEBAAAAAbkBAQD7AQAhugEBAAAAAbsBAQAAAAG8AQEAAAABDQUAAPgBACAYAAD9AQAgGQAA-AEAIBoAAPgBACAbAAD4AQAgsgECAAAAAbMBAgAAAAS0AQIAAAAEtQECAAAAAbYBAgAAAAG3AQIAAAABuAECAAAAAbkBAgD8AQAhCLIBCAAAAAGzAQgAAAAEtAEIAAAABLUBCAAAAAG2AQgAAAABtwEIAAAAAbgBCAAAAAG5AQgA_QEAIQmoAQAA_gEAMKkBAADaAQAQqgEAAP4BADCrAQIA9AEAIbABQAD2AQAhsQFAAPYBACG9AQIA9AEAIb4BAQD1AQAhvwECAPQBACELqAEAAP8BADCpAQAAxAEAEKoBAAD_AQAwqwECAPQBACGwAUAA9gEAIbEBQAD2AQAhvQECAPQBACG_AQIA9AEAIcABAgD0AQAhwQEIAIACACHCAQgAgAIAIQ0FAAD4AQAgGAAA_QEAIBkAAP0BACAaAAD9AQAgGwAA_QEAILIBCAAAAAGzAQgAAAAEtAEIAAAABLUBCAAAAAG2AQgAAAABtwEIAAAAAbgBCAAAAAG5AQgAgQIAIQ0FAAD4AQAgGAAA_QEAIBkAAP0BACAaAAD9AQAgGwAA_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_AQIAAAABwQEIAAAAAcIBCAAAAAECAAAAKQAgEgAA1wIAIAMAAAApACASAADXAgAgEwAA1gIAIAELAADhAwAwDSEAAKACACAkAACZAgAgqAEAAJ8CADCpAQAAJwAQqgEAAJ8CADCrAQIAAAABsAFAAIYCACGxAUAAhgIAIb0BAgCFAgAhvwECAIUCACHAAQIAhQIAIcEBCACHAgAhwgEIAIcCACECAAAAKQAgCwAA1gIAIAIAAADUAgAgCwAA1QIAIAuoAQAA0wIAMKkBAADUAgAQqgEAANMCADCrAQIAhQIAIbABQACGAgAhsQFAAIYCACG9AQIAhQIAIb8BAgCFAgAhwAECAIUCACHBAQgAhwIAIcIBCACHAgAhC6gBAADTAgAwqQEAANQCABCqAQAA0wIAMKsBAgCFAgAhsAFAAIYCACGxAUAAhgIAIb0BAgCFAgAhvwECAIUCACHAAQIAhQIAIcEBCACHAgAhwgEIAIcCACEHqwECAK8CACGwAUAAsAIAIbEBQACwAgAhvQECAK8CACG_AQIArwIAIcEBCAC_AgAhwgEIAL8CACEIJAAAwQIAIKsBAgCvAgAhsAFAALACACGxAUAAsAIAIb0BAgCvAgAhvwECAK8CACHBAQgAvwIAIcIBCAC_AgAhCCQAAMMCACCrAQIAAAABsAFAAAAAAbEBQAAAAAG9AQIAAAABvwECAAAAAcEBCAAAAAHCAQgAAAABAxIAAN8DACDdAQAA4AMAIOMBAACCAQAgAxIAAN0DACDdAQAA3gMAIOMBAAAfACAEEgAAzAIAMN0BAADNAgAw3wEAAM8CACDjAQAA0AIAMAAAAAAACxIAAOECADATAADmAgAw3QEAAOICADDeAQAA4wIAMN8BAADkAgAg4AEAAOUCADDhAQAA5QIAMOIBAADlAgAw4wEAAOUCADDkAQAA5wIAMOUBAADoAgAwByAAANkCACAnAADaAgAgqwECAAAAAbABQAAAAAGxAUAAAAABxAECAAAAAcUBCAAAAAECAAAAIwAgEgAA7AIAIAMAAAAjACASAADsAgAgEwAA6wIAIAELAADcAwAwDB8AAKICACAgAACjAgAgJwAAngIAIKgBAAChAgAwqQEAACEAEKoBAAChAgAwqwECAAAAAbABQACGAgAhsQFAAIYCACHDAQIAhQIAIcQBAgCFAgAhxQEIAIcCACECAAAAIwAgCwAA6wIAIAIAAADpAgAgCwAA6gIAIAmoAQAA6AIAMKkBAADpAgAQqgEAAOgCADCrAQIAhQIAIbABQACGAgAhsQFAAIYCACHDAQIAhQIAIcQBAgCFAgAhxQEIAIcCACEJqAEAAOgCADCpAQAA6QIAEKoBAADoAgAwqwECAIUCACGwAUAAhgIAIbEBQACGAgAhwwECAIUCACHEAQIAhQIAIcUBCACHAgAhBasBAgCvAgAhsAFAALACACGxAUAAsAIAIcQBAgCvAgAhxQEIAL8CACEHIAAAygIAICcAAMsCACCrAQIArwIAIbABQACwAgAhsQFAALACACHEAQIArwIAIcUBCAC_AgAhByAAANkCACAnAADaAgAgqwECAAAAAbABQAAAAAGxAUAAAAABxAECAAAAAcUBCAAAAAEEEgAA4QIAMN0BAADiAgAw3wEAAOQCACDjAQAA5QIAMAAAAAAAAAAB4AEBAAAAAQXgAQIAAAAB5gECAAAAAecBAgAAAAHoAQIAAAAB6QECAAAAAQcSAADVAwAgEwAA2gMAIN0BAADWAwAg3gEAANkDACDhAQAAKwAg4gEAACsAIOMBAABSACALEgAAgwMAMBMAAIgDADDdAQAAhAMAMN4BAACFAwAw3wEAAIYDACDgAQAAhwMAMOEBAACHAwAw4gEAAIcDADDjAQAAhwMAMOQBAACJAwAw5QEAAIoDADALEgAA-gIAMBMAAP4CADDdAQAA-wIAMN4BAAD8AgAw3wEAAP0CACDgAQAA0AIAMOEBAADQAgAw4gEAANACADDjAQAA0AIAMOQBAAD_AgAw5QEAANMCADAIIQAAwgIAIKsBAgAAAAGwAUAAAAABsQFAAAAAAb8BAgAAAAHAAQIAAAABwQEIAAAAAcIBCAAAAAECAAAAKQAgEgAAggMAIAMAAAApACASAACCAwAgEwAAgQMAIAELAADYAwAwAgAAACkAIAsAAIEDACACAAAA1AIAIAsAAIADACAHqwECAK8CACGwAUAAsAIAIbEBQACwAgAhvwECAK8CACHAAQIArwIAIcEBCAC_AgAhwgEIAL8CACEIIQAAwAIAIKsBAgCvAgAhsAFAALACACGxAUAAsAIAIb8BAgCvAgAhwAECAK8CACHBAQgAvwIAIcIBCAC_AgAhCCEAAMICACCrAQIAAAABsAFAAAAAAbEBQAAAAAG_AQIAAAABwAECAAAAAcEBCAAAAAHCAQgAAAABBasBAgAAAAGwAUAAAAABsQFAAAAAAb4BAQAAAAG_AQIAAAABAgAAADQAIBIAAI4DACADAAAANAAgEgAAjgMAIBMAAI0DACABCwAA1wMAMAokAACZAgAgqAEAAJgCADCpAQAAMgAQqgEAAJgCADCrAQIAAAABsAFAAIYCACGxAUAAhgIAIb0BAgCFAgAhvgEBAJMCACG_AQIAhQIAIQIAAAA0ACALAACNAwAgAgAAAIsDACALAACMAwAgCagBAACKAwAwqQEAAIsDABCqAQAAigMAMKsBAgCFAgAhsAFAAIYCACGxAUAAhgIAIb0BAgCFAgAhvgEBAJMCACG_AQIAhQIAIQmoAQAAigMAMKkBAACLAwAQqgEAAIoDADCrAQIAhQIAIbABQACGAgAhsQFAAIYCACG9AQIAhQIAIb4BAQCTAgAhvwECAIUCACEFqwECAK8CACGwAUAAsAIAIbEBQACwAgAhvgEBAK4CACG_AQIArwIAIQWrAQIArwIAIbABQACwAgAhsQFAALACACG-AQEArgIAIb8BAgCvAgAhBasBAgAAAAGwAUAAAAABsQFAAAAAAb4BAQAAAAG_AQIAAAABAxIAANUDACDdAQAA1gMAIOMBAABSACAEEgAAgwMAMN0BAACEAwAw3wEAAIYDACDjAQAAhwMAMAQSAAD6AgAw3QEAAPsCADDfAQAA_QIAIOMBAADQAgAwAAAAAAALEgAAmAMAMBMAAJ0DADDdAQAAmQMAMN4BAACaAwAw3wEAAJsDACDgAQAAnAMAMOEBAACcAwAw4gEAAJwDADDjAQAAnAMAMOQBAACeAwAw5QEAAJ8DADAMJQAAkAMAICYAAJEDACCrAQIAAAABsAFAAAAAAbEBQAAAAAHMAQEAAAABzQEBAAAAAc4BAQAAAAHQAQgAAAAB0QEIAAAAAdIBAgAAAAHTAQIAAAABAgAAAC8AIBIAAKMDACADAAAALwAgEgAAowMAIBMAAKIDACABCwAA1AMAMBEjAACcAgAgJQAAnQIAICYAAJ4CACCoAQAAmgIAMKkBAAAtABCqAQAAmgIAMKsBAgAAAAGwAUAAhgIAIbEBQACGAgAhzAEBAAAAAc0BAQCTAgAhzgEBAJcCACHPAQIAmwIAIdABCACHAgAh0QEIAIcCACHSAQIAhQIAIdMBAgCbAgAhAgAAAC8AIAsAAKIDACACAAAAoAMAIAsAAKEDACAOqAEAAJ8DADCpAQAAoAMAEKoBAACfAwAwqwECAIUCACGwAUAAhgIAIbEBQACGAgAhzAEBAJMCACHNAQEAkwIAIc4BAQCXAgAhzwECAJsCACHQAQgAhwIAIdEBCACHAgAh0gECAIUCACHTAQIAmwIAIQ6oAQAAnwMAMKkBAACgAwAQqgEAAJ8DADCrAQIAhQIAIbABQACGAgAhsQFAAIYCACHMAQEAkwIAIc0BAQCTAgAhzgEBAJcCACHPAQIAmwIAIdABCACHAgAh0QEIAIcCACHSAQIAhQIAIdMBAgCbAgAhCqsBAgCvAgAhsAFAALACACGxAUAAsAIAIcwBAQCuAgAhzQEBAK4CACHOAQEA9QIAIdABCAC_AgAh0QEIAL8CACHSAQIArwIAIdMBAgD2AgAhDCUAAPgCACAmAAD5AgAgqwECAK8CACGwAUAAsAIAIbEBQACwAgAhzAEBAK4CACHNAQEArgIAIc4BAQD1AgAh0AEIAL8CACHRAQgAvwIAIdIBAgCvAgAh0wECAPYCACEMJQAAkAMAICYAAJEDACCrAQIAAAABsAFAAAAAAbEBQAAAAAHMAQEAAAABzQEBAAAAAc4BAQAAAAHQAQgAAAAB0QEIAAAAAdIBAgAAAAHTAQIAAAABBBIAAJgDADDdAQAAmQMAMN8BAACbAwAg4wEAAJwDADAAAAAAAAALEgAArAMAMBMAALADADDdAQAArQMAMN4BAACuAwAw3wEAAK8DACDgAQAA5QIAMOEBAADlAgAw4gEAAOUCADDjAQAA5QIAMOQBAACxAwAw5QEAAOgCADAHHwAA2AIAICcAANoCACCrAQIAAAABsAFAAAAAAbEBQAAAAAHDAQIAAAABxQEIAAAAAQIAAAAjACASAAC0AwAgAwAAACMAIBIAALQDACATAACzAwAgAQsAANMDADACAAAAIwAgCwAAswMAIAIAAADpAgAgCwAAsgMAIAWrAQIArwIAIbABQACwAgAhsQFAALACACHDAQIArwIAIcUBCAC_AgAhBx8AAMkCACAnAADLAgAgqwECAK8CACGwAUAAsAIAIbEBQACwAgAhwwECAK8CACHFAQgAvwIAIQcfAADYAgAgJwAA2gIAIKsBAgAAAAGwAUAAAAABsQFAAAAAAcMBAgAAAAHFAQgAAAABBBIAAKwDADDdAQAArQMAMN8BAACvAwAg4wEAAOUCADAGIwAAtwMAICUAALgDACAmAAC5AwAgzgEAAO8CACDPAQAA7wIAINMBAADvAgAgASIAAKUDACAAAAMfAAC7AwAgIAAAvAMAICcAALkDACABHgAA7gIAIAMeAADuAgAg1QEAAO8CACDXAQAA7wIAIAAAAAAACxIAAMMDADATAADIAwAw3QEAAMQDADDeAQAAxQMAMN8BAADGAwAg4AEAAMcDADDhAQAAxwMAMOIBAADHAwAw4wEAAMcDADDkAQAAyQMAMOUBAADKAwAwBqsBAgAAAAGtAQEAAAABrgEBAAAAAa8BAgAAAAGwAUAAAAABsQFAAAAAAQIAAAAFACASAADOAwAgAwAAAAUAIBIAAM4DACATAADNAwAgAQsAANIDADALAwAAqAIAIKgBAACnAgAwqQEAAAMAEKoBAACnAgAwqwECAAAAAawBAgCFAgAhrQEBAJMCACGuAQEAkwIAIa8BAgCFAgAhsAFAAIYCACGxAUAAhgIAIQIAAAAFACALAADNAwAgAgAAAMsDACALAADMAwAgCqgBAADKAwAwqQEAAMsDABCqAQAAygMAMKsBAgCFAgAhrAECAIUCACGtAQEAkwIAIa4BAQCTAgAhrwECAIUCACGwAUAAhgIAIbEBQACGAgAhCqgBAADKAwAwqQEAAMsDABCqAQAAygMAMKsBAgCFAgAhrAECAIUCACGtAQEAkwIAIa4BAQCTAgAhrwECAIUCACGwAUAAhgIAIbEBQACGAgAhBqsBAgCvAgAhrQEBAK4CACGuAQEArgIAIa8BAgCvAgAhsAFAALACACGxAUAAsAIAIQarAQIArwIAIa0BAQCuAgAhrgEBAK4CACGvAQIArwIAIbABQACwAgAhsQFAALACACEGqwECAAAAAa0BAQAAAAGuAQEAAAABrwECAAAAAbABQAAAAAGxAUAAAAABBBIAAMMDADDdAQAAxAMAMN8BAADGAwAg4wEAAMcDADAAAQQAANADACAGqwECAAAAAa0BAQAAAAGuAQEAAAABrwECAAAAAbABQAAAAAGxAUAAAAABBasBAgAAAAGwAUAAAAABsQFAAAAAAcMBAgAAAAHFAQgAAAABCqsBAgAAAAGwAUAAAAABsQFAAAAAAcwBAQAAAAHNAQEAAAABzgEBAAAAAdABCAAAAAHRAQgAAAAB0gECAAAAAdMBAgAAAAEEqwECAAAAAbABQAAAAAGxAUAAAAABzQEBAAAAAQIAAABSACASAADVAwAgBasBAgAAAAGwAUAAAAABsQFAAAAAAb4BAQAAAAG_AQIAAAABB6sBAgAAAAGwAUAAAAABsQFAAAAAAb8BAgAAAAHAAQIAAAABwQEIAAAAAcIBCAAAAAEDAAAAKwAgEgAA1QMAIBMAANsDACAGAAAAKwAgCwAA2wMAIKsBAgCvAgAhsAFAALACACGxAUAAsAIAIc0BAQCuAgAhBKsBAgCvAgAhsAFAALACACGxAUAAsAIAIc0BAQCuAgAhBasBAgAAAAGwAUAAAAABsQFAAAAAAcQBAgAAAAHFAQgAAAABCKsBAgAAAAGwAUAAAAABsQFAAAAAAc0BAQAAAAHUAQEAAAAB1QEBAAAAAdYBAQAAAAHXAQEAAAABAgAAAB8AIBIAAN0DACAGqwECAAAAAbABQAAAAAGxAUAAAAABxgFAAAAAAccBCAAAAAHIAQgAAAABAgAAAIIBACASAADfAwAgB6sBAgAAAAGwAUAAAAABsQFAAAAAAb0BAgAAAAG_AQIAAAABwQEIAAAAAcIBCAAAAAEDAAAAPAAgEgAA3QMAIBMAAOQDACAKAAAAPAAgCwAA5AMAIKsBAgCvAgAhsAFAALACACGxAUAAsAIAIc0BAQCuAgAh1AEBAK4CACHVAQEA9QIAIdYBAQCuAgAh1wEBAPUCACEIqwECAK8CACGwAUAAsAIAIbEBQACwAgAhzQEBAK4CACHUAQEArgIAIdUBAQD1AgAh1gEBAK4CACHXAQEA9QIAIQMAAACFAQAgEgAA3wMAIBMAAOcDACAIAAAAhQEAIAsAAOcDACCrAQIArwIAIbABQACwAgAhsQFAALACACHGAUAAsAIAIccBCAC_AgAhyAEIAL8CACEGqwECAK8CACGwAUAAsAIAIbEBQACwAgAhxgFAALACACHHAQgAvwIAIcgBCAC_AgAhDSMAAI8DACAlAACQAwAgqwECAAAAAbABQAAAAAGxAUAAAAABzAEBAAAAAc0BAQAAAAHOAQEAAAABzwECAAAAAdABCAAAAAHRAQgAAAAB0gECAAAAAdMBAgAAAAECAAAALwAgEgAA6AMAIAgfAADYAgAgIAAA2QIAIKsBAgAAAAGwAUAAAAABsQFAAAAAAcMBAgAAAAHEAQIAAAABxQEIAAAAAQIAAAAjACASAADqAwAgAwAAAC0AIBIAAOgDACATAADuAwAgDwAAAC0AIAsAAO4DACAjAAD3AgAgJQAA-AIAIKsBAgCvAgAhsAFAALACACGxAUAAsAIAIcwBAQCuAgAhzQEBAK4CACHOAQEA9QIAIc8BAgD2AgAh0AEIAL8CACHRAQgAvwIAIdIBAgCvAgAh0wECAPYCACENIwAA9wIAICUAAPgCACCrAQIArwIAIbABQACwAgAhsQFAALACACHMAQEArgIAIc0BAQCuAgAhzgEBAPUCACHPAQIA9gIAIdABCAC_AgAh0QEIAL8CACHSAQIArwIAIdMBAgD2AgAhAwAAACEAIBIAAOoDACATAADxAwAgCgAAACEAIAsAAPEDACAfAADJAgAgIAAAygIAIKsBAgCvAgAhsAFAALACACGxAUAAsAIAIcMBAgCvAgAhxAECAK8CACHFAQgAvwIAIQgfAADJAgAgIAAAygIAIKsBAgCvAgAhsAFAALACACGxAUAAsAIAIcMBAgCvAgAhxAECAK8CACHFAQgAvwIAIQ0jAACPAwAgJgAAkQMAIKsBAgAAAAGwAUAAAAABsQFAAAAAAcwBAQAAAAHNAQEAAAABzgEBAAAAAc8BAgAAAAHQAQgAAAAB0QEIAAAAAdIBAgAAAAHTAQIAAAABAgAAAC8AIBIAAPIDACADAAAALQAgEgAA8gMAIBMAAPYDACAPAAAALQAgCwAA9gMAICMAAPcCACAmAAD5AgAgqwECAK8CACGwAUAAsAIAIbEBQACwAgAhzAEBAK4CACHNAQEArgIAIc4BAQD1AgAhzwECAPYCACHQAQgAvwIAIdEBCAC_AgAh0gECAK8CACHTAQIA9gIAIQ0jAAD3AgAgJgAA-QIAIKsBAgCvAgAhsAFAALACACGxAUAAsAIAIcwBAQCuAgAhzQEBAK4CACHOAQEA9QIAIc8BAgD2AgAh0AEIAL8CACHRAQgAvwIAIdIBAgCvAgAh0wECAPYCACEGqwECAAAAAbABQAAAAAGxAUAAAAAB2AEBAAAAAdkBAQAAAAHaAQEAAAABAgAAAAEAIBIAAPcDACADAAAACQAgEgAA9wMAIBMAAPsDACAIAAAACQAgCwAA-wMAIKsBAgCvAgAhsAFAALACACGxAUAAsAIAIdgBAQCuAgAh2QEBAK4CACHaAQEArgIAIQarAQIArwIAIbABQACwAgAhsQFAALACACHYAQEArgIAIdkBAQCuAgAh2gEBAK4CACECBAYCBQADAQMAAQEEBwAAAAAFBQAIGAAJGQAKGgALGwAMAAAAAAAFBQAIGAAJGQAKGgALGwAMAgUAGR4kDwQFABgfABAgAA4nKhICBQARHiUPAR4mAAIhAA8kABMEBQAXIywUJTUWJjYSAgUAFSIwEwEiMQABJAATAiU3ACY4AAEnOQABHjoAAAAFBQAdGAAeGQAfGgAgGwAhAAAAAAAFBQAdGAAeGQAfGgAgGwAhAAAFBQAmGAAnGQAoGgApGwAqAAAAAAAFBQAmGAAnGQAoGgApGwAqASN0FAEjehQFBQAvGAAwGQAxGgAyGwAzAAAAAAAFBQAvGAAwGQAxGgAyGwAzAAAFBQA4GAA5GQA6GgA7GwA8AAAAAAAFBQA4GAA5GQA6GgA7GwA8Ah8AECAADgIfABAgAA4FBQBBGABCGQBDGgBEGwBFAAAAAAAFBQBBGABCGQBDGgBEGwBFAiEADyQAEwIhAA8kABMFBQBKGABLGQBMGgBNGwBOAAAAAAAFBQBKGABLGQBMGgBNGwBOASQAEwEkABMFBQBTGABUGQBVGgBWGwBXAAAAAAAFBQBTGABUGQBVGgBWGwBXAQMAAQEDAAEFBQBcGABdGQBeGgBfGwBgAAAAAAAFBQBcGABdGQBeGgBfGwBgBgIBBwgBCAsBCQwBCg0BDA8BDREEDhIFDxQBEBYEERcGFBgBFRkBFhoEHB0HHR4NKCAOKTsOKj4OKz8OLEAOLUIOLkQEL0UaMEcOMUkEMkobM0sONEwONU0ENlAcN1EiOFMUOVQUOlYUO1cUPFgUPVoUPlwEP10jQF8UQWEEQmIkQ2MURGQURWUERmglR2krSGoTSWsTSmwTS20TTG4TTXATTnIET3MsUHYTUXgEUnktU3sTVHwTVX0EVoABLleBATRYgwEQWYQBEFqHARBbiAEQXIkBEF2LARBejQEEX44BNWCQARBhkgEEYpMBNmOUARBklQEQZZYBBGaZATdnmgE9aJsBD2mcAQ9qnQEPa54BD2yfAQ9toQEPbqMBBG-kAT5wpgEPcagBBHKpAT9zqgEPdKsBD3WsAQR2rwFAd7ABRnixARJ5sgESerMBEnu0ARJ8tQESfbcBEn65AQR_ugFHgAG8ARKBAb4BBIIBvwFIgwHAARKEAcEBEoUBwgEEhgHFAUmHAcYBT4gBxwEWiQHIARaKAckBFosBygEWjAHLARaNAc0BFo4BzwEEjwHQAVCQAdIBFpEB1AEEkgHVAVGTAdYBFpQB1wEWlQHYAQSWAdsBUpcB3AFYmAHdAQKZAd4BApoB3wECmwHgAQKcAeEBAp0B4wECngHlAQSfAeYBWaAB6AECoQHqAQSiAesBWqMB7AECpAHtAQKlAe4BBKYB8QFbpwHyAWE"
-};
-async function decodeBase64AsWasm(wasmBase64) {
-	const { Buffer } = await import("node:buffer");
-	const wasmArray = Buffer.from(wasmBase64, "base64");
-	return new WebAssembly.Module(wasmArray);
-}
-config.compilerWasm = {
-	getRuntime: async () => await import("@prisma/client/runtime/query_compiler_fast_bg.postgresql.mjs"),
-	getQueryCompilerWasmModule: async () => {
-		const { wasm } = await import("@prisma/client/runtime/query_compiler_fast_bg.postgresql.wasm-base64.mjs");
-		return await decodeBase64AsWasm(wasm);
-	},
-	importName: "./query_compiler_fast_bg.js"
-};
-function getPrismaClientClass() {
-	return runtime.getPrismaClient(config);
-}
-runtime.PrismaClientKnownRequestError;
-runtime.PrismaClientUnknownRequestError;
-runtime.PrismaClientRustPanicError;
-runtime.PrismaClientInitializationError;
-runtime.PrismaClientValidationError;
-runtime.sqltag;
-runtime.empty;
-runtime.join;
-runtime.raw;
-runtime.Sql;
-runtime.Decimal;
-runtime.Extensions.getExtensionContext;
-runtime.NullTypes.DbNull, runtime.NullTypes.JsonNull, runtime.NullTypes.AnyNull;
-runtime.DbNull;
-runtime.JsonNull;
-runtime.AnyNull;
-runtime.makeStrictEnum({
-	ReadUncommitted: "ReadUncommitted",
-	ReadCommitted: "ReadCommitted",
-	RepeatableRead: "RepeatableRead",
-	Serializable: "Serializable"
-});
-runtime.Extensions.defineExtension;
-//#endregion
-//#region src/generated/prisma/client.ts
-globalThis["__dirname"] = path$1.dirname(fileURLToPath$1(import.meta.url));
-/**
-* ## Prisma Client
-* 
-* Type-safe database client for TypeScript
-* @example
-* ```
-* const prisma = new PrismaClient({
-*   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL })
-* })
-* // Fetch zero or more Users
-* const users = await prisma.user.findMany()
-* ```
-* 
-* Read more in our [docs](https://pris.ly/d/client).
-*/
-var PrismaClient = getPrismaClientClass();
-//#endregion
 //#region src/main/prisma/client.ts
-var { Pool } = pkg;
 var globalForPrisma = globalThis;
-if (!globalForPrisma.pool) globalForPrisma.pool = new Pool({ connectionString: process.env.DATABASE_URL });
-var adapter = new PrismaPg(globalForPrisma.pool);
-var prisma = globalForPrisma.prisma ?? new PrismaClient({ adapter });
+var prisma = globalForPrisma.prisma ?? new PrismaClient({ datasources: { db: { url: "file:./dev.sqlite3?mode=rwc" } } });
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+async function setupSQLite() {
+	try {
+		await prisma.$connect();
+		await prisma.$queryRaw`PRAGMA journal_mode=WAL`;
+		await prisma.$queryRaw`PRAGMA synchronous=NORMAL`;
+		await prisma.$queryRaw`PRAGMA cache_size=10000`;
+		await prisma.$queryRaw`PRAGMA temp_store=MEMORY`;
+	} catch (e) {
+		console.warn("SQLite PRAGMA setup:", e);
+	}
+}
+setupSQLite();
 //#endregion
 //#region src/common/schemas.ts
 var productSchema = z.object({
@@ -140,6 +64,54 @@ z.object({
 	type: z.enum(["ENTRADA", "SALIDA"], { errorMap: () => ({ message: "El tipo debe ser ENTRADA o SALIDA." }) }),
 	quantity: z.coerce.number().int().positive("La cantidad debe ser mayor a 0.")
 });
+//#endregion
+//#region src/main/utils/auditLog.ts
+/**
+* Gets the first admin user from the database.
+* Used as a fallback when no userId is provided.
+*/
+async function getDefaultAdminUserId() {
+	try {
+		return (await prisma.user.findFirst({
+			where: { role: "ADMIN" },
+			select: { id: true },
+			orderBy: { id: "asc" }
+		}))?.id ?? null;
+	} catch {
+		return null;
+	}
+}
+/**
+* Safely creates an audit log entry.
+* Verifies the user exists before creating the log to avoid foreign key errors.
+*/
+async function createAuditLog({ userId, action, entity, entity_id }) {
+	let finalUserId = userId;
+	if (!finalUserId) {
+		finalUserId = await getDefaultAdminUserId();
+		if (!finalUserId) {
+			console.warn("No userId provided and no admin user found, skipping audit log");
+			return;
+		}
+	}
+	try {
+		if (!await prisma.user.findUnique({
+			where: { id: finalUserId },
+			select: { id: true }
+		})) {
+			console.warn(`User ${finalUserId} not found, skipping audit log`);
+			return;
+		}
+		await prisma.auditLog.create({ data: {
+			user_id: finalUserId,
+			action,
+			entity,
+			entity_id
+		} });
+	} catch (error) {
+		console.warn("Failed to create audit log:", error);
+	}
+}
 //#endregion
 //#region src/main/services/ClientService.ts
 var ClientService = class {
@@ -189,12 +161,12 @@ var ClientService = class {
 			if (await prisma.client.findFirst({ where: { tax_id: validated.tax_id } })) throw new Error(`El RUC ${validated.tax_id} ya se encuentra registrado.`);
 		}
 		const client = await prisma.client.create({ data: validated });
-		await prisma.auditLog.create({ data: {
-			user_id: userId,
+		await createAuditLog({
+			userId,
 			action: "CREATE_CLIENT",
 			entity: "clients",
 			entity_id: client.id
-		} });
+		});
 		return {
 			success: true,
 			id: client.id
@@ -224,12 +196,12 @@ var ClientService = class {
 			where: { id },
 			data: validated
 		});
-		await prisma.auditLog.create({ data: {
-			user_id: userId,
+		await createAuditLog({
+			userId,
 			action: "UPDATE_CLIENT",
 			entity: "clients",
 			entity_id: client.id
-		} });
+		});
 		return {
 			success: true,
 			client
@@ -243,12 +215,12 @@ var ClientService = class {
 		const salesCount = await prisma.sale.count({ where: { client_id: id } });
 		if (salesCount > 0) throw new Error(`No se puede eliminar el cliente porque tiene ${salesCount} venta(s) asociada(s).`);
 		await prisma.client.delete({ where: { id } });
-		await prisma.auditLog.create({ data: {
-			user_id: userId,
+		await createAuditLog({
+			userId,
 			action: "DELETE_CLIENT",
 			entity: "clients",
 			entity_id: id
-		} });
+		});
 		return { success: true };
 	}
 };
@@ -277,7 +249,22 @@ var ProductService = class {
 		if (categoryId) where.category_id = categoryId;
 		return prisma.product.findMany({
 			where,
-			include: { category: true },
+			select: {
+				id: true,
+				sku: true,
+				name: true,
+				description: true,
+				price_sale: true,
+				price_purchase: true,
+				stock: true,
+				min_stock: true,
+				created_at: true,
+				updated_at: true,
+				category: { select: {
+					id: true,
+					name: true
+				} }
+			},
 			orderBy: { created_at: "desc" }
 		});
 	}
@@ -325,14 +312,15 @@ var ProductService = class {
 		if (initialStock > 0) await prisma.inventoryMovement.create({ data: {
 			product_id: product.id,
 			type: "ENTRADA",
-			quantity: initialStock
+			quantity: initialStock,
+			reason: "INICIAL"
 		} });
-		await prisma.auditLog.create({ data: {
-			user_id: userId,
+		await createAuditLog({
+			userId,
 			action: "CREATE_PRODUCT",
 			entity: "products",
 			entity_id: product.id
-		} });
+		});
 		return {
 			success: true,
 			id: product.id
@@ -363,12 +351,12 @@ var ProductService = class {
 				min_stock: validated.min_stock
 			}
 		});
-		await prisma.auditLog.create({ data: {
-			user_id: userId,
+		await createAuditLog({
+			userId,
 			action: "UPDATE_PRODUCT",
 			entity: "products",
 			entity_id: product.id
-		} });
+		});
 		return {
 			success: true,
 			product
@@ -382,18 +370,18 @@ var ProductService = class {
 		const salesCount = await prisma.saleItem.count({ where: { product_id: id } });
 		if (salesCount > 0) throw new Error(`No se puede eliminar el producto porque tiene ${salesCount} venta(s) asociada(s).`);
 		await prisma.product.delete({ where: { id } });
-		await prisma.auditLog.create({ data: {
-			user_id: userId,
+		await createAuditLog({
+			userId,
 			action: "DELETE_PRODUCT",
 			entity: "products",
 			entity_id: id
-		} });
+		});
 		return { success: true };
 	}
 	/**
 	* Añade stock inicial o adicional (ENTRADA)
 	*/
-	static async addStock(productId, quantity, userId = 1) {
+	static async addStock(productId, quantity, userId = 1, reason = "AJUSTE") {
 		if (!await prisma.product.findUnique({ where: { id: productId } })) throw new Error("El producto no existe.");
 		if (quantity <= 0) throw new Error("La cantidad debe ser mayor a cero.");
 		await prisma.product.update({
@@ -403,20 +391,21 @@ var ProductService = class {
 		await prisma.inventoryMovement.create({ data: {
 			product_id: productId,
 			type: "ENTRADA",
-			quantity
+			quantity,
+			reason
 		} });
-		await prisma.auditLog.create({ data: {
-			user_id: userId,
+		await createAuditLog({
+			userId,
 			action: "STOCK_ENTRADA",
 			entity: "products",
 			entity_id: productId
-		} });
+		});
 		return { success: true };
 	}
 	/**
 	* Reduce stock (SALIDA) - Para devoluciones o ajustes
 	*/
-	static async removeStock(productId, quantity, userId = 1) {
+	static async removeStock(productId, quantity, userId = 1, reason = "AJUSTE") {
 		const product = await prisma.product.findUnique({ where: { id: productId } });
 		if (!product) throw new Error("El producto no existe.");
 		if (quantity <= 0) throw new Error("La cantidad debe ser mayor a cero.");
@@ -428,14 +417,15 @@ var ProductService = class {
 		await prisma.inventoryMovement.create({ data: {
 			product_id: productId,
 			type: "SALIDA",
-			quantity
+			quantity,
+			reason
 		} });
-		await prisma.auditLog.create({ data: {
-			user_id: userId,
+		await createAuditLog({
+			userId,
 			action: "STOCK_SALIDA",
 			entity: "products",
 			entity_id: productId
-		} });
+		});
 		return { success: true };
 	}
 	/**
@@ -448,528 +438,6 @@ var ProductService = class {
 			orderBy: { created_at: "desc" },
 			take: limit
 		});
-	}
-};
-//#endregion
-//#region src/main/services/SaleService.ts
-var SaleService = class {
-	/**
-	* Obtiene todas las ventas con filtros opcionales
-	*/
-	static async getAllSales(startDate, endDate, clientId, cashRegisterId) {
-		const where = {};
-		if (startDate || endDate) {
-			where.created_at = {};
-			if (startDate) where.created_at.gte = startDate;
-			if (endDate) where.created_at.lte = endDate;
-		}
-		if (clientId) where.client_id = clientId;
-		if (cashRegisterId) where.cash_register_id = cashRegisterId;
-		return prisma.sale.findMany({
-			where,
-			include: {
-				client: true,
-				cash_register: true
-			},
-			orderBy: { created_at: "desc" }
-		});
-	}
-	/**
-	* Obtiene una venta por ID con todos sus detalles
-	*/
-	static async getSaleDetails(id) {
-		const sale = await prisma.sale.findUnique({
-			where: { id },
-			include: {
-				items: { include: { product: true } },
-				client: true,
-				cash_register: true
-			}
-		});
-		if (!sale) throw new Error("Venta no encontrada");
-		return sale;
-	}
-	/**
-	* Obtiene ventas del día actual
-	*/
-	static async getTodaySales() {
-		const startOfDay = /* @__PURE__ */ new Date();
-		startOfDay.setHours(0, 0, 0, 0);
-		const endOfDay = /* @__PURE__ */ new Date();
-		endOfDay.setHours(23, 59, 59, 999);
-		return prisma.sale.findMany({
-			where: { created_at: {
-				gte: startOfDay,
-				lte: endOfDay
-			} },
-			include: {
-				client: true,
-				cash_register: true
-			},
-			orderBy: { created_at: "desc" }
-		});
-	}
-	/**
-	* Obtiene estadísticas de ventas
-	*/
-	static async getSalesStats(startDate, endDate) {
-		const where = {};
-		if (startDate || endDate) {
-			where.created_at = {};
-			if (startDate) where.created_at.gte = startDate;
-			if (endDate) where.created_at.lte = endDate;
-		}
-		const stats = await prisma.sale.aggregate({
-			where,
-			_count: { id: true },
-			_sum: { total: true },
-			_avg: { total: true }
-		});
-		return {
-			totalSales: stats._count.id,
-			totalRevenue: stats._sum.total || 0,
-			averageSale: stats._avg.total || 0
-		};
-	}
-	/**
-	* Registra una nueva venta con actualización de inventario
-	*/
-	static async registerSale(saleData, itemsData, userId = 1) {
-		const validated = saleSchema.parse({
-			...saleData,
-			items: itemsData
-		});
-		if (!await prisma.cashRegister.findFirst({ where: {
-			id: validated.cash_register_id,
-			opened_at: { gte: new Date((/* @__PURE__ */ new Date()).setHours(0, 0, 0, 0)) }
-		} })) throw new Error("La caja no está abierta o no existe.");
-		let finalClientId = validated.client_id;
-		if (validated.client_dni && validated.client_name && !finalClientId) {
-			const existingClient = await prisma.client.findFirst({ where: { dni: validated.client_dni } });
-			if (existingClient) finalClientId = existingClient.id;
-			else finalClientId = (await prisma.client.create({ data: {
-				dni: validated.client_dni,
-				name: validated.client_name,
-				code: `CLI-${Date.now()}`
-			} })).id;
-		}
-		if (finalClientId) {
-			if (!await prisma.client.findUnique({ where: { id: finalClientId } })) throw new Error("El cliente no existe.");
-		}
-		const saleId = await prisma.$transaction(async (tx) => {
-			const productIds = validated.items.map((item) => item.product_id);
-			const products = await tx.product.findMany({ where: { id: { in: productIds } } });
-			const productMap = new Map(products.map((p) => [p.id, p]));
-			for (const item of validated.items) {
-				const product = productMap.get(item.product_id);
-				if (!product) throw new Error(`El producto ID ${item.product_id} no existe.`);
-				if (product.stock < item.quantity) throw new Error(`Stock insuficiente para "${product.name}". Stock actual: ${product.stock}, Cantidad solicitada: ${item.quantity}`);
-			}
-			const itemsWithPurchasePrice = validated.items.map((item) => {
-				const product = productMap.get(item.product_id);
-				return {
-					...item,
-					purchase_price: product?.price_purchase || 0
-				};
-			});
-			const total = itemsWithPurchasePrice.reduce((acc, item) => acc + item.unit_price * item.quantity, 0);
-			const sale = await tx.sale.create({ data: {
-				cash_register_id: validated.cash_register_id,
-				client_id: finalClientId || 1,
-				total
-			} });
-			for (const item of itemsWithPurchasePrice) {
-				await tx.saleItem.create({ data: {
-					sale_id: sale.id,
-					product_id: item.product_id,
-					quantity: item.quantity,
-					unit_price: item.unit_price,
-					purchase_price: item.purchase_price
-				} });
-				await tx.product.update({
-					where: { id: item.product_id },
-					data: { stock: { decrement: item.quantity } }
-				});
-				await tx.inventoryMovement.create({ data: {
-					product_id: item.product_id,
-					type: "SALIDA",
-					quantity: item.quantity
-				} });
-			}
-			await tx.cashRegister.update({
-				where: { id: validated.cash_register_id },
-				data: { total_sales: { increment: total } }
-			});
-			return sale.id;
-		});
-		await prisma.auditLog.create({ data: {
-			user_id: userId,
-			action: "CREATE_SALE",
-			entity: "sales",
-			entity_id: saleId
-		} });
-		return {
-			success: true,
-			id: saleId
-		};
-	}
-	/**
-	* Anula una venta (devolución completa)
-	*/
-	static async cancelSale(saleId, userId = 1) {
-		const sale = await prisma.sale.findUnique({
-			where: { id: saleId },
-			include: { items: true }
-		});
-		if (!sale) throw new Error("Venta no encontrada");
-		await prisma.$transaction(async (tx) => {
-			for (const item of sale.items) {
-				await tx.product.update({
-					where: { id: item.product_id },
-					data: { stock: { increment: item.quantity } }
-				});
-				await tx.inventoryMovement.create({ data: {
-					product_id: item.product_id,
-					type: "ENTRADA",
-					quantity: item.quantity
-				} });
-			}
-			await tx.cashRegister.update({
-				where: { id: sale.cash_register_id },
-				data: { total_sales: { decrement: sale.total } }
-			});
-			await tx.sale.delete({ where: { id: saleId } });
-		});
-		await prisma.auditLog.create({ data: {
-			user_id: userId,
-			action: "CANCEL_SALE",
-			entity: "sales",
-			entity_id: saleId
-		} });
-		return { success: true };
-	}
-};
-//#endregion
-//#region src/main/repositories/UserRepository.ts
-var UserRepository = class {
-	/**
-	* Find all users (without password hash)
-	*/
-	static async findAll() {
-		return prisma.user.findMany({
-			select: {
-				id: true,
-				username: true,
-				role: true,
-				created_at: true,
-				updated_at: true
-			},
-			orderBy: { created_at: "desc" }
-		});
-	}
-	/**
-	* Find user by ID (without password hash)
-	*/
-	static async findById(id) {
-		return prisma.user.findUnique({
-			where: { id },
-			select: {
-				id: true,
-				username: true,
-				role: true,
-				created_at: true,
-				updated_at: true
-			}
-		});
-	}
-	/**
-	* Find user by username (with password hash for authentication)
-	*/
-	static async findByUsername(username) {
-		return prisma.user.findUnique({ where: { username } });
-	}
-	/**
-	* Create a new user
-	*/
-	static async create(data) {
-		return prisma.user.create({
-			data,
-			select: {
-				id: true,
-				username: true,
-				role: true,
-				created_at: true,
-				updated_at: true
-			}
-		});
-	}
-	/**
-	* Update an existing user
-	*/
-	static async update(id, data) {
-		return prisma.user.update({
-			where: { id },
-			data,
-			select: {
-				id: true,
-				username: true,
-				role: true,
-				created_at: true,
-				updated_at: true
-			}
-		});
-	}
-	/**
-	* Delete a user by ID
-	*/
-	static async delete(id) {
-		return prisma.user.delete({ where: { id } });
-	}
-	/**
-	* Check if username exists
-	*/
-	static async exists(username, excludeId) {
-		return !!await prisma.user.findFirst({
-			where: {
-				username,
-				...excludeId && { id: { not: excludeId } }
-			},
-			select: { id: true }
-		});
-	}
-	/**
-	* Count total users
-	*/
-	static async count() {
-		return prisma.user.count();
-	}
-};
-//#endregion
-//#region src/main/services/AuthService.ts
-var AuthService = class {
-	/**
-	* Intenta iniciar sesión comparando el hash de la base de datos
-	*/
-	static async login(username, password) {
-		try {
-			const user = await UserRepository.findByUsername(username);
-			if (!user) return {
-				success: false,
-				error: "Usuario no encontrado"
-			};
-			if (!await bcrypt.compare(password, user.password_hash)) return {
-				success: false,
-				error: "Contraseña incorrecta"
-			};
-			const { password_hash: _, ...userWithoutPassword } = user;
-			return {
-				success: true,
-				user: userWithoutPassword
-			};
-		} catch (error) {
-			console.error("Login error:", error);
-			if (error.code === "P2025") return {
-				success: false,
-				error: "Usuario no encontrado"
-			};
-			return {
-				success: false,
-				error: "Error interno del servidor"
-			};
-		}
-	}
-	/**
-	* Registra un nuevo usuario hasheando su contraseña
-	*/
-	static async register(userData) {
-		try {
-			if (await UserRepository.exists(userData.username)) return {
-				success: false,
-				error: `El usuario '${userData.username}' ya existe`
-			};
-			if (userData.password.length < 6) return {
-				success: false,
-				error: "La contraseña debe tener al menos 6 caracteres"
-			};
-			const salt = await bcrypt.genSalt(10);
-			const hashedPassword = await bcrypt.hash(userData.password, salt);
-			const user = await UserRepository.create({
-				username: userData.username,
-				password_hash: hashedPassword,
-				role: userData.role
-			});
-			return {
-				success: true,
-				user: {
-					id: user.id,
-					username: user.username,
-					role: user.role,
-					created_at: user.created_at,
-					updated_at: user.updated_at
-				}
-			};
-		} catch (error) {
-			console.error("Register error:", error);
-			if (error.code === "P2002") return {
-				success: false,
-				error: "El nombre de usuario ya está en uso"
-			};
-			return {
-				success: false,
-				error: "Error interno del servidor"
-			};
-		}
-	}
-	/**
-	* Cambia la contraseña de un usuario
-	*/
-	static async changePassword(userId, oldPassword, newPassword) {
-		try {
-			const user = await prisma.user.findUnique({ where: { id: userId } });
-			if (!user) return {
-				success: false,
-				error: "Usuario no encontrado"
-			};
-			if (!await bcrypt.compare(oldPassword, user.password_hash)) return {
-				success: false,
-				error: "Contraseña actual incorrecta"
-			};
-			if (newPassword.length < 6) return {
-				success: false,
-				error: "La contraseña debe tener al menos 6 caracteres"
-			};
-			const salt = await bcrypt.genSalt(10);
-			const hashedPassword = await bcrypt.hash(newPassword, salt);
-			await UserRepository.update(userId, { password_hash: hashedPassword });
-			return { success: true };
-		} catch (error) {
-			console.error("Change password error:", error);
-			return {
-				success: false,
-				error: "Error interno del servidor"
-			};
-		}
-	}
-};
-//#endregion
-//#region src/main/services/UserService.ts
-var UserService = class {
-	/**
-	* Get all users (without password hashes)
-	*/
-	static async getAllUsers() {
-		try {
-			return await UserRepository.findAll();
-		} catch (error) {
-			console.error("Get all users error:", error);
-			throw new Error("Error al obtener usuarios");
-		}
-	}
-	/**
-	* Get user by ID
-	*/
-	static async getUserById(id) {
-		try {
-			const user = await UserRepository.findById(id);
-			if (!user) throw new Error("Usuario no encontrado");
-			return user;
-		} catch (error) {
-			console.error("Get user by ID error:", error);
-			if (error.code === "P2025") throw new Error("Usuario no encontrado");
-			throw new Error("Error al obtener usuario");
-		}
-	}
-	/**
-	* Create a new user
-	*/
-	static async createUser(data, createdBy) {
-		try {
-			if (await UserRepository.exists(data.username)) throw new Error(`El usuario '${data.username}' ya existe`);
-			if (data.password.length < 6) throw new Error("La contraseña debe tener al menos 6 caracteres");
-			const salt = await bcrypt.genSalt(10);
-			const hashedPassword = await bcrypt.hash(data.password, salt);
-			const user = await UserRepository.create({
-				username: data.username,
-				password_hash: hashedPassword,
-				role: data.role
-			});
-			await prisma.auditLog.create({ data: {
-				user_id: createdBy,
-				action: "CREATE_USER",
-				entity: "users",
-				entity_id: user.id
-			} });
-			return user;
-		} catch (error) {
-			console.error("Create user error:", error);
-			if (error.code === "P2002") throw new Error("El nombre de usuario ya está en uso");
-			throw error;
-		}
-	}
-	/**
-	* Update an existing user
-	*/
-	static async updateUser(id, data, updatedBy) {
-		try {
-			if (data.username) {
-				if (await UserRepository.exists(data.username, id)) throw new Error(`El usuario '${data.username}' ya existe`);
-			}
-			const user = await UserRepository.update(id, data);
-			await prisma.auditLog.create({ data: {
-				user_id: updatedBy,
-				action: "UPDATE_USER",
-				entity: "users",
-				entity_id: id
-			} });
-			return user;
-		} catch (error) {
-			console.error("Update user error:", error);
-			if (error.code === "P2025") throw new Error("Usuario no encontrado");
-			throw error;
-		}
-	}
-	/**
-	* Delete a user
-	*/
-	static async deleteUser(id, deletedBy) {
-		try {
-			if (!await UserRepository.findById(id)) throw new Error("Usuario no encontrado");
-			if (id === deletedBy) throw new Error("No puedes eliminar tu propio usuario");
-			await UserRepository.delete(id);
-			await prisma.auditLog.create({ data: {
-				user_id: deletedBy,
-				action: "DELETE_USER",
-				entity: "users",
-				entity_id: id
-			} });
-			return { success: true };
-		} catch (error) {
-			console.error("Delete user error:", error);
-			if (error.code === "P2025") throw new Error("Usuario no encontrado");
-			throw error;
-		}
-	}
-	/**
-	* Change user password
-	*/
-	static async changePassword(userId, newPassword, changedBy) {
-		try {
-			if (newPassword.length < 6) throw new Error("La contraseña debe tener al menos 6 caracteres");
-			const salt = await bcrypt.genSalt(10);
-			const hashedPassword = await bcrypt.hash(newPassword, salt);
-			await UserRepository.update(userId, { password_hash: hashedPassword });
-			await prisma.auditLog.create({ data: {
-				user_id: changedBy,
-				action: "CHANGE_PASSWORD",
-				entity: "users",
-				entity_id: userId
-			} });
-			return { success: true };
-		} catch (error) {
-			console.error("Change password error:", error);
-			if (error.code === "P2025") throw new Error("Usuario no encontrado");
-			throw error;
-		}
 	}
 };
 //#endregion
@@ -1016,6 +484,9 @@ var DashboardRepository = class {
 		const totalClients = await prisma.client.count();
 		const lowStockCount = await prisma.product.count({ where: { stock: { lt: prisma.product.fields.min_stock } } });
 		const result = {
+			todayRevenue: revenueResult._sum.total || 0,
+			todayProfit: totalProfit,
+			todaySalesCount: salesCount,
 			totalRevenue: revenueResult._sum.total || 0,
 			totalProfit,
 			totalSales: salesCount,
@@ -1269,6 +740,553 @@ var DashboardRepository = class {
 	}
 };
 //#endregion
+//#region src/main/services/SaleService.ts
+var SaleService = class {
+	/**
+	* Obtiene todas las ventas con filtros opcionales
+	*/
+	static async getAllSales(startDate, endDate, clientId, cashRegisterId) {
+		const where = {};
+		if (startDate || endDate) {
+			where.created_at = {};
+			if (startDate) where.created_at.gte = startDate;
+			if (endDate) where.created_at.lte = endDate;
+		}
+		if (clientId) where.client_id = clientId;
+		if (cashRegisterId) where.cash_register_id = cashRegisterId;
+		return prisma.sale.findMany({
+			where,
+			select: {
+				id: true,
+				total: true,
+				payment_method: true,
+				created_at: true,
+				client: { select: {
+					id: true,
+					name: true,
+					dni: true
+				} },
+				cash_register: { select: {
+					id: true,
+					opened_at: true,
+					opening_amount: true
+				} }
+			},
+			orderBy: { created_at: "desc" }
+		});
+	}
+	/**
+	* Obtiene una venta por ID con todos sus detalles
+	*/
+	static async getSaleDetails(id) {
+		const sale = await prisma.sale.findUnique({
+			where: { id },
+			include: {
+				items: { include: { product: true } },
+				client: true,
+				cash_register: true
+			}
+		});
+		if (!sale) throw new Error("Venta no encontrada");
+		return sale;
+	}
+	/**
+	* Obtiene ventas del día actual
+	*/
+	static async getTodaySales() {
+		const startOfDay = /* @__PURE__ */ new Date();
+		startOfDay.setHours(0, 0, 0, 0);
+		const endOfDay = /* @__PURE__ */ new Date();
+		endOfDay.setHours(23, 59, 59, 999);
+		return prisma.sale.findMany({
+			where: { created_at: {
+				gte: startOfDay,
+				lte: endOfDay
+			} },
+			include: {
+				client: true,
+				cash_register: true
+			},
+			orderBy: { created_at: "desc" }
+		});
+	}
+	/**
+	* Obtiene estadísticas de ventas
+	*/
+	static async getSalesStats(startDate, endDate) {
+		const where = {};
+		if (startDate || endDate) {
+			where.created_at = {};
+			if (startDate) where.created_at.gte = startDate;
+			if (endDate) where.created_at.lte = endDate;
+		}
+		const stats = await prisma.sale.aggregate({
+			where,
+			_count: { id: true },
+			_sum: { total: true },
+			_avg: { total: true }
+		});
+		return {
+			totalSales: stats._count.id,
+			totalRevenue: stats._sum.total || 0,
+			averageSale: stats._avg.total || 0
+		};
+	}
+	/**
+	* Obtiene la última venta registrada
+	*/
+	static async getLastSale() {
+		return prisma.sale.findFirst({
+			orderBy: { created_at: "desc" },
+			include: { items: true }
+		});
+	}
+	/**
+	* Registra una nueva venta con actualización de inventario
+	*/
+	static async registerSale(saleData, itemsData, userId = 1) {
+		const validated = saleSchema.parse({
+			...saleData,
+			items: itemsData
+		});
+		if (!await prisma.cashRegister.findFirst({ where: {
+			id: validated.cash_register_id,
+			opened_at: { gte: new Date((/* @__PURE__ */ new Date()).setHours(0, 0, 0, 0)) }
+		} })) throw new Error("La caja no está abierta o no existe.");
+		let finalClientId = validated.client_id;
+		if (validated.client_dni && validated.client_name && !finalClientId) {
+			const existingClient = await prisma.client.findFirst({ where: { dni: validated.client_dni } });
+			if (existingClient) finalClientId = existingClient.id;
+			else finalClientId = (await prisma.client.create({ data: {
+				dni: validated.client_dni,
+				name: validated.client_name,
+				code: `CLI-${Date.now()}`
+			} })).id;
+		}
+		if (finalClientId) {
+			if (!await prisma.client.findUnique({ where: { id: finalClientId } })) throw new Error("El cliente no existe.");
+		}
+		const saleId = await prisma.$transaction(async (tx) => {
+			const productIds = validated.items.map((item) => item.product_id);
+			const products = await tx.product.findMany({ where: { id: { in: productIds } } });
+			const productMap = new Map(products.map((p) => [p.id, p]));
+			for (const item of validated.items) {
+				const product = productMap.get(item.product_id);
+				if (!product) throw new Error(`El producto ID ${item.product_id} no existe.`);
+				if (product.stock < item.quantity) throw new Error(`Stock insuficiente para "${product.name}". Stock actual: ${product.stock}, Cantidad solicitada: ${item.quantity}`);
+			}
+			const itemsWithPurchasePrice = validated.items.map((item) => {
+				const product = productMap.get(item.product_id);
+				return {
+					...item,
+					purchase_price: product?.price_purchase || 0
+				};
+			});
+			const total = itemsWithPurchasePrice.reduce((acc, item) => acc + item.unit_price * item.quantity, 0);
+			const sale = await tx.sale.create({ data: {
+				cash_register_id: validated.cash_register_id,
+				client_id: finalClientId || 1,
+				total
+			} });
+			for (const item of itemsWithPurchasePrice) {
+				await tx.saleItem.create({ data: {
+					sale_id: sale.id,
+					product_id: item.product_id,
+					quantity: item.quantity,
+					unit_price: item.unit_price,
+					purchase_price: item.purchase_price
+				} });
+				await tx.product.update({
+					where: { id: item.product_id },
+					data: { stock: { decrement: item.quantity } }
+				});
+				await tx.inventoryMovement.create({ data: {
+					product_id: item.product_id,
+					type: "SALIDA",
+					quantity: item.quantity,
+					reason: "VENTA"
+				} });
+			}
+			await tx.cashRegister.update({
+				where: { id: validated.cash_register_id },
+				data: { total_sales: { increment: total } }
+			});
+			return sale.id;
+		});
+		DashboardRepository.invalidateCache();
+		await createAuditLog({
+			userId,
+			action: "CREATE_SALE",
+			entity: "sales",
+			entity_id: saleId
+		});
+		return {
+			success: true,
+			id: saleId
+		};
+	}
+	/**
+	* Anula una venta (devolución completa)
+	*/
+	static async cancelSale(saleId, userId = 1) {
+		const sale = await prisma.sale.findUnique({
+			where: { id: saleId },
+			include: { items: true }
+		});
+		if (!sale) throw new Error("Venta no encontrada");
+		await prisma.$transaction(async (tx) => {
+			for (const item of sale.items) {
+				await tx.product.update({
+					where: { id: item.product_id },
+					data: { stock: { increment: item.quantity } }
+				});
+				await tx.inventoryMovement.create({ data: {
+					product_id: item.product_id,
+					type: "ENTRADA",
+					quantity: item.quantity,
+					reason: "DEVOLUCION"
+				} });
+			}
+			await tx.cashRegister.update({
+				where: { id: sale.cash_register_id },
+				data: { total_sales: { decrement: sale.total } }
+			});
+			await tx.sale.delete({ where: { id: saleId } });
+		});
+		DashboardRepository.invalidateCache();
+		await createAuditLog({
+			userId,
+			action: "CANCEL_SALE",
+			entity: "sales",
+			entity_id: saleId
+		});
+		return { success: true };
+	}
+};
+//#endregion
+//#region src/main/repositories/UserRepository.ts
+var UserRepository = class {
+	/**
+	* Find all users (without password hash)
+	*/
+	static async findAll() {
+		return prisma.user.findMany({
+			select: {
+				id: true,
+				username: true,
+				role: true,
+				created_at: true,
+				updated_at: true
+			},
+			orderBy: { created_at: "desc" }
+		});
+	}
+	/**
+	* Find user by ID (without password hash)
+	*/
+	static async findById(id) {
+		return prisma.user.findUnique({
+			where: { id },
+			select: {
+				id: true,
+				username: true,
+				role: true,
+				created_at: true,
+				updated_at: true
+			}
+		});
+	}
+	/**
+	* Find user by username (with password hash for authentication)
+	*/
+	static async findByUsername(username) {
+		return prisma.user.findUnique({ where: { username } });
+	}
+	/**
+	* Create a new user
+	*/
+	static async create(data) {
+		return prisma.user.create({
+			data,
+			select: {
+				id: true,
+				username: true,
+				role: true,
+				created_at: true,
+				updated_at: true
+			}
+		});
+	}
+	/**
+	* Update an existing user
+	*/
+	static async update(id, data) {
+		return prisma.user.update({
+			where: { id },
+			data,
+			select: {
+				id: true,
+				username: true,
+				role: true,
+				created_at: true,
+				updated_at: true
+			}
+		});
+	}
+	/**
+	* Delete a user by ID
+	*/
+	static async delete(id) {
+		return prisma.user.delete({ where: { id } });
+	}
+	/**
+	* Check if username exists
+	*/
+	static async exists(username, excludeId) {
+		return !!await prisma.user.findFirst({
+			where: {
+				username,
+				...excludeId && { id: { not: excludeId } }
+			},
+			select: { id: true }
+		});
+	}
+	/**
+	* Count total users
+	*/
+	static async count() {
+		return prisma.user.count();
+	}
+};
+//#endregion
+//#region src/main/services/AuthService.ts
+var AuthService = class {
+	/**
+	* Intenta iniciar sesión comparando el hash de la base de datos
+	*/
+	static async login(username, password) {
+		try {
+			const user = await UserRepository.findByUsername(username);
+			if (!user) return {
+				success: false,
+				error: "Usuario no encontrado"
+			};
+			if (!await bcrypt.compare(password, user.password_hash)) return {
+				success: false,
+				error: "Contraseña incorrecta"
+			};
+			const { password_hash: _, ...userWithoutPassword } = user;
+			return {
+				success: true,
+				user: userWithoutPassword
+			};
+		} catch (error) {
+			console.error("Login error:", error);
+			if (error.code === "P2025") return {
+				success: false,
+				error: "Usuario no encontrado"
+			};
+			return {
+				success: false,
+				error: "Error interno del servidor"
+			};
+		}
+	}
+	/**
+	* Registra un nuevo usuario hasheando su contraseña
+	*/
+	static async register(userData) {
+		try {
+			if (await UserRepository.exists(userData.username)) return {
+				success: false,
+				error: `El usuario '${userData.username}' ya existe`
+			};
+			if (userData.password.length < 6) return {
+				success: false,
+				error: "La contraseña debe tener al menos 6 caracteres"
+			};
+			const salt = await bcrypt.genSalt(10);
+			const hashedPassword = await bcrypt.hash(userData.password, salt);
+			const user = await UserRepository.create({
+				username: userData.username,
+				password_hash: hashedPassword,
+				role: userData.role
+			});
+			return {
+				success: true,
+				user: {
+					id: user.id,
+					username: user.username,
+					role: user.role,
+					created_at: user.created_at,
+					updated_at: user.updated_at
+				}
+			};
+		} catch (error) {
+			console.error("Register error:", error);
+			if (error.code === "P2002") return {
+				success: false,
+				error: "El nombre de usuario ya está en uso"
+			};
+			return {
+				success: false,
+				error: "Error interno del servidor"
+			};
+		}
+	}
+	/**
+	* Cambia la contraseña de un usuario
+	*/
+	static async changePassword(userId, oldPassword, newPassword) {
+		try {
+			const user = await prisma.user.findUnique({ where: { id: userId } });
+			if (!user) return {
+				success: false,
+				error: "Usuario no encontrado"
+			};
+			if (!await bcrypt.compare(oldPassword, user.password_hash)) return {
+				success: false,
+				error: "Contraseña actual incorrecta"
+			};
+			if (newPassword.length < 6) return {
+				success: false,
+				error: "La contraseña debe tener al menos 6 caracteres"
+			};
+			const salt = await bcrypt.genSalt(10);
+			const hashedPassword = await bcrypt.hash(newPassword, salt);
+			await UserRepository.update(userId, { password_hash: hashedPassword });
+			return { success: true };
+		} catch (error) {
+			console.error("Change password error:", error);
+			return {
+				success: false,
+				error: "Error interno del servidor"
+			};
+		}
+	}
+};
+//#endregion
+//#region src/main/services/UserService.ts
+var UserService = class {
+	/**
+	* Get all users (without password hashes)
+	*/
+	static async getAllUsers() {
+		try {
+			return await UserRepository.findAll();
+		} catch (error) {
+			console.error("Get all users error:", error);
+			throw new Error("Error al obtener usuarios");
+		}
+	}
+	/**
+	* Get user by ID
+	*/
+	static async getUserById(id) {
+		try {
+			const user = await UserRepository.findById(id);
+			if (!user) throw new Error("Usuario no encontrado");
+			return user;
+		} catch (error) {
+			console.error("Get user by ID error:", error);
+			if (error.code === "P2025") throw new Error("Usuario no encontrado");
+			throw new Error("Error al obtener usuario");
+		}
+	}
+	/**
+	* Create a new user
+	*/
+	static async createUser(data, createdBy) {
+		try {
+			if (await UserRepository.exists(data.username)) throw new Error(`El usuario '${data.username}' ya existe`);
+			if (data.password.length < 6) throw new Error("La contraseña debe tener al menos 6 caracteres");
+			const salt = await bcrypt.genSalt(10);
+			const hashedPassword = await bcrypt.hash(data.password, salt);
+			const user = await UserRepository.create({
+				username: data.username,
+				password_hash: hashedPassword,
+				role: data.role
+			});
+			await createAuditLog({
+				userId: createdBy,
+				action: "CREATE_USER",
+				entity: "users",
+				entity_id: user.id
+			});
+			return user;
+		} catch (error) {
+			console.error("Create user error:", error);
+			if (error.code === "P2002") throw new Error("El nombre de usuario ya está en uso");
+			throw error;
+		}
+	}
+	/**
+	* Update an existing user
+	*/
+	static async updateUser(id, data, updatedBy) {
+		try {
+			if (data.username) {
+				if (await UserRepository.exists(data.username, id)) throw new Error(`El usuario '${data.username}' ya existe`);
+			}
+			const user = await UserRepository.update(id, data);
+			await createAuditLog({
+				userId: updatedBy,
+				action: "UPDATE_USER",
+				entity: "users",
+				entity_id: id
+			});
+			return user;
+		} catch (error) {
+			console.error("Update user error:", error);
+			if (error.code === "P2025") throw new Error("Usuario no encontrado");
+			throw error;
+		}
+	}
+	/**
+	* Delete a user
+	*/
+	static async deleteUser(id, deletedBy) {
+		try {
+			if (!await UserRepository.findById(id)) throw new Error("Usuario no encontrado");
+			if (id === deletedBy) throw new Error("No puedes eliminar tu propio usuario");
+			await UserRepository.delete(id);
+			await createAuditLog({
+				userId: deletedBy,
+				action: "DELETE_USER",
+				entity: "users",
+				entity_id: id
+			});
+			return { success: true };
+		} catch (error) {
+			console.error("Delete user error:", error);
+			if (error.code === "P2025") throw new Error("Usuario no encontrado");
+			throw error;
+		}
+	}
+	/**
+	* Change user password
+	*/
+	static async changePassword(userId, newPassword, changedBy) {
+		try {
+			if (newPassword.length < 6) throw new Error("La contraseña debe tener al menos 6 caracteres");
+			const salt = await bcrypt.genSalt(10);
+			const hashedPassword = await bcrypt.hash(newPassword, salt);
+			await UserRepository.update(userId, { password_hash: hashedPassword });
+			await createAuditLog({
+				userId: changedBy,
+				action: "CHANGE_PASSWORD",
+				entity: "users",
+				entity_id: userId
+			});
+			return { success: true };
+		} catch (error) {
+			console.error("Change password error:", error);
+			if (error.code === "P2025") throw new Error("Usuario no encontrado");
+			throw error;
+		}
+	}
+};
+//#endregion
 //#region src/main/services/CashRegisterService.ts
 var CashRegisterService = class {
 	/**
@@ -1322,12 +1340,12 @@ var CashRegisterService = class {
 			opening_amount: Number(openingAmount),
 			total_sales: 0
 		} });
-		await prisma.auditLog.create({ data: {
-			user_id: userId,
+		await createAuditLog({
+			userId,
 			action: "OPEN_CASH_REGISTER",
 			entity: "cash_registers",
 			entity_id: cashRegister.id
-		} });
+		});
 		return {
 			success: true,
 			id: cashRegister.id
@@ -1347,12 +1365,12 @@ var CashRegisterService = class {
 			created_at: { gte: register.opened_at }
 		} });
 		const status = difference === 0 ? "PERFECT" : difference > 0 ? "SURPLUS" : "MISSING";
-		await prisma.auditLog.create({ data: {
-			user_id: userId,
+		await createAuditLog({
+			userId,
 			action: "CLOSE_CASH_REGISTER",
 			entity: "cash_registers",
 			entity_id: register.id
-		} });
+		});
 		return {
 			success: true,
 			registerId: register.id,
@@ -1424,6 +1442,12 @@ var CategoryRepository = class {
 		} } : {};
 		return prisma.category.findMany({
 			where,
+			select: {
+				id: true,
+				name: true,
+				created_at: true,
+				updated_at: true
+			},
 			orderBy: { name: "asc" }
 		});
 	}
@@ -1450,12 +1474,12 @@ var CategoryRepository = class {
 		const validated = categorySchema.parse(categoryData);
 		if (await prisma.category.findFirst({ where: { name: validated.name } })) throw new Error(`La categoría "${validated.name}" ya existe.`);
 		const category = await prisma.category.create({ data: validated });
-		if (userId) await prisma.auditLog.create({ data: {
-			user_id: userId,
+		if (userId) await createAuditLog({
+			userId,
 			action: "CREATE_CATEGORY",
 			entity: "categories",
 			entity_id: category.id
-		} });
+		});
 		return category;
 	}
 	/**
@@ -1472,12 +1496,12 @@ var CategoryRepository = class {
 			where: { id },
 			data: validated
 		});
-		if (userId) await prisma.auditLog.create({ data: {
-			user_id: userId,
+		if (userId) await createAuditLog({
+			userId,
 			action: "UPDATE_CATEGORY",
 			entity: "categories",
 			entity_id: category.id
-		} });
+		});
 		return category;
 	}
 	/**
@@ -1488,13 +1512,370 @@ var CategoryRepository = class {
 		const productsCount = await prisma.product.count({ where: { category_id: id } });
 		if (productsCount > 0) throw new Error(`No se puede eliminar la categoría porque tiene ${productsCount} producto(s) asociado(s).`);
 		await prisma.category.delete({ where: { id } });
-		if (userId) await prisma.auditLog.create({ data: {
-			user_id: userId,
+		if (userId) await createAuditLog({
+			userId,
 			action: "DELETE_CATEGORY",
 			entity: "categories",
 			entity_id: id
-		} });
+		});
 		return { success: true };
+	}
+};
+//#endregion
+//#region src/main/services/SettingsService.ts
+var SettingsService = class {
+	/**
+	* Obtiene todas las configuraciones como un objeto clave-valor
+	*/
+	static async getSettings() {
+		return (await prisma.setting.findMany()).reduce((acc, curr) => {
+			acc[curr.key] = curr.value;
+			return acc;
+		}, {});
+	}
+	/**
+	* Guarda o actualiza múltiples configuraciones
+	*/
+	static async updateSettings(settings) {
+		const promises = Object.entries(settings).map(([key, value]) => {
+			return prisma.setting.upsert({
+				where: { key },
+				update: { value },
+				create: {
+					key,
+					value
+				}
+			});
+		});
+		await Promise.all(promises);
+		return { success: true };
+	}
+	/**
+	* Obtiene una configuración específica
+	*/
+	static async getSetting(key, defaultValue = "") {
+		const setting = await prisma.setting.findUnique({ where: { key } });
+		return setting ? setting.value : defaultValue;
+	}
+};
+//#endregion
+//#region src/main/services/SupplierService.ts
+var SupplierService = class {
+	/**
+	* Get all suppliers with optional search
+	*/
+	static async getAllSuppliers(search) {
+		try {
+			const where = {};
+			if (search) where.OR = [
+				{ name: {
+					contains: search,
+					mode: "insensitive"
+				} },
+				{ ruc: {
+					contains: search,
+					mode: "insensitive"
+				} },
+				{ email: {
+					contains: search,
+					mode: "insensitive"
+				} }
+			];
+			return await prisma.supplier.findMany({
+				where,
+				include: { _count: { select: {
+					products: true,
+					purchases: true
+				} } },
+				orderBy: { name: "asc" }
+			});
+		} catch (error) {
+			console.error("Get all suppliers error:", error);
+			throw new Error("Error al obtener proveedores");
+		}
+	}
+	/**
+	* Get supplier by ID
+	*/
+	static async getSupplierById(id) {
+		try {
+			const supplier = await prisma.supplier.findUnique({
+				where: { id },
+				include: {
+					products: { select: {
+						id: true,
+						name: true,
+						sku: true,
+						stock: true
+					} },
+					purchases: {
+						orderBy: { created_at: "desc" },
+						take: 10
+					}
+				}
+			});
+			if (!supplier) throw new Error("Proveedor no encontrado");
+			return supplier;
+		} catch (error) {
+			console.error("Get supplier by ID error:", error);
+			if (error.code === "P2025") throw new Error("Proveedor no encontrado");
+			throw new Error("Error al obtener proveedor");
+		}
+	}
+	/**
+	* Create a new supplier
+	*/
+	static async createSupplier(data, createdBy) {
+		try {
+			if (data.ruc) {
+				if (await prisma.supplier.findFirst({ where: { ruc: data.ruc } })) throw new Error(`El RUC ${data.ruc} ya está registrado`);
+			}
+			const supplier = await prisma.supplier.create({ data: {
+				name: data.name,
+				ruc: data.ruc,
+				phone: data.phone,
+				email: data.email,
+				address: data.address
+			} });
+			await createAuditLog({
+				userId: createdBy,
+				action: "CREATE_SUPPLIER",
+				entity: "suppliers",
+				entity_id: supplier.id
+			});
+			return supplier;
+		} catch (error) {
+			console.error("Create supplier error:", error);
+			if (error.code === "P2002") throw new Error("El RUC ya está en uso");
+			throw error;
+		}
+	}
+	/**
+	* Update an existing supplier
+	*/
+	static async updateSupplier(id, data, updatedBy) {
+		try {
+			const existing = await prisma.supplier.findUnique({ where: { id } });
+			if (!existing) throw new Error("Proveedor no encontrado");
+			if (data.ruc && data.ruc !== existing.ruc) {
+				if (await prisma.supplier.findFirst({ where: {
+					ruc: data.ruc,
+					NOT: { id }
+				} })) throw new Error(`El RUC ${data.ruc} ya está registrado`);
+			}
+			const supplier = await prisma.supplier.update({
+				where: { id },
+				data: {
+					name: data.name,
+					ruc: data.ruc,
+					phone: data.phone,
+					email: data.email,
+					address: data.address
+				}
+			});
+			await createAuditLog({
+				userId: updatedBy,
+				action: "UPDATE_SUPPLIER",
+				entity: "suppliers",
+				entity_id: id
+			});
+			return supplier;
+		} catch (error) {
+			console.error("Update supplier error:", error);
+			if (error.code === "P2025") throw new Error("Proveedor no encontrado");
+			throw error;
+		}
+	}
+	/**
+	* Delete a supplier
+	*/
+	static async deleteSupplier(id, deletedBy) {
+		try {
+			const supplier = await prisma.supplier.findUnique({
+				where: { id },
+				include: {
+					products: true,
+					purchases: true
+				}
+			});
+			if (!supplier) throw new Error("Proveedor no encontrado");
+			if (supplier.products.length > 0) throw new Error(`No se puede eliminar el proveedor porque tiene ${supplier.products.length} producto(s) asociado(s)`);
+			if (supplier.purchases.length > 0) throw new Error(`No se puede eliminar el proveedor porque tiene ${supplier.purchases.length} compra(s) asociada(s)`);
+			await prisma.supplier.delete({ where: { id } });
+			await createAuditLog({
+				userId: deletedBy,
+				action: "DELETE_SUPPLIER",
+				entity: "suppliers",
+				entity_id: id
+			});
+			return { success: true };
+		} catch (error) {
+			console.error("Delete supplier error:", error);
+			if (error.code === "P2025") throw new Error("Proveedor no encontrado");
+			throw error;
+		}
+	}
+};
+//#endregion
+//#region src/main/services/PurchaseService.ts
+var PurchaseService = class {
+	/**
+	* Get all purchases with optional filters
+	*/
+	static async getAllPurchases(supplierId, status) {
+		try {
+			const where = {};
+			if (supplierId) where.supplier_id = supplierId;
+			if (status) where.status = status;
+			return await prisma.purchase.findMany({
+				where,
+				include: {
+					supplier: { select: {
+						id: true,
+						name: true,
+						ruc: true
+					} },
+					items: { include: { product: { select: {
+						id: true,
+						name: true,
+						sku: true
+					} } } }
+				},
+				orderBy: { created_at: "desc" }
+			});
+		} catch (error) {
+			console.error("Get all purchases error:", error);
+			throw new Error("Error al obtener compras");
+		}
+	}
+	/**
+	* Get purchase by ID
+	*/
+	static async getPurchaseById(id) {
+		try {
+			const purchase = await prisma.purchase.findUnique({
+				where: { id },
+				include: {
+					supplier: true,
+					items: { include: { product: true } }
+				}
+			});
+			if (!purchase) throw new Error("Compra no encontrada");
+			return purchase;
+		} catch (error) {
+			console.error("Get purchase by ID error:", error);
+			if (error.code === "P2025") throw new Error("Compra no encontrada");
+			throw new Error("Error al obtener compra");
+		}
+	}
+	/**
+	* Create a new purchase order (status: PENDING)
+	*/
+	static async createPurchase(data, createdBy) {
+		try {
+			if (!await prisma.supplier.findUnique({ where: { id: data.supplier_id } })) throw new Error("Proveedor no encontrado");
+			const productIds = data.items.map((item) => item.product_id);
+			if ((await prisma.product.findMany({ where: { id: { in: productIds } } })).length !== productIds.length) throw new Error("Uno o más productos no existen");
+			const totalAmount = data.items.reduce((sum, item) => sum + item.quantity * item.unit_cost, 0);
+			const purchase = await prisma.purchase.create({
+				data: {
+					supplier_id: data.supplier_id,
+					total_amount: totalAmount,
+					status: "PENDING",
+					items: { create: data.items.map((item) => ({
+						product_id: item.product_id,
+						quantity: item.quantity,
+						unit_cost: item.unit_cost
+					})) }
+				},
+				include: {
+					supplier: true,
+					items: { include: { product: true } }
+				}
+			});
+			await createAuditLog({
+				userId: createdBy,
+				action: "CREATE_PURCHASE",
+				entity: "purchases",
+				entity_id: purchase.id
+			});
+			return purchase;
+		} catch (error) {
+			console.error("Create purchase error:", error);
+			throw error;
+		}
+	}
+	/**
+	* Receive purchase (change status to RECEIVED and update stock)
+	*/
+	static async receivePurchase(purchaseId, receivedBy) {
+		try {
+			const purchase = await prisma.purchase.findUnique({
+				where: { id: purchaseId },
+				include: { items: { include: { product: true } } }
+			});
+			if (!purchase) throw new Error("Compra no encontrada");
+			if (purchase.status === "RECEIVED") throw new Error("Esta compra ya fue recibida");
+			if (purchase.status === "CANCELLED") throw new Error("No se puede recibir una compra cancelada");
+			await prisma.$transaction(async (tx) => {
+				for (const item of purchase.items) {
+					await tx.product.update({
+						where: { id: item.product_id },
+						data: {
+							stock: { increment: item.quantity },
+							price_purchase: item.unit_cost
+						}
+					});
+					await tx.inventoryMovement.create({ data: {
+						product_id: item.product_id,
+						type: "ENTRADA",
+						quantity: item.quantity,
+						reason: "COMPRA"
+					} });
+				}
+				await tx.purchase.update({
+					where: { id: purchaseId },
+					data: { status: "RECEIVED" }
+				});
+			});
+			await createAuditLog({
+				userId: receivedBy,
+				action: "RECEIVE_PURCHASE",
+				entity: "purchases",
+				entity_id: purchaseId
+			});
+			return { success: true };
+		} catch (error) {
+			console.error("Receive purchase error:", error);
+			if (error.code === "P2025") throw new Error("Compra no encontrada");
+			throw error;
+		}
+	}
+	/**
+	* Cancel purchase (only if PENDING)
+	*/
+	static async cancelPurchase(purchaseId, cancelledBy) {
+		try {
+			const purchase = await prisma.purchase.findUnique({ where: { id: purchaseId } });
+			if (!purchase) throw new Error("Compra no encontrada");
+			if (purchase.status === "RECEIVED") throw new Error("No se puede cancelar una compra ya recibida");
+			if (purchase.status === "CANCELLED") throw new Error("Esta compra ya está cancelada");
+			await prisma.purchase.update({
+				where: { id: purchaseId },
+				data: { status: "CANCELLED" }
+			});
+			await createAuditLog({
+				userId: cancelledBy,
+				action: "CANCEL_PURCHASE",
+				entity: "purchases",
+				entity_id: purchaseId
+			});
+			return { success: true };
+		} catch (error) {
+			console.error("Cancel purchase error:", error);
+			if (error.code === "P2025") throw new Error("Compra no encontrada");
+			throw error;
+		}
 	}
 };
 //#endregion
@@ -1539,6 +1920,16 @@ function setupIpcHandlers() {
 	/**
 	* HEALTH CHECK
 	*/
+	ipcMain.handle("dialog:showConfirm", async (_, options) => {
+		return (await dialog.showMessageBox({
+			type: "question",
+			buttons: ["Sí", "No"],
+			defaultId: 0,
+			cancelId: 1,
+			title: options.title || "Confirmación",
+			message: options.message
+		})).response === 0;
+	});
 	ipcMain.handle("health:check", async () => {
 		try {
 			await prisma.$queryRaw`SELECT 1`;
@@ -1635,6 +2026,26 @@ function setupIpcHandlers() {
 		try {
 			DashboardRepository.invalidateCache();
 			return { success: true };
+		} catch (error) {
+			return {
+				success: false,
+				message: error.message
+			};
+		}
+	});
+	/**
+	* SETTINGS
+	*/
+	ipcMain.handle("settings:getAll", async () => {
+		try {
+			return await SettingsService.getSettings();
+		} catch (error) {
+			return {};
+		}
+	});
+	ipcMain.handle("settings:update", async (_, settings) => {
+		try {
+			return await SettingsService.updateSettings(settings);
 		} catch (error) {
 			return {
 				success: false,
@@ -1777,9 +2188,9 @@ function setupIpcHandlers() {
 			};
 		}
 	});
-	ipcMain.handle("products:addStock", async (_, productId, quantity, userId) => {
+	ipcMain.handle("products:addStock", async (_, productId, quantity, userId, reason) => {
 		try {
-			return await ProductService.addStock(productId, quantity, userId);
+			return await ProductService.addStock(productId, quantity, userId, reason);
 		} catch (error) {
 			return {
 				success: false,
@@ -1787,9 +2198,9 @@ function setupIpcHandlers() {
 			};
 		}
 	});
-	ipcMain.handle("products:removeStock", async (_, productId, quantity, userId) => {
+	ipcMain.handle("products:removeStock", async (_, productId, quantity, userId, reason) => {
 		try {
-			return await ProductService.removeStock(productId, quantity, userId);
+			return await ProductService.removeStock(productId, quantity, userId, reason);
 		} catch (error) {
 			return {
 				success: false,
@@ -1828,6 +2239,13 @@ function setupIpcHandlers() {
 				success: false,
 				message: error.message || "Error al obtener ventas del día"
 			};
+		}
+	});
+	ipcMain.handle("sales:getLast", async () => {
+		try {
+			return await SaleService.getLastSale();
+		} catch (error) {
+			return null;
 		}
 	});
 	ipcMain.handle("sales:getStats", async (_, startDate, endDate) => {
@@ -1964,13 +2382,134 @@ function setupIpcHandlers() {
 			};
 		}
 	});
+	/**
+	* INVENTORY MOVEMENTS
+	*/
+	ipcMain.handle("movements:getAll", async () => {
+		try {
+			return await prisma.inventoryMovement.findMany({
+				include: { product: { select: {
+					id: true,
+					name: true,
+					sku: true
+				} } },
+				orderBy: { created_at: "desc" },
+				take: 500
+			});
+		} catch (error) {
+			return [];
+		}
+	});
+	/**
+	* SUPPLIERS
+	*/
+	ipcMain.handle("suppliers:getAll", async (_, search) => {
+		try {
+			return await SupplierService.getAllSuppliers(search);
+		} catch (error) {
+			return [];
+		}
+	});
+	ipcMain.handle("suppliers:getById", async (_, id) => {
+		try {
+			return await SupplierService.getSupplierById(id);
+		} catch (error) {
+			return null;
+		}
+	});
+	ipcMain.handle("suppliers:create", async (_, data, userId) => {
+		try {
+			return {
+				success: true,
+				supplier: await SupplierService.createSupplier(data, userId)
+			};
+		} catch (error) {
+			return {
+				success: false,
+				message: error.message || "Error al crear proveedor"
+			};
+		}
+	});
+	ipcMain.handle("suppliers:update", async (_, id, data, userId) => {
+		try {
+			return {
+				success: true,
+				supplier: await SupplierService.updateSupplier(id, data, userId)
+			};
+		} catch (error) {
+			return {
+				success: false,
+				message: error.message || "Error al actualizar proveedor"
+			};
+		}
+	});
+	ipcMain.handle("suppliers:delete", async (_, id, userId) => {
+		try {
+			return await SupplierService.deleteSupplier(id, userId);
+		} catch (error) {
+			return {
+				success: false,
+				message: error.message || "Error al eliminar proveedor"
+			};
+		}
+	});
+	/**
+	* PURCHASES
+	*/
+	ipcMain.handle("purchases:getAll", async (_, supplierId, status) => {
+		try {
+			return await PurchaseService.getAllPurchases(supplierId, status);
+		} catch (error) {
+			return [];
+		}
+	});
+	ipcMain.handle("purchases:getById", async (_, id) => {
+		try {
+			return await PurchaseService.getPurchaseById(id);
+		} catch (error) {
+			return null;
+		}
+	});
+	ipcMain.handle("purchases:create", async (_, data, userId) => {
+		try {
+			return {
+				success: true,
+				purchase: await PurchaseService.createPurchase(data, userId)
+			};
+		} catch (error) {
+			return {
+				success: false,
+				message: error.message || "Error al crear orden de compra"
+			};
+		}
+	});
+	ipcMain.handle("purchases:receive", async (_, purchaseId, userId) => {
+		try {
+			return await PurchaseService.receivePurchase(purchaseId, userId);
+		} catch (error) {
+			return {
+				success: false,
+				message: error.message || "Error al recibir compra"
+			};
+		}
+	});
+	ipcMain.handle("purchases:cancel", async (_, purchaseId, userId) => {
+		try {
+			return await PurchaseService.cancelPurchase(purchaseId, userId);
+		} catch (error) {
+			return {
+				success: false,
+				message: error.message || "Error al cancelar compra"
+			};
+		}
+	});
 }
 //#endregion
 //#region src/main/index.ts
 var __dirname = path.dirname(fileURLToPath(import.meta.url));
 process.env.DIST = path.join(__dirname, "../dist");
 process.env.VITE_PUBLIC = app.isPackaged ? process.env.DIST : path.join(process.env.DIST, "../public");
-var win;
+var win = null;
 var VITE_DEV_SERVER_URL = process.env["VITE_DEV_SERVER_URL"];
 async function createWindow() {
 	win = new BrowserWindow({
@@ -1990,7 +2529,44 @@ async function createWindow() {
 		win.loadURL(VITE_DEV_SERVER_URL);
 		win.webContents.openDevTools();
 	} else win.loadFile(path.join(process.env.DIST, "index.html"));
+	win.on("blur", () => {
+		setTimeout(() => {
+			if (win && !win.isDestroyed() && !win.isFocused()) {
+				const focusedWindow = BrowserWindow.getFocusedWindow();
+				if (!focusedWindow || focusedWindow === win) win.focus();
+			}
+		}, 100);
+	});
+	win.on("focus", () => {
+		if (win && win.webContents) win.webContents.focus();
+	});
+	win.on("closed", () => {
+		win = null;
+	});
 }
+ipcMain.handle("window:focus", () => {
+	if (win && !win.isDestroyed()) {
+		win.focus();
+		win.webContents.focus();
+		return true;
+	}
+	return false;
+});
+ipcMain.handle("window:is-ready", () => {
+	return win && !win.isDestroyed();
+});
+ipcMain.handle("dialog:showMessageBox", (event, options) => {
+	const focusedWindow = BrowserWindow.getFocusedWindow() || win;
+	return dialog.showMessageBox(focusedWindow, options);
+});
+ipcMain.handle("dialog:showOpenDialog", (event, options) => {
+	const focusedWindow = BrowserWindow.getFocusedWindow() || win;
+	return dialog.showOpenDialog(focusedWindow, options);
+});
+ipcMain.handle("dialog:showSaveDialog", (event, options) => {
+	const focusedWindow = BrowserWindow.getFocusedWindow() || win;
+	return dialog.showSaveDialog(focusedWindow, options);
+});
 app.on("window-all-closed", () => {
 	if (process.platform !== "darwin") {
 		app.quit();
@@ -2000,9 +2576,9 @@ app.on("window-all-closed", () => {
 app.whenReady().then(async () => {
 	try {
 		await prisma.$connect();
-		console.log("✅ Prisma connected to PostgreSQL successfully.");
+		console.log("✅ Prisma connected to SQLite successfully.");
 	} catch (err) {
-		console.error("❌ Failed to connect to PostgreSQL:", err);
+		console.error("❌ Failed to connect to SQLite:", err);
 	}
 	setupIpcHandlers();
 	createWindow();

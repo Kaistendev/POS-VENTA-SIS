@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { UserRepository } from '../repositories/UserRepository.js';
 import { prisma } from '../prisma/client.js';
+import { createAuditLog } from '../utils/auditLog.js';
 
 export class UserService {
   /**
@@ -66,13 +67,11 @@ export class UserService {
       });
 
       // Log audit
-      await prisma.auditLog.create({
-        data: {
-          user_id: createdBy,
-          action: 'CREATE_USER',
-          entity: 'users',
-          entity_id: user.id,
-        },
+      await createAuditLog({
+        userId: createdBy,
+        action: 'CREATE_USER',
+        entity: 'users',
+        entity_id: user.id,
       });
 
       return user;
@@ -108,13 +107,11 @@ export class UserService {
       const user = await UserRepository.update(id, data);
 
       // Log audit
-      await prisma.auditLog.create({
-        data: {
-          user_id: updatedBy,
-          action: 'UPDATE_USER',
-          entity: 'users',
-          entity_id: id,
-        },
+      await createAuditLog({
+        userId: updatedBy,
+        action: 'UPDATE_USER',
+        entity: 'users',
+        entity_id: id,
       });
 
       return user;
@@ -149,13 +146,11 @@ export class UserService {
       await UserRepository.delete(id);
 
       // Log audit
-      await prisma.auditLog.create({
-        data: {
-          user_id: deletedBy,
-          action: 'DELETE_USER',
-          entity: 'users',
-          entity_id: id,
-        },
+      await createAuditLog({
+        userId: deletedBy,
+        action: 'DELETE_USER',
+        entity: 'users',
+        entity_id: id,
       });
 
       return { success: true };
@@ -192,13 +187,11 @@ export class UserService {
       await UserRepository.update(userId, { password_hash: hashedPassword });
 
       // Log audit
-      await prisma.auditLog.create({
-        data: {
-          user_id: changedBy,
-          action: 'CHANGE_PASSWORD',
-          entity: 'users',
-          entity_id: userId,
-        },
+      await createAuditLog({
+        userId: changedBy,
+        action: 'CHANGE_PASSWORD',
+        entity: 'users',
+        entity_id: userId,
       });
 
       return { success: true };

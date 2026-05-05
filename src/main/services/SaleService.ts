@@ -1,5 +1,7 @@
 import { prisma } from '../prisma/client.js';
 import { saleSchema } from '../../common/schemas.js';
+import { DashboardRepository } from '../repositories/DashboardRepository.js';
+import { createAuditLog } from '../utils/auditLog.js';
 
 export class SaleService {
   /**
@@ -36,9 +38,17 @@ export class SaleService {
 
     return prisma.sale.findMany({
       where,
-      include: {
-        client: true,
-        cash_register: true,
+      select: {
+        id: true,
+        total: true,
+        payment_method: true,
+        created_at: true,
+        client: {
+          select: { id: true, name: true, dni: true },
+        },
+        cash_register: {
+          select: { id: true, opened_at: true, opening_amount: true },
+        },
       },
       orderBy: { created_at: 'desc' },
     });
@@ -127,6 +137,16 @@ export class SaleService {
       totalRevenue: stats._sum.total || 0,
       averageSale: stats._avg.total || 0,
     };
+  }
+
+  /**
+   * Obtiene la última venta registrada
+   */
+  static async getLastSale() {
+    return prisma.sale.findFirst({
+      orderBy: { created_at: 'desc' },
+      include: { items: true },
+    });
   }
 
   /**
@@ -264,6 +284,7 @@ export class SaleService {
             product_id: item.product_id,
             type: 'SALIDA',
             quantity: item.quantity,
+            reason: 'VENTA',
           },
         });
       }
@@ -281,14 +302,15 @@ export class SaleService {
       return sale.id;
     });
 
+    // Invalidar cache del dashboard
+    DashboardRepository.invalidateCache();
+
     // Registrar en auditoría
-    await prisma.auditLog.create({
-      data: {
-        user_id: userId,
-        action: 'CREATE_SALE',
-        entity: 'sales',
-        entity_id: saleId,
-      },
+    await createAuditLog({
+      userId,
+      action: 'CREATE_SALE',
+      entity: 'sales',
+      entity_id: saleId,
     });
 
     return { success: true, id: saleId };
@@ -332,6 +354,7 @@ export class SaleService {
             product_id: item.product_id,
             type: 'ENTRADA',
             quantity: item.quantity,
+            reason: 'DEVOLUCION',
           },
         });
       }
@@ -352,14 +375,15 @@ export class SaleService {
       });
     });
 
+    // Invalidar cache del dashboard
+    DashboardRepository.invalidateCache();
+
     // Registrar en auditoría
-    await prisma.auditLog.create({
-      data: {
-        user_id: userId,
-        action: 'CANCEL_SALE',
-        entity: 'sales',
-        entity_id: saleId,
-      },
+    await createAuditLog({
+      userId,
+      action: 'CANCEL_SALE',
+      entity: 'sales',
+      entity_id: saleId,
     });
 
     return { success: true };

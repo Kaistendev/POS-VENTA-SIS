@@ -30,3 +30,6 @@ GEMINI.md
 /src/generated/prisma
 .env
 QWEN.md
+ROADMAP_IMPROVEMENTS.md
+ROADMAP_SISTEMA.md
+.gitignore

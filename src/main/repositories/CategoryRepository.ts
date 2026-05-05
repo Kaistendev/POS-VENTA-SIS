@@ -1,5 +1,6 @@
 import { prisma } from '../prisma/client.js';
 import { categorySchema } from '../../common/schemas.js';
+import { createAuditLog } from '../utils/auditLog.js';
 
 export class CategoryRepository {
   /**
@@ -14,6 +15,12 @@ export class CategoryRepository {
 
     return prisma.category.findMany({
       where,
+      select: {
+        id: true,
+        name: true,
+        created_at: true,
+        updated_at: true,
+      },
       orderBy: { name: 'asc' },
     });
   }
@@ -65,13 +72,11 @@ export class CategoryRepository {
 
     // Registrar en auditoría si se proporciona userId
     if (userId) {
-      await prisma.auditLog.create({
-        data: {
-          user_id: userId,
-          action: 'CREATE_CATEGORY',
-          entity: 'categories',
-          entity_id: category.id,
-        },
+      await createAuditLog({
+        userId,
+        action: 'CREATE_CATEGORY',
+        entity: 'categories',
+        entity_id: category.id,
       });
     }
 
@@ -113,13 +118,11 @@ export class CategoryRepository {
 
     // Registrar en auditoría si se proporciona userId
     if (userId) {
-      await prisma.auditLog.create({
-        data: {
-          user_id: userId,
-          action: 'UPDATE_CATEGORY',
-          entity: 'categories',
-          entity_id: category.id,
-        },
+      await createAuditLog({
+        userId,
+        action: 'UPDATE_CATEGORY',
+        entity: 'categories',
+        entity_id: category.id,
       });
     }
 
@@ -156,13 +159,11 @@ export class CategoryRepository {
 
     // Registrar en auditoría si se proporciona userId
     if (userId) {
-      await prisma.auditLog.create({
-        data: {
-          user_id: userId,
-          action: 'DELETE_CATEGORY',
-          entity: 'categories',
-          entity_id: id,
-        },
+      await createAuditLog({
+        userId,
+        action: 'DELETE_CATEGORY',
+        entity: 'categories',
+        entity_id: id,
       });
     }
 

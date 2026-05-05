@@ -1,18 +1,8 @@
 import 'dotenv/config';
-import { PrismaClient } from '../src/generated/prisma/client.js';
-import { PrismaPg } from '@prisma/adapter-pg';
+import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
-import pkg from 'pg';
-const { Pool } = pkg;
 
-console.log('🌱 Starting seed...');
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
-
-const adapter = new PrismaPg(pool);
-const prisma = new PrismaClient({ adapter });
+const prisma = new PrismaClient();
 
 async function main() {
   console.log('🌱 Starting seed...');
@@ -48,11 +38,9 @@ async function main() {
   // Create a sample client
   const sampleClient = await prisma.client.create({
     data: {
-      dni: '12345678',
-      name: 'Cliente Genérico',
-      code: 'GEN-001',
-      phone: '+51999999999',
-      tax_id: '20123456789',
+      dni: '00000000',
+      name: 'Cliente General',
+      code: 'CLI-GENERAL',
     },
   });
 

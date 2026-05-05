@@ -1,88 +1,87 @@
 import { useState, useEffect } from 'react';
 import { DataGrid, GridColDef } from '@mui/x-data-grid';
-import { UserPlus, RefreshCw, Pencil, Trash2 } from 'lucide-react';
+import { Truck, RefreshCw, Pencil, Trash2, PlusCircle } from 'lucide-react';
 import { useToast } from '../hooks/useToast.ts';
 import { TableSkeleton, EmptyState } from '../components/ui/Skeleton.tsx';
 import Modal from '../components/ui/Modal.tsx';
 
-export default function Clients() {
-  const [clients, setClients] = useState<any[]>([]);
+export default function Suppliers() {
+  const [suppliers, setSuppliers] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [selectedClient, setSelectedClient] = useState<any>(null);
+  const [selectedSupplier, setSelectedSupplier] = useState<any>(null);
   const { success, error: toastError } = useToast();
   
   // Form state
-  const [formData, setFormData] = useState({
-    code: '',
-    name: '',
-    dni: '',
-    tax_id: '',
-    phone: ''
+  const [formData, setFormData] = useState({ 
+    name: '', 
+    ruc: '', 
+    phone: '', 
+    email: '', 
+    address: '' 
   });
   const [deleteTarget, setDeleteTarget] = useState<{id: number, name: string} | null>(null);
 
-  const fetchClients = async () => {
+  const fetchData = async () => {
     setLoading(true);
     try {
-      if (window.api && window.api.getAllClients) {
-        const data = await window.api.getAllClients();
-        setClients(data || []);
+      if (window.api) {
+        const data = await window.api.getAllSuppliers();
+        setSuppliers(data || []);
       }
     } catch (error) {
       console.error(error);
-      toastError('Error al cargar clientes');
     }
     setLoading(false);
   };
 
   useEffect(() => {
-    fetchClients();
+    fetchData();
   }, []);
 
   const handleOpenCreateModal = () => {
-    setSelectedClient(null);
-    setFormData({
-      code: `CLI-${Math.floor(Math.random() * 10000)}`,
-      name: '',
-      dni: '',
-      tax_id: '',
-      phone: ''
-    });
+    setSelectedSupplier(null);
+    setFormData({ name: '', ruc: '', phone: '', email: '', address: '' });
     setIsModalOpen(true);
   };
 
-  const handleOpenEditModal = (client: any) => {
-    setSelectedClient(client);
+  const handleOpenEditModal = (supplier: any) => {
+    setSelectedSupplier(supplier);
     setFormData({
-      code: client.code,
-      name: client.name,
-      dni: client.dni || '',
-      tax_id: client.tax_id || '',
-      phone: client.phone || ''
+      name: supplier.name,
+      ruc: supplier.ruc || '',
+      phone: supplier.phone || '',
+      email: supplier.email || '',
+      address: supplier.address || '',
     });
     setIsModalOpen(true);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
     try {
+      if (!formData.name) {
+        toastError('El nombre es requerido');
+        return;
+      }
+
       let result;
-      if (selectedClient) {
-        result = await window.api.updateClient(selectedClient.id, formData);
+      if (selectedSupplier) {
+        result = await window.api.updateSupplier(selectedSupplier.id, formData);
       } else {
-        result = await window.api.createClient(formData);
+        result = await window.api.createSupplier(formData);
       }
 
       if (result.success) {
-        success(selectedClient ? 'Cliente actualizado' : 'Cliente creado');
+        success(selectedSupplier ? 'Proveedor actualizado' : 'Proveedor creado');
         setIsModalOpen(false);
-        fetchClients();
+        fetchData();
       } else {
-        toastError(result.message || 'Error al procesar cliente');
+        toastError(result.message || 'Error al guardar');
       }
-    } catch (err) {
+    } catch (err: any) {
       toastError('Error de comunicación');
     }
   };
@@ -96,43 +95,76 @@ export default function Clients() {
     if (!deleteTarget) return;
     
     try {
-      const result = await window.api.deleteClient(deleteTarget.id);
+      const result = await window.api.deleteSupplier(deleteTarget.id);
       if (result.success) {
-        success('Cliente eliminado');
+        success('Proveedor eliminado');
         setIsDeleteModalOpen(false);
-        fetchClients();
+        fetchData();
       } else {
         toastError(result.message || 'Error al eliminar');
       }
     } catch (err) {
-      toastError('Error al eliminar cliente');
+      console.error(err);
     }
   };
 
   const columns: GridColDef[] = [
-    { field: 'id', headerName: 'ID', width: 70 },
-    { field: 'code', headerName: 'Código', width: 120 },
-    { field: 'name', headerName: 'Nombre / Razón Social', flex: 1 },
-    { field: 'dni', headerName: 'DNI / ID', width: 130 },
-    { field: 'tax_id', headerName: 'RFC/NIF', width: 130 },
-    { field: 'phone', headerName: 'Teléfono', width: 130 },
+    { 
+      field: 'name', 
+      headerName: 'Nombre', 
+      flex: 1,
+      renderCell: (params) => (
+        <div>
+          <div className="font-medium text-white">{params.value}</div>
+          <div className="text-xs text-gray-500">{params.row.ruc}</div>
+        </div>
+      )
+    },
+    { 
+      field: 'ruc', 
+      headerName: 'RUC', 
+      width: 150,
+      renderCell: (params) => params.value || <span className="text-gray-600">-</span>
+    },
+    { 
+      field: 'phone', 
+      headerName: 'Teléfono', 
+      width: 130,
+      renderCell: (params) => params.value || <span className="text-gray-600">-</span>
+    },
+    { 
+      field: 'email', 
+      headerName: 'Email', 
+      width: 200,
+      renderCell: (params) => params.value || <span className="text-gray-600">-</span>
+    },
+    { 
+      field: '_count', 
+      headerName: 'Productos', 
+      width: 100,
+      renderCell: (params) => (
+        <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-500/20 text-blue-400">
+          {params.value?.products || 0}
+        </span>
+      )
+    },
     { 
       field: 'actions', 
       headerName: 'Acciones', 
-      width: 120, 
+      width: 150, 
       sortable: false,
       renderCell: (params) => (
-        <div className="flex items-center h-full space-x-2">
+        <div className="flex items-center h-full space-x-1">
           <button 
-            onClick={() => handleOpenEditModal(params.row)}
-            className="p-1.5 text-blue-400 hover:bg-blue-400/10 rounded-lg transition-colors"
+            onClick={() => handleOpenEditModal(params.row)} 
+            className="p-2 text-blue-400 hover:bg-blue-400/10 rounded-lg transition-colors" 
             title="Editar"
           >
             <Pencil className="w-4 h-4" />
           </button>
           <button 
-            onClick={() => handleDeleteClick(params.row.id, params.row.name)}
-            className="p-1.5 text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
+            onClick={() => handleDeleteClick(params.row.id, params.row.name)} 
+            className="p-2 text-red-400 hover:bg-red-400/10 rounded-lg transition-colors" 
             title="Eliminar"
           >
             <Trash2 className="w-4 h-4" />
@@ -146,19 +178,22 @@ export default function Clients() {
     <div className="space-y-6 h-full flex flex-col">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight text-white m-0">Clientes</h2>
-          <p className="text-gray-400 mt-1">Directorio de clientes y empresas</p>
+          <h2 className="text-3xl font-bold tracking-tight text-white m-0">Proveedores</h2>
+          <p className="text-gray-400 mt-1">Gestión de proveedores para compras</p>
         </div>
         <div className="flex space-x-3">
-          <button onClick={fetchClients} className="p-2 rounded-lg bg-[#1f2028] text-gray-300 hover:text-white border border-[#2e303a] transition-colors">
+          <button 
+            onClick={fetchData} 
+            className="p-2 rounded-lg bg-[#1f2028] text-gray-300 hover:text-white border border-[#2e303a] transition-colors shadow-sm"
+          >
             <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
           </button>
           <button 
             onClick={handleOpenCreateModal}
             className="flex items-center px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded-xl font-bold transition-all shadow-lg shadow-primary/20"
           >
-            <UserPlus className="w-5 h-5 mr-2" />
-            Nuevo Cliente
+            <PlusCircle className="w-5 h-5 mr-2" />
+            Nuevo Proveedor
           </button>
         </div>
       </div>
@@ -166,17 +201,17 @@ export default function Clients() {
       <div className="flex-1 w-full glass-panel rounded-2xl overflow-hidden p-1 flex flex-col border border-white/5 shadow-2xl">
         {loading ? (
           <TableSkeleton rows={10} />
-        ) : clients.length === 0 ? (
+        ) : suppliers.length === 0 ? (
           <EmptyState
-            icon={<UserPlus className="w-8 h-8" />}
-            title="No hay clientes"
-            description="Agrega tu primer cliente al sistema"
-            action={{ label: 'Agregar Cliente', onClick: handleOpenCreateModal }}
+            icon={<Truck className="w-8 h-8" />}
+            title="No hay proveedores"
+            description="Agrega tu primer proveedor para gestionar compras"
+            action={{ label: 'Agregar Proveedor', onClick: handleOpenCreateModal }}
           />
         ) : (
           <div style={{ flexGrow: 1, width: '100%' }}>
             <DataGrid
-              rows={clients}
+              rows={suppliers}
               columns={columns}
               loading={loading}
               getRowId={(row) => row.id}
@@ -189,26 +224,14 @@ export default function Clients() {
         )}
       </div>
 
-      {/* Modal para Crear/Editar Cliente */}
+      {/* Modal para Crear/Editar */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={selectedClient ? 'Editar Cliente' : 'Nuevo Cliente'}
-        width="500px"
+        title={selectedSupplier ? 'Editar Proveedor' : 'Nuevo Proveedor'}
+        width="600px"
       >
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">
-              Código
-            </label>
-            <input
-              type="text"
-              value={formData.code}
-              onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-              className="w-full px-4 py-2 bg-[#1f2028] border border-[#2e303a] rounded-lg text-white focus:outline-none focus:border-primary"
-            />
-          </div>
-
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-1">
               Nombre *
@@ -225,24 +248,12 @@ export default function Clients() {
 
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-1">
-              DNI / Documento
+              RUC
             </label>
             <input
               type="text"
-              value={formData.dni}
-              onChange={(e) => setFormData({ ...formData, dni: e.target.value })}
-              className="w-full px-4 py-2 bg-[#1f2028] border border-[#2e303a] rounded-lg text-white focus:outline-none focus:border-primary"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">
-              RFC/NIF
-            </label>
-            <input
-              type="text"
-              value={formData.tax_id}
-              onChange={(e) => setFormData({ ...formData, tax_id: e.target.value })}
+              value={formData.ruc}
+              onChange={(e) => setFormData({ ...formData, ruc: e.target.value })}
               className="w-full px-4 py-2 bg-[#1f2028] border border-[#2e303a] rounded-lg text-white focus:outline-none focus:border-primary"
             />
           </div>
@@ -259,6 +270,30 @@ export default function Clients() {
             />
           </div>
 
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">
+              Email
+            </label>
+            <input
+              type="email"
+              value={formData.email}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              className="w-full px-4 py-2 bg-[#1f2028] border border-[#2e303a] rounded-lg text-white focus:outline-none focus:border-primary"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">
+              Dirección
+            </label>
+            <textarea
+              value={formData.address}
+              onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+              className="w-full px-4 py-2 bg-[#1f2028] border border-[#2e303a] rounded-lg text-white focus:outline-none focus:border-primary"
+              rows={3}
+            />
+          </div>
+
           <div className="flex justify-end space-x-3 pt-4">
             <button
               type="button"
@@ -271,7 +306,7 @@ export default function Clients() {
               type="submit"
               className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
             >
-              {selectedClient ? 'Actualizar' : 'Crear'}
+              {selectedSupplier ? 'Actualizar' : 'Crear'}
             </button>
           </div>
         </form>

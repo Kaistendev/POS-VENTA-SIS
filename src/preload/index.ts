@@ -2,6 +2,9 @@ import { contextBridge, ipcRenderer } from 'electron';
 
 // Exponemos de forma segura un subconjunto específico de funcionalidades
 contextBridge.exposeInMainWorld('api', {
+  // Dialog
+  showConfirmDialog: (options: { message: string, title?: string }) => ipcRenderer.invoke('dialog:showConfirm', options),
+
   // Health Check
   checkHealth: () => ipcRenderer.invoke('health:check'),
 
@@ -19,6 +22,10 @@ contextBridge.exposeInMainWorld('api', {
   getCashSummary: (startDate?: Date, endDate?: Date) => ipcRenderer.invoke('dashboard:getCashSummary', startDate, endDate),
   getInventoryMetrics: () => ipcRenderer.invoke('dashboard:getInventoryMetrics'),
   invalidateDashboardCache: () => ipcRenderer.invoke('dashboard:invalidateCache'),
+
+  // Settings
+  getSettings: () => ipcRenderer.invoke('settings:getAll'),
+  updateSettings: (settings: Record<string, string>) => ipcRenderer.invoke('settings:update', settings),
 
   // Cash Registers
   getOpenRegister: () => ipcRenderer.invoke('cash:getOpen'),
@@ -42,8 +49,8 @@ contextBridge.exposeInMainWorld('api', {
   createProduct: (productData: any, userId?: number) => ipcRenderer.invoke('products:create', productData, userId),
   updateProduct: (id: number, productData: any, userId?: number) => ipcRenderer.invoke('products:update', id, productData, userId),
   deleteProduct: (id: number, userId?: number) => ipcRenderer.invoke('products:delete', id, userId),
-  addProductStock: (productId: number, quantity: number, userId?: number) => ipcRenderer.invoke('products:addStock', productId, quantity, userId),
-  removeProductStock: (productId: number, quantity: number, userId?: number) => ipcRenderer.invoke('products:removeStock', productId, quantity, userId),
+  addProductStock: (productId: number, quantity: number, userId?: number, reason?: string) => ipcRenderer.invoke('products:addStock', productId, quantity, userId, reason),
+  removeProductStock: (productId: number, quantity: number, userId?: number, reason?: string) => ipcRenderer.invoke('products:removeStock', productId, quantity, userId, reason),
   getProductMovements: (productId: number, limit?: number) => ipcRenderer.invoke('products:getMovements', productId, limit),
 
   // Categories
@@ -56,6 +63,7 @@ contextBridge.exposeInMainWorld('api', {
   // Sales
   getAllSales: (startDate?: Date, endDate?: Date, clientId?: number, cashRegisterId?: number) => ipcRenderer.invoke('sales:getAll', startDate, endDate, clientId, cashRegisterId),
   getTodaySales: () => ipcRenderer.invoke('sales:getToday'),
+  getLastSale: () => ipcRenderer.invoke('sales:getLast'),
   getSalesStats: (startDate?: Date, endDate?: Date) => ipcRenderer.invoke('sales:getStats', startDate, endDate),
   getSaleDetails: (saleId: number) => ipcRenderer.invoke('sales:getDetails', saleId),
   registerSale: (saleData: any, itemsData: any, userId?: number) => ipcRenderer.invoke('sales:register', saleData, itemsData, userId),
@@ -68,4 +76,39 @@ contextBridge.exposeInMainWorld('api', {
   updateUser: (id: number, userData: any, updatedBy?: number) => ipcRenderer.invoke('users:update', id, userData, updatedBy),
   deleteUser: (id: number, deletedBy?: number) => ipcRenderer.invoke('users:delete', id, deletedBy),
   changePassword: (userId: number, newPassword: string, changedBy?: number) => ipcRenderer.invoke('users:changePassword', userId, newPassword, changedBy),
+
+  // Suppliers
+  getAllSuppliers: (search?: string) => ipcRenderer.invoke('suppliers:getAll', search),
+  getSupplierById: (id: number) => ipcRenderer.invoke('suppliers:getById', id),
+  createSupplier: (data: any, userId?: number) => ipcRenderer.invoke('suppliers:create', data, userId),
+  updateSupplier: (id: number, data: any, userId?: number) => ipcRenderer.invoke('suppliers:update', id, data, userId),
+  deleteSupplier: (id: number, userId?: number) => ipcRenderer.invoke('suppliers:delete', id, userId),
+
+  // Purchases
+  getAllPurchases: (supplierId?: number, status?: string) => ipcRenderer.invoke('purchases:getAll', supplierId, status),
+  getPurchaseById: (id: number) => ipcRenderer.invoke('purchases:getById', id),
+  createPurchase: (data: any, userId?: number) => ipcRenderer.invoke('purchases:create', data, userId),
+  receivePurchase: (purchaseId: number, userId?: number) => ipcRenderer.invoke('purchases:receive', purchaseId, userId),
+  cancelPurchase: (purchaseId: number, userId?: number) => ipcRenderer.invoke('purchases:cancel', purchaseId, userId),
+
+  // Inventory Movements
+  getAllMovements: () => ipcRenderer.invoke('movements:getAll'),
+
+  // Window management (for focus fix)
+  windowFocus: () => ipcRenderer.invoke('window:focus'),
+  windowIsReady: () => ipcRenderer.invoke('window:is-ready'),
+
+  // Native dialogs (properly handle focus on Windows)
+  dialog: {
+    showMessageBox: (options: any) => ipcRenderer.invoke('dialog:showMessageBox', options),
+    showOpenDialog: (options: any) => ipcRenderer.invoke('dialog:showOpenDialog', options),
+    showSaveDialog: (options: any) => ipcRenderer.invoke('dialog:showSaveDialog', options),
+  },
+
+  // Modal management (native Electron modals)
+  modal: {
+    create: (options: any) => ipcRenderer.invoke('modal:create', options),
+    close: (id: number) => ipcRenderer.invoke('modal:close', id),
+    focus: (id: number) => ipcRenderer.invoke('modal:focus', id),
+  },
 });

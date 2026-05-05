@@ -1,28 +1,34 @@
-import { PrismaClient } from '../../generated/prisma/client.js';
-import { PrismaPg } from '@prisma/adapter-pg';
-import pkg from 'pg';
-const { Pool } = pkg;
+import { PrismaClient } from '@prisma/client';
 
-// Create a singleton instance of PrismaClient
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
-  pool: any | undefined;
 };
 
-// Create the pool only once
-if (!globalForPrisma.pool) {
-  globalForPrisma.pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-  });
-}
-
-const adapter = new PrismaPg(globalForPrisma.pool);
-
 export const prisma =
-  globalForPrisma.prisma ?? new PrismaClient({ adapter });
+  globalForPrisma.prisma ?? new PrismaClient({
+    datasources: {
+      db: {
+        url: 'file:./dev.sqlite3?mode=rwc',
+      },
+    },
+  });
 
 if (process.env.NODE_ENV !== 'production') {
   globalForPrisma.prisma = prisma;
 }
+
+async function setupSQLite() {
+  try {
+    await prisma.$connect();
+    await prisma.$queryRaw`PRAGMA journal_mode=WAL`;
+    await prisma.$queryRaw`PRAGMA synchronous=NORMAL`;
+    await prisma.$queryRaw`PRAGMA cache_size=10000`;
+    await prisma.$queryRaw`PRAGMA temp_store=MEMORY`;
+  } catch (e) {
+    console.warn('SQLite PRAGMA setup:', e);
+  }
+}
+
+setupSQLite();
 
 export default prisma;

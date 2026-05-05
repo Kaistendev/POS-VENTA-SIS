@@ -1,5 +1,6 @@
 import { prisma } from '../prisma/client.js';
 import { clientSchema } from '../../common/schemas.js';
+import { createAuditLog } from '../utils/auditLog.js';
 
 export class ClientService {
   /**
@@ -79,13 +80,11 @@ export class ClientService {
     });
 
     // Registrar en auditoría
-    await prisma.auditLog.create({
-      data: {
-        user_id: userId,
-        action: 'CREATE_CLIENT',
-        entity: 'clients',
-        entity_id: client.id,
-      },
+    await createAuditLog({
+      userId,
+      action: 'CREATE_CLIENT',
+      entity: 'clients',
+      entity_id: client.id,
     });
 
     return { success: true, id: client.id };
@@ -151,13 +150,11 @@ export class ClientService {
     });
 
     // Registrar en auditoría
-    await prisma.auditLog.create({
-      data: {
-        user_id: userId,
-        action: 'UPDATE_CLIENT',
-        entity: 'clients',
-        entity_id: client.id,
-      },
+    await createAuditLog({
+      userId,
+      action: 'UPDATE_CLIENT',
+      entity: 'clients',
+      entity_id: client.id,
     });
 
     return { success: true, client };
@@ -190,13 +187,11 @@ export class ClientService {
     });
 
     // Registrar en auditoría
-    await prisma.auditLog.create({
-      data: {
-        user_id: userId,
-        action: 'DELETE_CLIENT',
-        entity: 'clients',
-        entity_id: id,
-      },
+    await createAuditLog({
+      userId,
+      action: 'DELETE_CLIENT',
+      entity: 'clients',
+      entity_id: id,
     });
 
     return { success: true };

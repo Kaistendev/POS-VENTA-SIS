@@ -96,6 +96,9 @@ export class DashboardRepository {
     });
 
     const result = {
+      todayRevenue: revenueResult._sum.total || 0,
+      todayProfit: totalProfit,
+      todaySalesCount: salesCount,
       totalRevenue: revenueResult._sum.total || 0,
       totalProfit,
       totalSales: salesCount,

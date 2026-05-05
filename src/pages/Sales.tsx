@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, ShoppingCart, Trash2, CreditCard, Banknote, Package, User, UserPlus, CheckCircle, Lock } from 'lucide-react';
+import { Search, ShoppingCart, Trash2, CreditCard, Banknote, Package, User, UserPlus, CheckCircle, Lock, X, ArrowLeft, Download, Eye, Calendar, RefreshCw, PackagePlus, Pencil, PlusCircle, MinusCircle, AlertCircle, History } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
@@ -11,24 +11,40 @@ export default function Sales() {
   const [products, setProducts] = useState<Product[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const { activeRegister, setActiveRegister } = useCashStore();
-  const { items: cart, addItem, removeItem, updateQty, clearCart, getTotal } = useCartStore();
+  const { items: cart, addItem, removeItem, updateQty, clearCart, getTotal, suspendCart, suspendedCarts, resumeCart } = useCartStore();
   const { success, error: toastError } = useToast();
   
+  const [isCheckout, setIsCheckout] = useState(false);
+  const [modalSearch, setModalSearch] = useState('');
+  
+  const handleModalSearch = (val: string) => {
+    setModalSearch(val);
+    const p = products.find(prod => prod.sku.toLowerCase() === val.toLowerCase());
+    if (p) {
+        addItem(p);
+        setModalSearch('');
+        success(`Añadido: ${p.name}`);
+    }
+  };
+
   const [selectedClient, setSelectedClient] = useState<{ id?: number; name: string }>({ id: 1, name: 'Cliente General' });
   const [customerData, setCustomerData] = useState({ name: '', dni: '' });
   const [searchTerm, setSearchTerm] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [lastSaleId, setLastSaleId] = useState<number | string | null>(null);
+  const [businessInfo, setBusinessInfo] = useState<any>(null);
 
   const fetchData = async () => {
     if (window.api) {
       const p = await window.api.getAllProducts();
       const c = await window.api.getAllClients();
       const reg = await window.api.getOpenRegister();
+      const settings = await window.api.getSettings();
       setProducts(p || []);
       setClients(c || []);
       setActiveRegister(reg || null);
+      setBusinessInfo(settings);
     }
   };
 
@@ -71,7 +87,7 @@ export default function Sales() {
         client_name: customerData.name || null,
         client_dni: customerData.dni || null,
         payment_method: method === 'card' ? 'CARD' : 'CASH',
-        total: total
+        total: getTotal()
       };
       const itemsData = cart.map(item => ({
         product_id: item.id,
@@ -146,6 +162,17 @@ export default function Sales() {
     (p.name && p.name.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
+  useEffect(() => {
+    if (searchTerm.length >= 3) {
+      const product = products.find(p => p.sku.toLowerCase() === searchTerm.toLowerCase());
+      if (product) {
+        addItem(product);
+        setSearchTerm('');
+        success(`Añadido: ${product.name}`);
+      }
+    }
+  }, [searchTerm, products, addItem]);
+
   const filteredClients = clients.filter(c => 
     c.name.toLowerCase().includes(customerData.name.toLowerCase()) || 
     c.dni.includes(customerData.dni)
@@ -211,9 +238,24 @@ export default function Sales() {
           )}
         </div>
 
-        <div className="relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-          <input type="text" placeholder="Buscar producto..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-[#1f2028] border border-[#2e303a] rounded-xl py-4 pl-12 pr-4 text-white outline-none focus:border-primary/50 transition-all shadow-sm" />
+        <div className="flex gap-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <input type="text" placeholder="Buscar o escanear producto (SKU)..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-[#1f2028] border border-[#2e303a] rounded-xl py-4 pl-12 pr-4 text-white outline-none focus:border-primary/50 transition-all shadow-sm" />
+          </div>
+          <button onClick={async () => {
+             const last = await window.api.getLastSale();
+             if (last) {
+               const confirm = await window.api.showConfirmDialog({ message: `¿Anular última venta #${last.id} por $${last.total}?` });
+               if (confirm) {
+                 await window.api.cancelSale(last.id);
+                 success('Venta anulada');
+                 fetchData();
+               }
+             }
+          }} className="px-4 bg-red-900/20 text-red-400 border border-red-500/20 rounded-xl hover:bg-red-500/20 transition-all font-bold text-sm">
+             Anular Última
+          </button>
         </div>
 
         <div className="flex-1 bg-[#16171d] rounded-2xl border border-[#2e303a] overflow-hidden p-4">
@@ -231,48 +273,84 @@ export default function Sales() {
       </div>
 
       <div className="w-[400px] flex flex-col space-y-4">
-        <div className="flex-1 flex flex-col glass-panel rounded-2xl border border-[#2e303a] overflow-hidden shadow-2xl">
-          <div className="h-16 flex items-center justify-between px-6 border-b border-[#2e303a] bg-[#1f2028]">
-             <div className="flex items-center text-white font-medium"><ShoppingCart className="w-5 h-5 mr-3 text-primary" /> Ticket</div>
-             <span className="bg-primary/20 text-primary px-2.5 py-1 rounded-md text-xs font-bold">{cart.length} Ítems</span>
-          </div>
-          <div className="flex-1 overflow-y-auto p-4 space-y-3">
-             {cart.map((item) => (
-               <div key={item.id} className="p-3 rounded-xl bg-[#16171d] border border-[#2e303a]">
-                 <div className="flex justify-between items-start">
-                   <span className="text-sm font-medium text-gray-200">{item.name || item.sku}</span>
-                   <button onClick={() => removeItem(item.id)} className="text-gray-500 hover:text-red-400 transition-colors"><Trash2 className="w-4 h-4" /></button>
-                 </div>
-                 <div className="flex justify-between items-center mt-3">
-                   <div className="flex items-center space-x-2 bg-[#1f2028] rounded-lg border border-[#2e303a]">
-                     <button onClick={() => updateQty(item.id, item.qty - 1)} className="px-3 py-1 text-gray-400">-</button>
-                     <span className="text-sm font-medium w-4 text-center">{item.qty}</span>
-                     <button onClick={() => updateQty(item.id, item.qty + 1)} className="px-3 py-1 text-gray-400">+</button>
-                   </div>
-                   <span className="text-sm font-bold text-white">${(item.price * item.qty).toFixed(2)}</span>
-                 </div>
-               </div>
-             ))}
-          </div>
-          <div className="bg-[#1f2028] p-6 border-t border-[#2e303a]">
+        {isCheckout ? (
+           <div className="flex-1 flex flex-col glass-panel rounded-2xl border border-[#2e303a] overflow-hidden shadow-2xl p-6 bg-[#1f2028]">
+              <h3 className="text-white font-bold mb-6">Confirmar Pago</h3>
+              <div className="flex-1 space-y-4">
+                 <div className="flex justify-between text-gray-400"><span>Subtotal</span><span>${total.toFixed(2)}</span></div>
+                 <div className="text-4xl font-black text-white text-right">${total.toFixed(2)}</div>
+              </div>
+              <div className="grid grid-cols-2 gap-3 mt-6">
+                <button onClick={() => setIsCheckout(false)} className="py-3 bg-white/5 text-white rounded-xl">Volver</button>
+                <button onClick={() => handleProcessSale('cash')} className="py-3 bg-primary text-white font-bold rounded-xl">Pagar</button>
+              </div>
+           </div>
+        ) : (
+           <div className="flex-1 flex flex-col glass-panel rounded-2xl border border-[#2e303a] overflow-hidden shadow-2xl">
+             {/* ... carrito existente ... */}
+             <div className="bg-[#1f2028] p-6 border-t border-[#2e303a]">
              <div className="flex justify-between text-2xl font-bold text-white mb-6"><span>Total</span><span>${total.toFixed(2)}</span></div>
-             <div className="grid grid-cols-2 gap-3">
-                <button disabled={cart.length === 0 || isProcessing} onClick={() => handleProcessSale('cash')} className="flex items-center justify-center p-3 rounded-xl bg-[#2e303a] hover:bg-[#383b47] disabled:opacity-50 text-white font-medium transition-colors"><Banknote className="w-5 h-5 mr-2" /> Efectivo</button>
-                <button disabled={cart.length === 0 || isProcessing} onClick={() => handleProcessSale('card')} className="flex items-center justify-center p-3 rounded-xl bg-primary hover:bg-primary/90 disabled:opacity-50 text-white font-medium transition-colors shadow-lg shadow-primary/20"><CreditCard className="w-5 h-5 mr-2" /> Tarjeta</button>
+             <button disabled={cart.length === 0} onClick={() => setIsCheckout(true)} className="w-full py-4 bg-primary text-white font-bold rounded-xl">Ir a Pagar</button>
              </div>
-          </div>
-        </div>
+           </div>
+        )}
       </div>
 
+      {/* Modal de Carrito / Checkout */}
       <AnimatePresence>
-        {showSuccess && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-[#1f2028] border border-[#2e303a] rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl">
-              <div className="w-20 h-20 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-6"><CheckCircle className="w-10 h-10 text-green-500" /></div>
-              <h3 className="text-2xl font-bold text-white mb-2">¡Venta Exitosa!</h3>
-              <p className="text-gray-400 mb-6">La venta #{lastSaleId} se ha registrado y el ticket se ha descargado.</p>
-              <button onClick={() => setShowSuccess(false)} className="w-full py-4 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 transition-all">Nueva Venta</button>
-            </motion.div>
+        {isCheckout && (
+          <div className="fixed inset-0 z-50 bg-[#16171d] p-8 flex flex-col">
+            <div className="flex justify-between items-center mb-8">
+              <h2 className="text-4xl font-black text-white">Carrito de Compras</h2>
+              
+              {/* Buscador interno del modal */}
+              <div className="relative w-96">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <input 
+                  autoFocus
+                  type="text" 
+                  value={modalSearch}
+                  placeholder="Escanear o buscar producto..." 
+                  className="w-full bg-[#1f2028] border border-[#2e303a] rounded-xl py-3 pl-12 pr-4 text-white"
+                  onChange={(e) => handleModalSearch(e.target.value)}
+                />
+              </div>
+
+              <button onClick={() => setIsCheckout(false)} className="p-4 bg-white/5 rounded-full hover:bg-red-500/20 text-white"><X className="w-8 h-8" /></button>
+            </div>
+            
+            <div className="flex-1 grid grid-cols-3 gap-8">
+              <div className="col-span-2 bg-[#1f2028] rounded-3xl p-6 border border-white/5 overflow-y-auto">
+                {cart.length === 0 ? (
+                    <div className="h-full flex items-center justify-center text-gray-500">El carrito está vacío</div>
+                ) : cart.map(item => (
+                  <div key={item.id} className="flex justify-between items-center p-4 border-b border-white/5">
+                    <div>
+                      <p className="font-bold text-white text-lg">{item.name}</p>
+                      <p className="text-gray-500">${item.price.toFixed(2)}</p>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <button onClick={() => updateQty(item.id, item.qty - 1)} className="p-2 bg-white/10 rounded-lg">-</button>
+                      <span className="text-xl font-bold">{item.qty}</span>
+                      <button onClick={() => updateQty(item.id, item.qty + 1)} className="p-2 bg-white/10 rounded-lg">+</button>
+                      <button onClick={() => removeItem(item.id)} className="text-red-400 p-2"><Trash2 /></button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              
+              <div className="bg-[#1f2028] rounded-3xl p-8 border border-white/5 flex flex-col justify-between">
+                <div>
+                   <p className="text-gray-400 uppercase text-xs font-bold tracking-widest mb-2">Total a Pagar</p>
+                   <p className="text-6xl font-black text-white mb-8">${total.toFixed(2)}</p>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <button onClick={() => handleProcessSale('cash')} className="py-6 bg-green-600 rounded-2xl font-bold text-white text-xl">Pagar Efectivo</button>
+                  <button onClick={() => handleProcessSale('card')} className="py-6 bg-primary rounded-2xl font-bold text-white text-xl">Pagar Tarjeta</button>
+                </div>
+                <button onClick={() => { setIsCheckout(false); clearCart(); }} className="w-full py-4 text-red-400 font-bold hover:bg-red-500/10 rounded-2xl transition-all">Cancelar Operación</button>
+              </div>
+            </div>
           </div>
         )}
       </AnimatePresence>

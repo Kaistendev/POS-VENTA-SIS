@@ -1,0 +1,243 @@
+import { useState, useEffect } from 'react';
+import { Search, Calendar, Eye, Trash2, ArrowLeft, Download } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useToast } from '../hooks/useToast.ts';
+import { Sale } from '../common/types';
+import { jsPDF } from 'jspdf';
+import 'jspdf-autotable';
+
+export default function SalesHistory() {
+  const [sales, setSales] = useState<Sale[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedSale, setSelectedSale] = useState<any>(null);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [businessInfo, setBusinessInfo] = useState<any>(null);
+  const { success, error: toastError } = useToast();
+
+  const fetchSales = async () => {
+    setLoading(true);
+    try {
+      if (window.api) {
+        const [data, settings] = await Promise.all([
+            window.api.getAllSales(),
+            window.api.getSettings()
+        ]);
+        setSales(data || []);
+        setBusinessInfo(settings);
+      }
+    } catch (err) {
+      toastError('Error al cargar el historial');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchSales();
+  }, []);
+
+  const handleShowDetail = async (id: number) => {
+    try {
+      const details = await window.api.getSaleDetails(id);
+      setSelectedSale(details);
+      setIsDetailOpen(true);
+    } catch (err) {
+      toastError('No se pudieron obtener los detalles');
+    }
+  };
+
+  const handleCancelSale = async (id: number) => {
+    const confirm = await window.api.showConfirmDialog({ message: '¿Estás seguro de que deseas anular esta venta? El stock será devuelto y el total se restará de la caja.' });
+    if (!confirm) return;
+    
+    try {
+      const result = await window.api.cancelSale(id);
+      if (result.success) {
+        success('Venta anulada correctamente');
+        fetchSales();
+        setIsDetailOpen(false);
+      } else {
+        toastError(result.message || 'Error al anular');
+      }
+    } catch (err) {
+      toastError('Error de comunicación');
+    }
+  };
+const downloadTicket = (sale: any) => {
+  const doc = new jsPDF({ unit: 'mm', format: [80, 150] });
+  const bizName = businessInfo?.business_name || 'INVENTARIO-POS';
+  const bizAddress = businessInfo?.business_address || '';
+  const bizPhone = businessInfo?.business_phone || '';
+  const footer = businessInfo?.ticket_footer || '¡Gracias por su compra!';
+
+  doc.setFontSize(12);
+  doc.text(bizName, 40, 10, { align: 'center' });
+  doc.setFontSize(7);
+  if (bizAddress) {
+    doc.text(bizAddress, 40, 14, { align: 'center' });
+  }
+  if (bizPhone) {
+    doc.text(`Tel: ${bizPhone}`, 40, 17, { align: 'center' });
+  }
+
+  doc.setFontSize(8);
+  doc.text(`Ticket: #${sale.id} (REIMPRESIÓN)`, 5, 25);
+  doc.text(`Fecha: ${new Date(sale.created_at!).toLocaleString()}`, 5, 30);
+  doc.text(`Cliente: ${sale.client?.name || 'Cliente General'}`, 5, 35);
+  doc.text('------------------------------------------', 5, 40);
+
+  let y = 45;
+  sale.items.forEach((item: any) => {
+    doc.text(`${item.quantity} x ${item.product?.name || 'Producto'}`, 5, y);
+    doc.text(`$${(item.unit_price * item.quantity).toFixed(2)}`, 75, y, { align: 'right' });
+    y += 5;
+  });
+
+  doc.text('------------------------------------------', 5, y + 2);
+  doc.setFontSize(10);
+  doc.text(`TOTAL: $${sale.total.toFixed(2)}`, 75, y + 10, { align: 'right' });
+  doc.setFontSize(8);
+  doc.text(footer, 40, y + 20, { align: 'center' });
+  doc.save(`Ticket_Reimpresion_${sale.id}.pdf`);
+};
+  const filteredSales = sales.filter(s => 
+    s.id?.toString().includes(searchTerm) || 
+    (s.client?.name || '').toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-500">
+      <div className="flex items-center justify-between">
+        <h2 className="text-3xl font-bold tracking-tight text-white">Historial de Ventas</h2>
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+            <input 
+              type="text" 
+              placeholder="Buscar por ID o cliente..." 
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="bg-[#1f2028] border border-[#2e303a] rounded-xl py-2 pl-10 pr-4 text-sm text-white focus:border-primary outline-none transition-all"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="glass-panel rounded-2xl border border-white/5 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="bg-white/5 text-gray-400 text-xs uppercase tracking-wider">
+                <th className="px-6 py-4 font-semibold">ID</th>
+                <th className="px-6 py-4 font-semibold">Fecha</th>
+                <th className="px-6 py-4 font-semibold">Cliente</th>
+                <th className="px-6 py-4 font-semibold">Método</th>
+                <th className="px-6 py-4 font-semibold">Total</th>
+                <th className="px-6 py-4 font-semibold text-right">Acciones</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {loading ? (
+                <tr><td colSpan={6} className="px-6 py-10 text-center text-gray-500">Cargando ventas...</td></tr>
+              ) : filteredSales.length > 0 ? filteredSales.map((sale) => (
+                <tr key={sale.id} className="hover:bg-white/5 transition-colors group">
+                  <td className="px-6 py-4 text-sm font-medium text-white">#{sale.id}</td>
+                  <td className="px-6 py-4 text-sm text-gray-400">
+                    <div className="flex items-center italic">
+                      <Calendar className="w-3 h-3 mr-2 text-primary/60" />
+                      {new Date(sale.created_at!).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-300">{sale.client?.name || 'Cliente General'}</td>
+                  <td className="px-6 py-4">
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${sale.payment_method === 'CASH' ? 'bg-green-500/10 text-green-400' : 'bg-blue-500/10 text-blue-400'}`}>
+                      {sale.payment_method === 'CASH' ? 'EFECTIVO' : 'TARJETA'}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-sm font-bold text-white">${sale.total.toFixed(2)}</td>
+                  <td className="px-6 py-4 text-right">
+                    <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => handleShowDetail(sale.id!)} className="p-2 hover:bg-primary/20 rounded-lg text-primary transition-colors" title="Ver Detalles">
+                        <Eye className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              )) : (
+                <tr><td colSpan={6} className="px-6 py-10 text-center text-gray-500">No se encontraron ventas</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Modal de Detalle */}
+      <AnimatePresence>
+        {isDetailOpen && selectedSale && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }} 
+              animate={{ scale: 1, opacity: 1 }} 
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-[#1f2028] border border-[#2e303a] rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl"
+            >
+              <div className="p-6 border-b border-white/5 flex items-center justify-between bg-white/5">
+                <div>
+                  <h3 className="text-xl font-bold text-white">Detalle de Venta #{selectedSale.id}</h3>
+                  <p className="text-xs text-gray-500">{new Date(selectedSale.created_at!).toLocaleString()}</p>
+                </div>
+                <button onClick={() => setIsDetailOpen(false)} className="p-2 hover:bg-white/10 rounded-xl text-gray-400 transition-colors">
+                  <ArrowLeft className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-6">
+                <div className="space-y-3">
+                  <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest">Productos</h4>
+                  <div className="space-y-2">
+                    {selectedSale.items.map((item: any, idx: number) => (
+                      <div key={idx} className="flex justify-between items-center p-3 rounded-xl bg-white/5 border border-white/5">
+                        <div className="flex flex-col">
+                          <span className="text-sm font-medium text-white">{item.product?.name || 'Producto Desconocido'}</span>
+                          <span className="text-[10px] text-gray-500">{item.quantity} unidades x ${item.unit_price.toFixed(2)}</span>
+                        </div>
+                        <span className="text-sm font-bold text-white">${(item.quantity * item.unit_price).toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-white/5 flex justify-between items-end">
+                  <div>
+                    <p className="text-xs text-gray-500">Cliente</p>
+                    <p className="text-sm text-white font-medium">{selectedSale.client?.name || 'Cliente General'}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-gray-500">Total Pagado</p>
+                    <p className="text-2xl font-black text-primary">${selectedSale.total.toFixed(2)}</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 pt-4">
+                  <button 
+                    onClick={() => downloadTicket(selectedSale)}
+                    className="flex items-center justify-center gap-2 py-3 bg-white/5 hover:bg-white/10 text-white rounded-xl text-sm font-bold transition-all"
+                  >
+                    <Download className="w-4 h-4" /> Reimprimir
+                  </button>
+                  <button 
+                    onClick={() => handleCancelSale(selectedSale.id)}
+                    className="flex items-center justify-center gap-2 py-3 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-xl text-sm font-bold transition-all"
+                  >
+                    <Trash2 className="w-4 h-4" /> Anular Venta
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}

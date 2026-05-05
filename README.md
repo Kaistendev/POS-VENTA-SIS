@@ -1,6 +1,6 @@
 # 🚀 POS-VENTA-SIS: Sistema de Punto de Venta e Inventario
 
-**POS-VENTA-SIS** es una aplicación de escritorio profesional diseñada para pequeños y medianos comercios. Combina la potencia de **Electron** con la reactividad de **React 19** y la robustez de **PostgreSQL** con **Prisma ORM** para ofrecer un control total sobre las ventas, el stock y el flujo de caja en un entorno local seguro.
+**POS-VENTA-SIS** es una aplicación de escritorio profesional diseñada para pequeños y medianos comercios. Combina la potencia de **Electron** con la reactividad de **React 19** y la robustez de **SQLite** con **Prisma ORM** para ofrecer un control total sobre las ventas, el stock y el flujo de caja en un entorno local seguro.
 
 ---
 
@@ -25,22 +25,26 @@
 - **Validación de Stock:** Impide ventas si no hay stock suficiente.
 - **Tickets Profesionales:** Generación automática de tickets en PDF.
 - **Cancelación de Ventas:** Restaura automáticamente el stock.
+- **Soporte para Impresoras Térmicas:** Ticket optimizado para impresión.
 
 ### 3. 🏦 Control de Caja (Cash Management)
 - **Seguridad Contable:** Bloqueo automático de ventas si no se ha realizado la apertura de caja.
 - **Gestión de Turnos:** Apertura con fondo inicial y arqueo de caja al cierre.
 - **Conciliación:** Cálculo automático de diferencias (Sobrantes/Faltantes).
 - **Resumen Diario:** Estadísticas completas por caja y método de pago.
+- **Historial de Cierres:** Auditoría completa de todas las cajas cerradas para administradores.
+- **Cálculo de Esperado:** Fondo inicial + Ventas totales vs. Real.
 
 ### 4. 📦 Gestión Completa de Inventario
 - **CRUD de Productos:** Crear, leer, actualizar y eliminar productos.
 - **Control de Stock:**
-  - Añadir stock (ENTRADA)
-  - Reducir stock (SALIDA)
+  - Añadir stock (ENTRADA - Compras, Ajustes)
+  - Reducir stock (SALIDA - Ventas, Roturas)
   - Alertas de stock bajo automáticas
-  - Historial completo de movimientos
+  - Historial completo de movimientos con filtro por producto
 - **Categorías:** Organización de productos por categorías.
 - **Búsqueda Avanzada:** Filtrar por nombre, SKU o descripción.
+- **Movimientos de Inventario:** Auditoría completa de entradas y salidas (Solo Admin).
 
 ### 5. 👥 Gestión de Clientes
 - **CRUD Completo:** Crear, leer, actualizar y eliminar clientes.
@@ -48,10 +52,21 @@
 - **Validación de Datos:** Prevención de duplicados.
 - **Historial de Compras:** Seguimiento de ventas por cliente.
 
-### 6. 👤 Gestión de Usuarios
+### 6. 👤 Gestión de Usuarios y Seguridad
 - **Autenticación Segura:** Login con bcrypt.
-- **Control de Roles:** Administrador y usuario estándar.
-- **Auditoría Completa:** Registro de todas las acciones críticas.
+- **Control de Roles:** Administrador y Vendedor.
+- **Protección de Rutas:** Los vendedores no pueden acceder a módulos administrativos (Categorías, Usuarios, Movimientos, Cierres, Ajustes).
+- **Auditoría Completa:** Registro de todas las acciones críticas en `audit_logs`.
+- **Gestión de Usuarios:** Crear, editar, cambiar contraseña y eliminar usuarios (Solo Admin).
+
+### 7. ⚙️ UI/UX Moderna
+- **Temas Oscuros:** Interfaz elegante con colores suaves.
+- **Sidebar Colapsable:** Con atajo de teclado `Ctrl+B`.
+- **Skeleton Loaders:** Feedback visual durante la carga de datos.
+- **Empty States:** Mensajes amigables cuando no hay datos.
+- **Micro-interacciones:** Animaciones suaves con Framer Motion.
+- **Lazy Loading:** Carga diferida de páginas para mejor rendimiento.
+- **Caché Inteligente:** Uso de Zustand para categorías y configuraciones.
 
 ---
 
@@ -60,33 +75,32 @@
 ### Backend (Electron Main Process)
 - **Runtime:** Electron (Node.js)
 - **Language:** TypeScript (strict mode)
-- **ORM:** Prisma 7.7.0
-- **Database:** PostgreSQL
+- **ORM:** Prisma 6.2.1
+- **Database:** SQLite (WAL mode optimizado)
 - **Validation:** Zod
 - **Authentication:** bcryptjs
 
 ### Frontend (Renderer Process)
 - **Framework:** React 19
 - **Language:** TypeScript
-- **Styling:** Tailwind CSS + Material UI
-- **State Management:** Zustand
+- **Styling:** Tailwind CSS + Material UI (MUI)
+- **State Management:** Zustand (con persistencia)
 - **Routing:** React Router DOM v7
 - **Charts:** Recharts
 - **Animations:** Framer Motion
 - **UI Icons:** Lucide React
+- **PDF Generation:** jsPDF + jsPDF-AutoTable
 
 ### Build & Dev Tools
-- **Bundler:** Vite
+- **Bundler:** Vite 8
 - **Electron Integration:** vite-plugin-electron
 - **Linter:** ESLint
-- **Database Management:** Prisma Studio
 
 ---
 
 ## 📋 Requisitos Previos
 
 - **Node.js** 18 o superior
-- **PostgreSQL** 14 o superior
 - **npm** o **yarn**
 
 ---
@@ -104,30 +118,10 @@ cd POS-VENTA-SIS
 npm install
 ```
 
-### 3. Configurar PostgreSQL
+### 3. Configurar SQLite
+SQLite viene integrado con el proyecto, solo asegurate de que el archivo `dev.sqlite3` se genere en la carpeta `prisma/`.
 
-Crear un archivo `.env` en la raíz del proyecto:
-
-```env
-DATABASE_URL="postgresql://username:password@localhost:5432/pos_venta_sis"
-```
-
-Reemplazar:
-- `username`: Tu usuario de PostgreSQL
-- `password`: Tu contraseña de PostgreSQL
-- `pos_venta_sis`: Nombre de la base de datos (crearla primero)
-
-### 4. Crear la Base de Datos
-```bash
-# Conectarse a PostgreSQL
-psql -U username
-
-# Crear la base de datos
-CREATE DATABASE pos_venta_sis;
-\q
-```
-
-### 5. Ejecutar Migraciones
+### 4. Ejecutar Migraciones
 ```bash
 # Generar Prisma Client
 npm run db:generate
@@ -139,7 +133,7 @@ npm run db:migrate
 npm run db:seed
 ```
 
-### 6. Iniciar la Aplicación
+### 5. Iniciar la Aplicación
 ```bash
 npm run dev
 ```
@@ -167,7 +161,6 @@ npm run db:validate      # Validar esquema Prisma
 ### Build
 ```bash
 npm run build            # Compilar para producción
-npm run preview          # Previsualizar build
 npm run lint             # Ejecutar linter
 ```
 
@@ -189,7 +182,18 @@ POS-VENTA-SIS/
 │   │   ├── repositories/ # Capa de acceso a datos (Prisma)
 │   │   └── prisma/       # Cliente Prisma
 │   ├── preload/          # Scripts de precarga de Electron
-│   └── renderer/         # Frontend React
+│   └── pages/           # Frontend React (Páginas)
+│       ├── Dashboard.tsx
+│       ├── Sales.tsx
+│       ├── SalesHistory.tsx
+│       ├── Products.tsx
+│       ├── Categories.tsx
+│       ├── Clients.tsx
+│       ├── Cash.tsx
+│       ├── CashHistory.tsx
+│       ├── InventoryMovements.tsx
+│       ├── Users.tsx
+│       └── Settings.tsx
 ├── prisma/
 │   ├── schema.prisma     # Esquema de base de datos
 │   ├── migrations/       # Migraciones
@@ -213,6 +217,8 @@ POS-VENTA-SIS/
 - ✅ **Contraseñas hasheadas** con bcryptjs
 - ✅ **Validación de entradas** con Zod
 - ✅ **Auditoría completa** de todas las acciones críticas
+- ✅ **Control de Roles:** Admin vs Vendedor
+- ✅ **Rutas Protegidas:** Ocultas para vendedores
 - ✅ **Variables de entorno** para datos sensibles
 
 ---
@@ -248,6 +254,15 @@ ipcRenderer.invoke('cash:open', openingAmount, userId)
 ipcRenderer.invoke('cash:close', registerId, closingAmount, userId)
 ```
 
+### Categories
+```javascript
+ipcRenderer.invoke('categories:getAll', search)
+ipcRenderer.invoke('categories:getById', id)
+ipcRenderer.invoke('categories:create', data, userId)
+ipcRenderer.invoke('categories:update', id, data, userId)
+ipcRenderer.invoke('categories:delete', id, userId)
+```
+
 ### Clients
 ```javascript
 ipcRenderer.invoke('clients:getAll', search)
@@ -270,15 +285,6 @@ ipcRenderer.invoke('products:removeStock', productId, quantity, userId)
 ipcRenderer.invoke('products:getMovements', productId, limit)
 ```
 
-### Categories
-```javascript
-ipcRenderer.invoke('categories:getAll', search)
-ipcRenderer.invoke('categories:getById', id)
-ipcRenderer.invoke('categories:create', data, userId)
-ipcRenderer.invoke('categories:update', id, data, userId)
-ipcRenderer.invoke('categories:delete', id, userId)
-```
-
 ### Sales
 ```javascript
 ipcRenderer.invoke('sales:getAll', startDate, endDate, clientId, registerId)
@@ -299,6 +305,11 @@ ipcRenderer.invoke('users:delete', id, deletedBy)
 ipcRenderer.invoke('users:changePassword', userId, newPassword, changedBy)
 ```
 
+### Inventory Movements
+```javascript
+ipcRenderer.invoke('movements:getAll')
+```
+
 ---
 
 ## 📊 Base de Datos
@@ -313,32 +324,75 @@ ipcRenderer.invoke('users:changePassword', userId, newPassword, changedBy)
 - **sale_items** - Detalle de ventas
 - **inventory_movements** - Movimientos de inventario
 - **audit_logs** - Registro de auditoría
+- **settings** - Configuraciones del sistema
 
 ### Optimizaciones
 - ✅ Índices en columnas de búsqueda frecuente
 - ✅ Índices compuestos para filtros combinados
 - ✅ Restricciones de unicidad en campos clave
 - ✅ Eliminación en cascada donde corresponde
+- ✅ SQLite WAL mode + caché optimizada
 
 ---
 
 ## 🚀 Próximas Mejoras (Roadmap)
 
-1. **Frontend:**
+### 1. **Módulo de Proveedores y Compras (Crítico)**
+   - Crear tabla `suppliers` (Proveedores)
+   - Crear tabla `purchases` (Compras/Órdenes)
+   - Al recibir compra, incrementar stock automáticamente
+   - Generar movimiento de inventario tipo `COMPRA`
+   - Cálculo de costo de mercancía vendida
+
+### 2. **Exportación de Reportes**
+   - Botón para exportar Dashboard a PDF
+   - Reporte contable de cierre de caja en PDF
+   - Exportar historial de ventas a Excel/PDF
+   - Tickets personalizables para impresoras térmicas
+
+### 3. **Gestión de Impuestos (Fiscal)**
+   - Agregar campos de `tax_rate` en Settings
+   - Modificar ventas para desglosar: `subtotal`, `tax_amount`, `total`
+   - Mostrar desglose de impuestos en tickets
+
+### 4. **Módulo de Auditoría Visual (Admin)**
+   - Crear página `/audit-logs` (Solo Admin)
+   - Mostrar tabla: Usuario, Acción, Entidad, Fecha
+   - Filtros por usuario y rango de fechas
+
+### 5. **Respaldo de Seguridad (Backup)**
+   - Botón en Ajustes para "Descargar Copia de Seguridad"
+   - Botón para "Restaurar Copia" (importar .sqlite3)
+   - Respaldo automático al iniciar el día o al cerrar caja
+
+### 6. **Frontend (UX)**
    - Implementar validación Zod en todos los formularios
-   - Mejorar estados de carga y feedback
-   - Optimizar diseño responsive
-   - Exportar reportes a PDF/Excel
+   - Mejorar estados de carga y feedback visual
+   - Optimizar diseño responsive para tablets
+   - Notificaciones push para alertas de stock
 
-2. **Backend:**
-   - Implementar caché Redis para métricas
+### 7. **Backend (Performance)**
+   - Implementar caché para métricas de dashboard
    - Agregar pagination en listas grandes
-   - Optimizar consultas con Prisma
+   - Optimizar consultas con Prisma (select explícito ya implementado)
+   - Soporte para múltiples cajas simultáneas
 
-3. **Testing:**
-   - Tests unitarios para servicios
-   - Tests de integración para Prisma
-   - Tests E2E para flujos críticos
+---
+
+## 📊 Fase Actual del Proyecto
+
+**Fase:** MVP Completo + Maduración (Beta Funcional)
+
+El proyecto ha superado la fase de "Prototipo" y se encuentra en **Desarrollo Avanzado**. Está listo para ser usado en un entorno real de bajo/moderado tráfico (mono-usuario), pero le faltan módulos administrativos clave para considerarse un sistema empresarial completo.
+
+| Área | Estado |
+|------|--------|
+| **Base Técnica** | ✅ Sólida (Electron, React, Prisma, SQLite) |
+| **UI/UX** | ✅ Moderna (MUI, Framer Motion, Skeletons) |
+| **Seguridad** | ✅ Roles (Admin/Vendedor) y Auditoría (AuditLog) |
+| **Ventas** | ✅ Funcional (POS, Historial, Caja) |
+| **Inventario** | ⚠️ Básico (Falta gestión de proveedores) |
+| **Reportes** | ⚠️ En progreso (Falta exportación PDF) |
 
 ---
 

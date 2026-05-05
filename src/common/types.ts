@@ -55,8 +55,11 @@ export interface Sale {
   cash_register_id: number;
   client_id: number;
   total: number;
+  payment_method?: string;
   created_at?: Date | string;
   updated_at?: Date | string;
+  client?: any;
+  items?: any[];
 }
 
 export interface SaleItem {

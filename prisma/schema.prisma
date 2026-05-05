@@ -2,20 +2,19 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
-  provider     = "postgresql"
-  relationMode = "prisma"
+  provider = "sqlite"
+  url      = "file:./dev.sqlite3"
 }
 
 model User {
   id             Int        @id @default(autoincrement())
-  username       String     @unique @db.VarChar(255)
-  password_hash  String     @db.VarChar(255)
-  role           String     @db.VarChar(50)
+  username       String     @unique
+  password_hash  String
+  role           String
   created_at     DateTime   @default(now()) @map("created_at")
   updated_at     DateTime   @updatedAt @map("updated_at")
 
@@ -26,11 +25,11 @@ model User {
 
 model Client {
   id          Int      @id @default(autoincrement())
-  dni         String   @unique @db.VarChar(20)
-  name        String   @db.VarChar(255)
-  phone       String?  @db.VarChar(50)
-  code        String   @unique @db.VarChar(50)
-  tax_id      String?  @unique @db.VarChar(50)
+  dni         String   @unique
+  name        String
+  phone       String?
+  code        String   @unique
+  tax_id      String?  @unique
   created_at  DateTime @default(now()) @map("created_at")
   updated_at  DateTime @updatedAt @map("updated_at")
 
@@ -43,7 +42,7 @@ model Client {
 
 model Category {
   id          Int      @id @default(autoincrement())
-  name        String   @db.VarChar(255)
+  name        String
   created_at  DateTime @default(now()) @map("created_at")
   updated_at  DateTime @updatedAt @map("updated_at")
 
@@ -54,9 +53,9 @@ model Category {
 
 model Product {
   id               Int       @id @default(autoincrement())
-  sku              String    @unique @db.VarChar(100)
-  name             String    @db.VarChar(255)
-  description      String?   @db.Text
+  sku              String    @unique
+  name             String
+  description      String?
   category_id      Int?
   category         Category? @relation(fields: [category_id], references: [id], onDelete: SetNull)
   price_purchase   Float     @map("price_purchase")
@@ -65,14 +64,18 @@ model Product {
   min_stock        Int?      @default(5)
   created_at       DateTime  @default(now()) @map("created_at")
   updated_at       DateTime  @updatedAt @map("updated_at")
+  supplier_id      Int?
+  supplier         Supplier? @relation(fields: [supplier_id], references: [id])
 
   inventory_movements InventoryMovement[]
   sale_items       SaleItem[]
+  purchase_items   PurchaseItem[] @relation("ProductPurchaseItems")
 
   @@index([category_id])
   @@index([stock, min_stock])
   @@index([name])
   @@index([sku])
+  @@index([supplier_id])
   @@map("products")
 }
 
@@ -96,7 +99,7 @@ model Sale {
   client_id        Int
   client           Client     @relation(fields: [client_id], references: [id])
   total            Float
-  payment_method   String?    @default("CASH") @db.VarChar(10) @map("payment_method")
+  payment_method   String?    @default("CASH") @map("payment_method")
   created_at       DateTime   @default(now()) @map("created_at")
   updated_at       DateTime   @updatedAt @map("updated_at")
 
@@ -132,8 +135,9 @@ model InventoryMovement {
   id          Int      @id @default(autoincrement())
   product_id  Int
   product     Product  @relation(fields: [product_id], references: [id], onDelete: Cascade)
-  type        String   @db.VarChar(10) // ENTRADA | SALIDA
+  type        String   // ENTRADA | SALIDA
   quantity    Int
+  reason      String?  // Ej: COMPRA, AJUSTE, DEVOLUCION, VENTA
   created_at  DateTime @default(now()) @map("created_at")
   updated_at  DateTime @updatedAt @map("updated_at")
 
@@ -144,12 +148,59 @@ model InventoryMovement {
   @@map("inventory_movements")
 }
 
+model Supplier {
+  id          Int       @id @default(autoincrement())
+  name        String
+  ruc         String?  @unique
+  phone       String?
+  email       String?
+  address     String?
+  created_at  DateTime  @default(now()) @map("created_at")
+  updated_at  DateTime  @updatedAt @map("updated_at")
+  
+  products    Product[]
+  purchases   Purchase[]
+  
+  @@map("suppliers")
+}
+
+model Purchase {
+  id           Int           @id @default(autoincrement())
+  supplier_id  Int
+  supplier     Supplier      @relation(fields: [supplier_id], references: [id])
+  total_amount Float         @map("total_amount")
+  status       String        @default("PENDING") // PENDING, RECEIVED, CANCELLED
+  created_at   DateTime       @default(now()) @map("created_at")
+  updated_at   DateTime       @updatedAt @map("updated_at")
+  
+  items        PurchaseItem[]
+  
+  @@index([supplier_id])
+  @@index([status])
+  @@index([created_at])
+  @@map("purchases")
+}
+
+model PurchaseItem {
+  id          Int     @id @default(autoincrement())
+  purchase_id Int
+  purchase    Purchase @relation(fields: [purchase_id], references: [id])
+  product_id  Int
+  product     Product  @relation(fields: [product_id], references: [id], name: "ProductPurchaseItems")
+  quantity    Int
+  unit_cost   Float   @map("unit_cost")
+  
+  @@index([purchase_id])
+  @@index([product_id])
+  @@map("purchase_items")
+}
+
 model AuditLog {
   id          Int      @id @default(autoincrement())
   user_id     Int
   user        User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  action      String   @db.VarChar(100)
-  entity      String   @db.VarChar(100)
+  action      String
+  entity      String
   entity_id   Int
   created_at  DateTime @default(now()) @map("created_at")
   updated_at  DateTime @updatedAt @map("updated_at")
@@ -158,4 +209,12 @@ model AuditLog {
   @@index([entity])
   @@index([created_at])
   @@map("audit_logs")
+}
+
+model Setting {
+  id    Int    @id @default(autoincrement())
+  key   String @unique
+  value String
+
+  @@map("settings")
 }

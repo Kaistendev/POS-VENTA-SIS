@@ -1,5 +1,6 @@
 import { prisma } from '../prisma/client.js';
 import { cashRegisterSchema, cashRegisterCloseSchema } from '../../common/schemas.js';
+import { createAuditLog } from '../utils/auditLog.js';
 
 export class CashRegisterService {
   /**
@@ -100,13 +101,11 @@ export class CashRegisterService {
     });
 
     // Registrar en auditoría
-    await prisma.auditLog.create({
-      data: {
-        user_id: userId,
-        action: 'OPEN_CASH_REGISTER',
-        entity: 'cash_registers',
-        entity_id: cashRegister.id,
-      },
+    await createAuditLog({
+      userId,
+      action: 'OPEN_CASH_REGISTER',
+      entity: 'cash_registers',
+      entity_id: cashRegister.id,
     });
 
     return { success: true, id: cashRegister.id };
@@ -159,13 +158,11 @@ export class CashRegisterService {
         : 'MISSING';
 
     // Registrar en auditoría
-    await prisma.auditLog.create({
-      data: {
-        user_id: userId,
-        action: 'CLOSE_CASH_REGISTER',
-        entity: 'cash_registers',
-        entity_id: register.id,
-      },
+    await createAuditLog({
+      userId,
+      action: 'CLOSE_CASH_REGISTER',
+      entity: 'cash_registers',
+      entity_id: register.id,
     });
 
     return {

@@ -1,4 +1,4 @@
-import { ipcMain } from "electron";
+import { ipcMain, dialog } from "electron";
 import { ClientService } from "./services/ClientService.js";
 import { ProductService } from "./services/ProductService.js";
 import { SaleService } from "./services/SaleService.js";
@@ -7,6 +7,9 @@ import { UserService } from "./services/UserService.js";
 import { DashboardRepository } from "./repositories/DashboardRepository.js";
 import { CashRegisterService } from "./services/CashRegisterService.js";
 import { CategoryRepository } from "./repositories/CategoryRepository.js";
+import { SettingsService } from "./services/SettingsService.js";
+import { SupplierService } from "./services/SupplierService.js";
+import { PurchaseService } from "./services/PurchaseService.js";
 import { prisma } from "./prisma/client.js";
 import { wrapIpc } from "./utils/ipcWrapper.js";
 import { 
@@ -20,6 +23,18 @@ export function setupIpcHandlers() {
   /**
    * HEALTH CHECK
    */
+  ipcMain.handle("dialog:showConfirm", async (_, options: { message: string, title?: string }) => {
+    const result = await dialog.showMessageBox({
+      type: 'question',
+      buttons: ['Sí', 'No'],
+      defaultId: 0,
+      cancelId: 1,
+      title: options.title || 'Confirmación',
+      message: options.message,
+    });
+    return result.response === 0;
+  });
+
   ipcMain.handle("health:check", async () => {
     try {
       await prisma.$queryRaw`SELECT 1`;
@@ -117,6 +132,25 @@ export function setupIpcHandlers() {
     try {
       DashboardRepository.invalidateCache();
       return { success: true };
+    } catch (error: any) {
+      return { success: false, message: error.message };
+    }
+  });
+
+  /**
+   * SETTINGS
+   */
+  ipcMain.handle("settings:getAll", async () => {
+    try {
+      return await SettingsService.getSettings();
+    } catch (error: any) {
+      return {};
+    }
+  });
+
+  ipcMain.handle("settings:update", async (_, settings: Record<string, string>) => {
+    try {
+      return await SettingsService.updateSettings(settings);
     } catch (error: any) {
       return { success: false, message: error.message };
     }
@@ -292,12 +326,13 @@ export function setupIpcHandlers() {
 
   ipcMain.handle(
     "products:addStock",
-    async (_, productId, quantity, userId) => {
+    async (_, productId, quantity, userId, reason) => {
       try {
         return await ProductService.addStock(
           productId,
           quantity,
           userId,
+          reason
         );
       } catch (error: any) {
         return {
@@ -310,12 +345,13 @@ export function setupIpcHandlers() {
 
   ipcMain.handle(
     "products:removeStock",
-    async (_, productId, quantity, userId) => {
+    async (_, productId, quantity, userId, reason) => {
       try {
         return await ProductService.removeStock(
           productId,
           quantity,
           userId,
+          reason
         );
       } catch (error: any) {
         return {
@@ -365,6 +401,14 @@ export function setupIpcHandlers() {
         success: false,
         message: error.message || "Error al obtener ventas del día",
       };
+    }
+  });
+
+  ipcMain.handle("sales:getLast", async () => {
+    try {
+      return await SaleService.getLastSale();
+    } catch (error: any) {
+      return null;
     }
   });
 
@@ -511,6 +555,132 @@ export function setupIpcHandlers() {
       return {
         success: false,
         message: error.message || "Error al cambiar contraseña",
+      };
+    }
+  });
+
+  /**
+   * INVENTORY MOVEMENTS
+   */
+  ipcMain.handle("movements:getAll", async () => {
+    try {
+      return await prisma.inventoryMovement.findMany({
+        include: {
+          product: {
+            select: { id: true, name: true, sku: true },
+          },
+        },
+        orderBy: { created_at: 'desc' },
+        take: 500,
+      });
+    } catch (error: any) {
+      return [];
+    }
+  });
+
+  /**
+   * SUPPLIERS
+   */
+  ipcMain.handle("suppliers:getAll", async (_, search?: string) => {
+    try {
+      return await SupplierService.getAllSuppliers(search);
+    } catch (error: any) {
+      return [];
+    }
+  });
+
+  ipcMain.handle("suppliers:getById", async (_, id) => {
+    try {
+      return await SupplierService.getSupplierById(id);
+    } catch (error: any) {
+      return null;
+    }
+  });
+
+  ipcMain.handle("suppliers:create", async (_, data, userId) => {
+    try {
+      const supplier = await SupplierService.createSupplier(data, userId);
+      return { success: true, supplier };
+    } catch (error: any) {
+      return {
+        success: false,
+        message: error.message || "Error al crear proveedor",
+      };
+    }
+  });
+
+  ipcMain.handle("suppliers:update", async (_, id, data, userId) => {
+    try {
+      const supplier = await SupplierService.updateSupplier(id, data, userId);
+      return { success: true, supplier };
+    } catch (error: any) {
+      return {
+        success: false,
+        message: error.message || "Error al actualizar proveedor",
+      };
+    }
+  });
+
+  ipcMain.handle("suppliers:delete", async (_, id, userId) => {
+    try {
+      return await SupplierService.deleteSupplier(id, userId);
+    } catch (error: any) {
+      return {
+        success: false,
+        message: error.message || "Error al eliminar proveedor",
+      };
+    }
+  });
+
+  /**
+   * PURCHASES
+   */
+  ipcMain.handle("purchases:getAll", async (_, supplierId?, status?) => {
+    try {
+      return await PurchaseService.getAllPurchases(supplierId, status);
+    } catch (error: any) {
+      return [];
+    }
+  });
+
+  ipcMain.handle("purchases:getById", async (_, id) => {
+    try {
+      return await PurchaseService.getPurchaseById(id);
+    } catch (error: any) {
+      return null;
+    }
+  });
+
+  ipcMain.handle("purchases:create", async (_, data, userId) => {
+    try {
+      const purchase = await PurchaseService.createPurchase(data, userId);
+      return { success: true, purchase };
+    } catch (error: any) {
+      return {
+        success: false,
+        message: error.message || "Error al crear orden de compra",
+      };
+    }
+  });
+
+  ipcMain.handle("purchases:receive", async (_, purchaseId, userId) => {
+    try {
+      return await PurchaseService.receivePurchase(purchaseId, userId);
+    } catch (error: any) {
+      return {
+        success: false,
+        message: error.message || "Error al recibir compra",
+      };
+    }
+  });
+
+  ipcMain.handle("purchases:cancel", async (_, purchaseId, userId) => {
+    try {
+      return await PurchaseService.cancelPurchase(purchaseId, userId);
+    } catch (error: any) {
+      return {
+        success: false,
+        message: error.message || "Error al cancelar compra",
       };
     }
   });
