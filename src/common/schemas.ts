@@ -5,6 +5,7 @@ export const productSchema = z.object({
   name: z.string().min(1, "El nombre es obligatorio."),
   description: z.string().optional(),
   category_id: z.coerce.number().int().positive().optional().nullable(),
+  supplier_id: z.coerce.number().int().positive().optional().nullable(),
   price_purchase: z.coerce.number().min(0, "El precio de compra no puede ser negativo."),
   price_sale: z.coerce.number().min(0, "El precio de venta no puede ser negativo."),
   stock: z.coerce.number().int().optional(),

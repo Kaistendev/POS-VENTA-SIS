@@ -10,13 +10,15 @@ import { CategoryRepository } from "./repositories/CategoryRepository.js";
 import { SettingsService } from "./services/SettingsService.js";
 import { SupplierService } from "./services/SupplierService.js";
 import { PurchaseService } from "./services/PurchaseService.js";
+import { InventoryMovementService } from "./services/InventoryMovementService.js";
+import { BackupService } from "./services/BackupService.js";
 import { prisma } from "./prisma/client.js";
 import { wrapIpc } from "./utils/ipcWrapper.js";
 import { 
   productSchema, 
   clientSchema, 
-  saleSchema, 
-  categorySchema
+  saleSchema,
+  categorySchema,
 } from "../common/schemas.js";
 
 export function setupIpcHandlers() {
@@ -74,8 +76,9 @@ export function setupIpcHandlers() {
 
   ipcMain.handle("dashboard:getLowStock", async (_, limit?: number) => {
     try {
-      return await DashboardRepository.getLowStockProducts(limit);
+      return await DashboardRepository.getLowStockProducts(limit || 50);
     } catch (error: any) {
+      console.error('[IPC] Error getting low stock:', error);
       return [];
     }
   });
@@ -295,12 +298,10 @@ export function setupIpcHandlers() {
 
   ipcMain.handle("products:getLowStock", async () => {
     try {
-      return await ProductService.getLowStockProducts();
+      return await DashboardRepository.getLowStockProducts(50);
     } catch (error: any) {
-      return {
-        success: false,
-        message: error.message || "Error al obtener productos con stock bajo",
-      };
+      console.error('Get low stock products error:', error);
+      return [];
     }
   });
 
@@ -682,6 +683,62 @@ export function setupIpcHandlers() {
         success: false,
         message: error.message || "Error al cancelar compra",
       };
+    }
+  });
+
+  // Backup & Restore
+  ipcMain.handle("backup:create", async (_, label?: string) => {
+    try {
+      return await BackupService.createBackup(label);
+    } catch (error: any) {
+      console.error('[IPC] Error creating backup:', error);
+      return { success: false, message: error.message };
+    }
+  });
+
+  ipcMain.handle("backup:list", async () => {
+    try {
+      return await BackupService.listBackups();
+    } catch (error: any) {
+      console.error('[IPC] Error listing backups:', error);
+      return [];
+    }
+  });
+
+  ipcMain.handle("backup:restore", async (_, backupPath: string) => {
+    try {
+      return await BackupService.restoreBackup(backupPath);
+    } catch (error: any) {
+      console.error('[IPC] Error restoring backup:', error);
+      return { success: false, message: error.message };
+    }
+  });
+
+  ipcMain.handle("backup:delete", async (_, backupPath: string) => {
+    try {
+      return await BackupService.deleteBackup(backupPath);
+    } catch (error: any) {
+      console.error('[IPC] Error deleting backup:', error);
+      return { success: false, message: error.message };
+    }
+  });
+
+  // Tax Settings
+  ipcMain.handle("settings:getTax", async () => {
+    try {
+      return await SettingsService.getTaxSettings();
+    } catch (error: any) {
+      console.error('[IPC] Error getting tax settings:', error);
+      return { taxRate: 0, taxType: 'none', taxIncluded: false };
+    }
+  });
+
+  ipcMain.handle("settings:updateTax", async (_, taxRate: number, taxType: string, taxIncluded: boolean) => {
+    try {
+      return await SettingsService.updateTaxSettings(taxRate, taxType, taxIncluded);
+    } catch (error: any) {
+      console.error('[IPC] Error updating tax settings:', error);
+      return { success: false, message: error.message };
     }
   });
 }

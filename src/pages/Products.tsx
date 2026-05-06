@@ -8,6 +8,7 @@ import Modal from '../components/ui/Modal.tsx';
 export default function Products() {
   const [products, setProducts] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
+  const [suppliers, setSuppliers] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isStockModalOpen, setIsStockModalOpen] = useState(false);
@@ -20,6 +21,7 @@ export default function Products() {
     sku: '', 
     name: '', 
     category_id: '', 
+    supplier_id: '',
     price_purchase: '', 
     price_sale: '', 
     stock: '0', 
@@ -36,12 +38,14 @@ export default function Products() {
     setLoading(true);
     try {
       if (window.api) {
-        const [prodData, catData] = await Promise.all([
+        const [prodData, catData, supData] = await Promise.all([
           window.api.getAllProducts(),
-          window.api.getAllCategories()
+          window.api.getAllCategories(),
+          window.api.getAllSuppliers()
         ]);
         setProducts(prodData || []);
         setCategories(catData || []);
+        setSuppliers(supData || []);
       }
     } catch (error) {
       console.error(error);
@@ -59,6 +63,7 @@ export default function Products() {
       sku: '', 
       name: '', 
       category_id: '', 
+      supplier_id: '',
       price_purchase: '', 
       price_sale: '', 
       stock: '0', 
@@ -73,6 +78,7 @@ export default function Products() {
       sku: product.sku || '',
       name: product.name || '',
       category_id: product.category_id ? product.category_id.toString() : '',
+      supplier_id: product.supplier_id ? product.supplier_id.toString() : '',
       price_purchase: product.price_purchase?.toString() || '',
       price_sale: product.price_sale?.toString() || '',
       stock: '0',
@@ -99,6 +105,7 @@ export default function Products() {
         sku: formData.sku,
         name: formData.name,
         category_id: formData.category_id ? parseInt(formData.category_id) : null,
+        supplier_id: formData.supplier_id ? parseInt(formData.supplier_id) : null,
         price_purchase: parseFloat(formData.price_purchase) || 0,
         price_sale: parseFloat(formData.price_sale),
         min_stock: parseInt(formData.min_stock) || 10,
@@ -185,12 +192,22 @@ export default function Products() {
       width: 150,
       renderCell: (params) => <span className="text-gray-400">{params.value?.name || 'General'}</span>
     },
+    { 
+      field: 'supplier', 
+      headerName: 'Proveedor', 
+      width: 180,
+      renderCell: (params) => (
+        <span className="text-gray-300 text-sm">
+          {params.value?.name || <span className="text-gray-600 italic">Sin proveedor</span>}
+        </span>
+      )
+    },
     { field: 'price_sale', headerName: 'Precio Venta', type: 'number', width: 120, renderCell: (params) => `$${params.value?.toFixed(2)}` },
     { 
       field: 'stock', 
       headerName: 'Stock', 
       type: 'number', 
-      width: 120, 
+      width: 120,
       renderCell: (params) => {
         const isLow = params.value <= params.row.min_stock;
         return (
@@ -206,7 +223,7 @@ export default function Products() {
     { 
       field: 'actions', 
       headerName: 'Acciones', 
-      width: 180, 
+      width: 180,
       sortable: false,
       renderCell: (params) => (
         <div className="flex items-center h-full space-x-1">
@@ -219,6 +236,13 @@ export default function Products() {
     },
   ];
 
+  // Supplier filter state
+  const [selectedSupplier, setSelectedSupplier] = useState<string>('');
+
+  const filteredProducts = selectedSupplier
+    ? products.filter(p => p.supplier_id === parseInt(selectedSupplier))
+    : products;
+
   return (
     <div className="space-y-6 h-full flex flex-col">
       <div className="flex items-center justify-between">
@@ -226,7 +250,17 @@ export default function Products() {
           <h2 className="text-3xl font-bold tracking-tight text-white m-0">Productos</h2>
           <p className="text-gray-400 mt-1">Gestión de inventario y alertas de stock</p>
         </div>
-        <div className="flex space-x-3">
+        <div className="flex items-center space-x-3">
+          <select
+            value={selectedSupplier}
+            onChange={(e) => setSelectedSupplier(e.target.value)}
+            className="bg-[#1f2028] border border-[#2e303a] rounded-lg px-4 py-2 text-white text-sm"
+          >
+            <option value="">Todos los proveedores</option>
+            {suppliers.map((s: any) => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
           <button onClick={fetchData} className="p-2 rounded-lg bg-[#1f2028] text-gray-300 hover:text-white border border-[#2e303a] transition-colors shadow-sm">
             <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
           </button>
@@ -243,17 +277,17 @@ export default function Products() {
       <div className="flex-1 w-full glass-panel rounded-2xl overflow-hidden p-1 flex flex-col border border-white/5 shadow-2xl">
         {loading ? (
           <TableSkeleton rows={10} />
-        ) : products.length === 0 ? (
+        ) : filteredProducts.length === 0 ? (
           <EmptyState
             icon={<Package className="w-8 h-8" />}
             title="No hay productos"
-            description="Agrega tu primer producto al inventario"
+            description={selectedSupplier ? "No hay productos de este proveedor" : "Agrega tu primer producto al inventario"}
             action={{ label: 'Agregar Producto', onClick: handleOpenCreateModal }}
           />
         ) : (
           <div style={{ flexGrow: 1, width: '100%' }}>
             <DataGrid
-              rows={products}
+              rows={filteredProducts}
               columns={columns}
               loading={loading}
               getRowId={(row) => row.id}
@@ -297,18 +331,34 @@ export default function Products() {
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">Categoría</label>
-            <select
-              value={formData.category_id}
-              onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
-              className="w-full px-4 py-2 bg-[#1f2028] border border-[#2e303a] rounded-lg text-white focus:outline-none focus:border-primary"
-            >
-              <option value="">General</option>
-              {categories.map((cat) => (
-                <option key={cat.id} value={cat.id}>{cat.name}</option>
-              ))}
-            </select>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-1">Categoría</label>
+              <select
+                value={formData.category_id}
+                onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
+                className="w-full px-4 py-2 bg-[#1f2028] border border-[#2e303a] rounded-lg text-white focus:outline-none focus:border-primary"
+              >
+                <option value="">General</option>
+                {categories.map((cat) => (
+                  <option key={cat.id} value={cat.id}>{cat.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-1">Proveedor *</label>
+              <select
+                value={formData.supplier_id}
+                onChange={(e) => setFormData({ ...formData, supplier_id: e.target.value })}
+                className="w-full px-4 py-2 bg-[#1f2028] border border-[#2e303a] rounded-lg text-white focus:outline-none focus:border-primary"
+                required
+              >
+                <option value="">Seleccionar proveedor...</option>
+                {suppliers.map((s: any) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">

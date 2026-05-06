@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Store, Phone, MapPin, Save, TrendingUp, DollarSign, Calendar, RefreshCw } from 'lucide-react';
+import { Store, Phone, MapPin, Save, TrendingUp, DollarSign, Calendar, RefreshCw, Database, Download, Upload, Trash2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useToast } from '../hooks/useToast.ts';
 
 export default function Settings() {
-  const [activeTab, setActiveTab] = useState<'business' | 'reports'>('business');
+  const [activeTab, setActiveTab] = useState<'business' | 'reports' | 'backup' | 'tax'>('business');
   const [settings, setSettings] = useState({
     business_name: 'INVENTARIO-POS',
     business_address: '',
@@ -15,6 +15,9 @@ export default function Settings() {
   
   const [reportData, setReportsData] = useState<any>(null);
   const [loadingReport, setLoadingLoading] = useState(false);
+  const [backups, setBackups] = useState<any[]>([]);
+  const [loadingBackup, setLoadingBackup] = useState(false);
+  const [taxSettings, setTaxSettings] = useState({ taxRate: 0, taxType: 'none', taxIncluded: false });
   const { success, error: toastError } = useToast();
 
   useEffect(() => {
@@ -24,6 +27,9 @@ export default function Settings() {
         if (Object.keys(s).length > 0) {
           setSettings(prev => ({ ...prev, ...s }));
         }
+        // Load tax settings
+        const tax = await window.api.getTaxSettings();
+        setTaxSettings(tax);
       }
     };
     loadSettings();
@@ -59,7 +65,70 @@ export default function Settings() {
 
   useEffect(() => {
     if (activeTab === 'reports') loadProfitReport();
+    if (activeTab === 'backup') loadBackups();
   }, [activeTab]);
+
+  const loadBackups = async () => {
+    setLoadingBackup(true);
+    try {
+      if (window.api) {
+        const result = await window.api.listBackups();
+        setBackups(result || []);
+      }
+    } catch (err) {
+      console.error('Error loading backups:', err);
+    }
+    setLoadingBackup(false);
+  };
+
+  const handleCreateBackup = async () => {
+    try {
+      if (window.api) {
+        const result = await window.api.createBackup();
+        if (result.success) {
+          success('Respaldo creado exitosamente');
+          loadBackups();
+        } else {
+          toastError(result.message || 'Error al crear respaldo');
+        }
+      }
+    } catch (err) {
+      toastError('Error de comunicación');
+    }
+  };
+
+  const handleRestoreBackup = async (backupPath: string) => {
+    if (!confirm('¿Estás seguro de restaurar este respaldo? Se creará un respaldo de seguridad antes de restaurar.')) return;
+    try {
+      if (window.api) {
+        const result = await window.api.restoreBackup(backupPath);
+        if (result.success) {
+          success('Respaldo restaurado. Reinicia la aplicación para ver los cambios.');
+        } else {
+          toastError(result.message || 'Error al restaurar');
+        }
+      }
+    } catch (err) {
+      toastError('Error de comunicación');
+    }
+  };
+
+  const handleDeleteBackup = async (backupPath: string) => {
+    if (!confirm('¿Estás seguro de eliminar este respaldo?')) return;
+    try {
+      if (window.api) {
+        const result = await window.api.deleteBackup(backupPath);
+        if (result.success) {
+          success('Respaldo eliminado');
+          loadBackups();
+        } else {
+          toastError(result.message || 'Error al eliminar');
+        }
+      }
+    } catch (err) {
+      toastError('Error de comunicación');
+    }
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 h-full flex flex-col">
@@ -82,6 +151,18 @@ export default function Settings() {
           className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'reports' ? 'bg-primary text-white shadow-lg' : 'text-gray-400 hover:text-white'}`}
         >
           Reporte de Ganancias
+        </button>
+        <button 
+          onClick={() => setActiveTab('backup')}
+          className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'backup' ? 'bg-primary text-white shadow-lg' : 'text-gray-400 hover:text-white'}`}
+        >
+          Respaldos
+        </button>
+        <button 
+          onClick={() => setActiveTab('tax')}
+          className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'tax' ? 'bg-primary text-white shadow-lg' : 'text-gray-400 hover:text-white'}`}
+        >
+          Impuestos
         </button>
       </div>
 
@@ -137,7 +218,7 @@ export default function Settings() {
               </button>
             </form>
           </motion.div>
-        ) : (
+        ) : activeTab === 'reports' ? (
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="glass-panel p-6 rounded-3xl border border-white/5 space-y-2">
@@ -167,24 +248,202 @@ export default function Settings() {
 
                 <div className="space-y-4">
                    <div className="flex justify-between items-center p-4 rounded-2xl bg-white/5 border border-white/5">
-                      <div>
-                        <p className="text-white font-medium">Margen de Ganancia</p>
-                        <p className="text-xs text-gray-500">Porcentaje sobre el total de ventas</p>
-                      </div>
-                      <p className="text-2xl font-black text-primary">
-                        {reportData?.todayRevenue > 0 
-                          ? ((reportData.todayProfit / reportData.todayRevenue) * 100).toFixed(1) 
-                          : '0.0'}%
-                      </p>
+                        <div>
+                          <p className="text-white font-medium">Margen de Ganancia</p>
+                          <p className="text-xs text-gray-500">Porcentaje sobre el total de ventas</p>
+                        </div>
+                        <p className="text-2xl font-black text-primary">
+                          {reportData?.todayRevenue > 0 
+                            ? ((reportData.todayProfit / reportData.todayRevenue) * 100).toFixed(1) 
+                            : '0.0'}%
+                        </p>
                    </div>
                    
                    <div className="p-6 bg-primary/5 border border-primary/10 rounded-3xl">
-                      <p className="text-sm text-gray-300 leading-relaxed italic">
-                        "La ganancia bruta se calcula restando el **precio de costo** registrado en cada producto al momento de la venta del **precio final pagado** por el cliente."
-                      </p>
+                        <p className="text-sm text-gray-300 leading-relaxed italic">
+                          "La ganancia bruta se calcula restando el **precio de costo** registrado en cada producto al momento de la venta del **precio final pagado** por el cliente."
+                        </p>
                    </div>
                 </div>
              </div>
+          </motion.div>
+        ) : activeTab === 'backup' ? (
+          /* Backup & Restore Tab */
+          <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
+            <div className="glass-panel p-6 rounded-3xl border border-white/5">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                    <Database className="w-5 h-5 text-primary" /> Respaldos de Base de Datos
+                  </h3>
+                  <p className="text-sm text-gray-400 mt-1">Crea y administra respaldos comprimidos de tu información</p>
+                </div>
+                <button
+                  onClick={handleCreateBackup}
+                  className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded-xl font-medium transition-all"
+                >
+                  <Download className="w-4 h-4" />
+                  Crear Respaldo
+                </button>
+              </div>
+
+              {loadingBackup ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {backups.length > 0 ? backups.map((backup: any) => (
+                    <div key={backup.path} className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5 hover:bg-white/10 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-blue-500/10 rounded-lg">
+                          <Database className="w-4 h-4 text-blue-400" />
+                        </div>
+                        <div>
+                          <p className="text-white font-medium text-sm">{backup.filename}</p>
+                          <p className="text-xs text-gray-500">
+                            {new Date(backup.created).toLocaleString()} - {(backup.size / 1024).toFixed(2)} KB
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleRestoreBackup(backup.path)}
+                          className="p-2 text-green-400 hover:bg-green-400/10 rounded-lg transition-colors"
+                          title="Restaurar"
+                        >
+                          <Upload className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteBackup(backup.path)}
+                          className="p-2 text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
+                          title="Eliminar"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  )) : (
+                    <div className="text-center py-8 text-gray-500">
+                      No hay respaldos creados
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="glass-panel p-6 rounded-3xl border border-white/5">
+                <h4 className="text-lg font-bold text-white mb-4">Información de Respaldos</h4>
+                <div className="space-y-3 text-sm text-gray-400">
+                  <p>• Los respaldos se guardan comprimidos (.sqlite.gz) en la carpeta del sistema</p>
+                  <p>• Se crea un respaldo automático diario si no existe uno para ese día</p>
+                  <p>• Al restaurar, se crea un respaldo de seguridad automáticamente</p>
+                  <p className="text-yellow-400">• Después de restaurar, reinicia la aplicación para ver los cambios</p>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        ) : (
+          /* Tax Settings Tab */
+          <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="max-w-2xl space-y-6">
+            <div className="glass-panel p-8 rounded-3xl border border-white/5">
+              <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+                <DollarSign className="w-5 h-5 text-green-400" />
+                Configuración de Impuestos
+              </h3>
+              
+              <div className="space-y-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase font-bold text-gray-500 tracking-widest flex items-center">
+                    <DollarSign className="w-3 h-3 mr-2" /> Tasa de Impuesto (%)
+                  </label>
+                  <input
+                    type="number"
+                    value={(taxSettings.taxRate * 100).toString()}
+                    onChange={(e) => setTaxSettings(prev => ({ ...prev, taxRate: parseFloat(e.target.value) / 100 || 0 }))}
+                    className="w-full bg-black/20 border border-white/10 rounded-xl py-3 px-4 text-white outline-none focus:border-primary transition-all"
+                    min="0"
+                    max="100"
+                    step="0.1"
+                  />
+                  <p className="text-xs text-gray-500">Porcentaje de impuesto a aplicar en ventas</p>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase font-bold text-gray-500 tracking-widest">
+                    Tipo de Impuesto
+                  </label>
+                  <select
+                    value={taxSettings.taxType}
+                    onChange={(e) => setTaxSettings(prev => ({ ...prev, taxType: e.target.value }))}
+                    className="w-full px-4 py-3 bg-black/20 border border-white/10 rounded-xl text-white outline-none focus:border-primary transition-all"
+                  >
+                    <option value="none">Sin impuesto</option>
+                    <option value="iva">IVA</option>
+                    <option value="igv">IGV</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-3 p-4 bg-white/5 rounded-xl">
+                  <input
+                    type="checkbox"
+                    id="taxIncluded"
+                    checked={taxSettings.taxIncluded}
+                    onChange={(e) => setTaxSettings(prev => ({ ...prev, taxIncluded: e.target.checked }))}
+                    className="w-5 h-5 rounded border-white/20 bg-black/20 text-primary focus:ring-primary"
+                  />
+                  <label htmlFor="taxIncluded" className="text-sm text-gray-300 cursor-pointer">
+                    El precio de venta <strong className="text-white">ya incluye impuestos</strong>
+                  </label>
+                </div>
+
+                <div className="glass-panel p-4 rounded-xl bg-blue-500/5 border border-blue-500/20">
+                  <p className="text-sm text-blue-300">
+                    <strong>Nota:</strong> Cuando "Precio incluye impuestos" está activado, el sistema calculará el precio base restando el impuesto. 
+                    Cuando está desactivado, se añadirá el impuesto al precio base.
+                  </p>
+                </div>
+
+                <button
+                  onClick={async () => {
+                    try {
+                      if (window.api) {
+                        const result = await window.api.updateTaxSettings(
+                          taxSettings.taxRate,
+                          taxSettings.taxType,
+                          taxSettings.taxIncluded
+                        );
+                        if (result.success) {
+                          success('Configuración de impuestos guardada');
+                        } else {
+                          toastError(result.message || 'Error al guardar');
+                        }
+                      }
+                    } catch (err) {
+                      toastError('Error de comunicación');
+                    }
+                  }}
+                  className="w-full py-4 bg-primary hover:bg-primary/90 text-white font-bold rounded-xl transition-all"
+                >
+                  <Save className="w-5 h-5 inline mr-2" />
+                  Guardar Configuración de Impuestos
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+                </div>
+              )}
+            </div>
+
+            <div className="glass-panel p-6 rounded-3xl border border-white/5">
+              <h4 className="text-lg font-bold text-white mb-4">Información de Respaldos</h4>
+              <div className="space-y-3 text-sm text-gray-400">
+                <p>• Los respaldos se guardan comprimidos (.sqlite.gz) en la carpeta del sistema</p>
+                <p>• Se crea un respaldo automático diario si no existe uno para ese día</p>
+                <p>• Al restaurar, se crea un respaldo de seguridad automáticamente</p>
+                <p className="text-yellow-400">• Después de restaurar, reinicia la aplicación para ver los cambios</p>
+              </div>
+            </div>
           </motion.div>
         )}
       </div>

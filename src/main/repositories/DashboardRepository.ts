@@ -167,32 +167,30 @@ export class DashboardRepository {
    * Obtiene productos con stock bajo
    */
   static async getLowStockProducts(limit: number = 10) {
-    return prisma.product.findMany({
-      where: {
-        stock: {
-          lt: prisma.product.fields.min_stock,
-        },
-      },
-      include: {
-        category: {
-          select: {
-            name: true,
-          },
-        },
-      },
-      select: {
-        id: true,
-        sku: true,
-        name: true,
-        stock: true,
-        min_stock: true,
-        category: true,
-      },
-      orderBy: {
-        stock: 'asc',
-      },
-      take: limit,
-    });
+    console.log('[DashboardRepository] Fetching low stock products with limit:', limit);
+    
+    // Use Prisma with proper null handling
+    // Get products where stock <= min_stock (handles null min_stock with default 5)
+    const result = await prisma.$queryRaw<Array<any>>`
+      SELECT p.id, p.sku, p.name, p.stock, p.min_stock, c.name as category_name
+      FROM products p
+      LEFT JOIN categories c ON p.category_id = c.id
+      WHERE p.stock <= COALESCE(p.min_stock, 5) OR p.stock = 0
+      ORDER BY p.stock ASC
+      LIMIT ${limit}
+    `;
+    
+    const formatted = (result || []).map((r: any) => ({
+      id: r.id,
+      sku: r.sku,
+      name: r.name,
+      stock: r.stock,
+      min_stock: r.min_stock,
+      category: r.category_name ? { name: r.category_name } : null,
+    }));
+    
+    console.log('[DashboardRepository] Found low stock products:', formatted.length, formatted);
+    return formatted;
   }
 
   /**

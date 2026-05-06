@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
@@ -22,6 +22,7 @@ import { ErrorBoundary } from './components/ui/ErrorBoundary.tsx';
 import { useToast } from './hooks/useToast.ts';
 import { ToastContainer } from './components/ui/ToastContainer.tsx';
 import { useAuthStore } from './store/useStore.ts';
+import { useGlobalShortcuts } from './hooks/useKeyboardShortcut.ts';
 
 // Lazy-loaded pages
 const Login = lazy(() => import('./pages/Login.tsx'));
@@ -50,6 +51,9 @@ function PageLoader() {
 export default function App() {
   const { isAuthenticated, login } = useAuthStore();
   const { toasts, removeToast } = useToast();
+
+  // Initialize global keyboard shortcuts
+  useGlobalShortcuts();
 
   return (
     <ErrorBoundary>

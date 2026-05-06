@@ -32,26 +32,32 @@ export async function createAuditLog({
   entity: string;
   entity_id: number;
 }): Promise<void> {
-  // If no userId provided, try to get the first admin user
+  // Get userId: use provided value, or fallback to first admin
   let finalUserId = userId;
-  if (!finalUserId) {
-    finalUserId = await getDefaultAdminUserId();
-    if (!finalUserId) {
-      console.warn('No userId provided and no admin user found, skipping audit log');
-      return;
-    }
-  }
-
+  
   try {
-    // Verify user exists
-    const user = await prisma.user.findUnique({
-      where: { id: finalUserId },
-      select: { id: true },
-    });
-
-    if (!user) {
-      console.warn(`User ${finalUserId} not found, skipping audit log`);
-      return;
+    // Verify user exists (or fallback to admin)
+    if (finalUserId) {
+      const user = await prisma.user.findUnique({
+        where: { id: finalUserId },
+        select: { id: true },
+      });
+      
+      if (!user) {
+        // User doesn't exist, try fallback to admin
+        finalUserId = await getDefaultAdminUserId();
+        if (!finalUserId) {
+          console.warn(`User ${userId} not found and no admin available, skipping audit log`);
+          return;
+        }
+        console.warn(`User ${userId} not found, using admin user ${finalUserId} for audit log`);
+      }
+    } else {
+      finalUserId = await getDefaultAdminUserId();
+      if (!finalUserId) {
+        console.warn('No userId provided and no admin user found, skipping audit log');
+        return;
+      }
     }
 
     await prisma.auditLog.create({

@@ -17,7 +17,9 @@ export default function Dashboard() {
           const s = await window.api.getDashboardStats();
           const ls = await window.api.getLowStock();
           const ws = await window.api.getWeeklySales();
-          
+           
+          console.log('[Dashboard] Low stock data received:', ls);
+           
           setStats({
             todayRevenue:    Number(s?.todayRevenue    ?? 0),
             todayProfit:     Number(s?.todayProfit     ?? 0),
@@ -26,7 +28,7 @@ export default function Dashboard() {
             totalClients:    Number(s?.totalClients    ?? 0),
           });
           setLowStock(ls || []);
-          
+           
           // Formatear fechas para el gráfico (ej: 2024-04-09 -> 09 Abr)
           const formattedChart = (ws || []).map(d => ({
             name: new Date(d.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }),
@@ -34,7 +36,7 @@ export default function Dashboard() {
           }));
           setChartData(formattedChart);
         } catch (error) {
-          console.error("Error loading dashboard data:", error);
+          console.error("[Dashboard] Error loading data:", error);
         }
       }
       setLoading(false);
@@ -102,19 +104,27 @@ export default function Dashboard() {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className="p-6 rounded-2xl glass-panel border border-white/5">
           <h3 className="text-white font-bold mb-4 flex items-center"><AlertTriangle className="w-5 h-5 mr-2 text-orange-400" /> Stock Crítico</h3>
           <div className="space-y-3">
-            {lowStock.length > 0 ? lowStock.map((p, i) => (
-              <div key={i} className="flex justify-between items-center p-4 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors">
+              {lowStock.length > 0 ? lowStock.map((p, i) => {
+                const stock = p.stock ?? 0;
+                const minStock = p.min_stock ?? 5;
+                return (
+              <div key={i} className={`flex justify-between items-center p-4 rounded-xl bg-white/5 border hover:bg-white/10 transition-colors ${stock === 0 ? 'border-red-500/50' : 'border-white/5'}`}>
                 <div className="flex flex-col">
                   <span className="text-sm font-bold text-white truncate max-w-[140px]">{p.name || p.sku}</span>
                   <span className="text-[10px] text-gray-500 uppercase tracking-tighter">{p.sku}</span>
                 </div>
                 <div className="text-right">
-                   <span className={`px-2 py-1 rounded text-[10px] font-black ${(p.stock ?? 0) <= 5 ? 'bg-red-500/20 text-red-400' : 'bg-orange-500/20 text-orange-400'}`}>
-                    {p.stock ?? 0} UNIDADES
+                   <span className={`px-2 py-1 rounded text-[10px] font-black ${
+                     stock === 0 ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 
+                     stock <= minStock ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30' : 
+                     'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
+                   }`}>
+                    {stock} / {minStock}
                   </span>
                 </div>
               </div>
-            )) : (
+                );
+            }) : (
               <div className="text-gray-500 text-center py-20 italic text-sm">Todo el stock está bajo control</div>
             )}
           </div>

@@ -42,7 +42,7 @@ export default function Purchases() {
   // Quick product creation
   const [isCreateProductModalOpen, setIsCreateProductModalOpen] = useState(false);
   const [creatingForIndex, setCreatingForIndex] = useState<number>(-1);
-  const [quickProduct, setQuickProduct] = useState({ name: '', sku: '', price_purchase: 0, supplier_id: 0 });
+  const [quickProduct, setQuickProduct] = useState({ name: '', sku: '', price_purchase: 0 });
 
   // Product search handler
   const handleProductSearch = (index: number, searchTerm: string) => {
@@ -78,8 +78,7 @@ export default function Purchases() {
   // Open quick product creation modal
   const openCreateProduct = (index: number) => {
     setCreatingForIndex(index);
-    const supplierId = formData.supplier_id ? parseInt(formData.supplier_id) : 0;
-    setQuickProduct({ name: productSearch[index] || '', sku: '', price_purchase: 0, supplier_id: supplierId });
+    setQuickProduct({ name: productSearch[index] || '', sku: '', price_purchase: 0 });
     setIsCreateProductModalOpen(true);
   };
 
@@ -88,23 +87,16 @@ export default function Purchases() {
     if (!quickProduct.name) return;
     
     try {
-      const productData: any = {
+      const result = await window.api.createProduct({
         name: quickProduct.name,
         sku: quickProduct.sku,
         price_purchase: quickProduct.price_purchase,
         price_sale: quickProduct.price_purchase * 1.3, // Default 30% margin
         stock: 0,
-      };
-
-      // Associate with supplier if creating from a purchase
-      if (quickProduct.supplier_id > 0) {
-        productData.supplier_id = quickProduct.supplier_id;
-      }
-
-      const result = await window.api.createProduct(productData);
+      });
 
       if (result.success) {
-        success(`Producto creado${quickProduct.supplier_id ? ' y asociado al proveedor' : ''}`);
+        success('Producto creado');
         setIsCreateProductModalOpen(false);
         
         // Refresh products list
@@ -115,10 +107,9 @@ export default function Purchases() {
         if (creatingForIndex >= 0) {
           updateItem(creatingForIndex, 'product_id', result.id);
           updateItem(creatingForIndex, 'unit_cost', quickProduct.price_purchase);
-          const supplierName = suppliers.find((s: any) => s.id === quickProduct.supplier_id)?.name || '';
           setProductSearch(prev => ({ 
             ...prev, 
-            [creatingForIndex]: `${quickProduct.name} (${quickProduct.sku})${supplierName ? ` - ${supplierName}` : ''}` 
+            [creatingForIndex]: `${quickProduct.name} (${quickProduct.sku})` 
           }));
         }
       } else {
@@ -762,16 +753,6 @@ export default function Purchases() {
                 </button>
               </div>
               <div className="p-6 space-y-4">
-                {/* Show supplier info if creating from purchase */}
-                {quickProduct.supplier_id > 0 && (
-                  <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl">
-                    <p className="text-xs text-blue-400 font-medium">Se asociará al proveedor:</p>
-                    <p className="text-white font-medium mt-1">
-                      {suppliers.find((s: any) => s.id === quickProduct.supplier_id)?.name || 'Proveedor'}
-                    </p>
-                  </div>
-                )}
-
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-1">
                     Nombre *

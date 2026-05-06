@@ -5,6 +5,10 @@ import { fileURLToPath } from "url";
 import { PrismaClient } from "@prisma/client";
 import { ZodError, z } from "zod";
 import bcrypt from "bcryptjs";
+import fs from "fs";
+import { pipeline } from "stream";
+import { promisify } from "util";
+import { createGunzip, createGzip } from "zlib";
 //#region src/main/prisma/client.ts
 var globalForPrisma = globalThis;
 var prisma = globalForPrisma.prisma ?? new PrismaClient({ datasources: { db: { url: "file:./dev.sqlite3?mode=rwc" } } });
@@ -28,6 +32,7 @@ var productSchema = z.object({
 	name: z.string().min(1, "El nombre es obligatorio."),
 	description: z.string().optional(),
 	category_id: z.coerce.number().int().positive().optional().nullable(),
+	supplier_id: z.coerce.number().int().positive().optional().nullable(),
 	price_purchase: z.coerce.number().min(0, "El precio de compra no puede ser negativo."),
 	price_sale: z.coerce.number().min(0, "El precio de venta no puede ser negativo."),
 	stock: z.coerce.number().int().optional(),
@@ -87,20 +92,25 @@ async function getDefaultAdminUserId() {
 */
 async function createAuditLog({ userId, action, entity, entity_id }) {
 	let finalUserId = userId;
-	if (!finalUserId) {
-		finalUserId = await getDefaultAdminUserId();
-		if (!finalUserId) {
-			console.warn("No userId provided and no admin user found, skipping audit log");
-			return;
-		}
-	}
 	try {
-		if (!await prisma.user.findUnique({
-			where: { id: finalUserId },
-			select: { id: true }
-		})) {
-			console.warn(`User ${finalUserId} not found, skipping audit log`);
-			return;
+		if (finalUserId) {
+			if (!await prisma.user.findUnique({
+				where: { id: finalUserId },
+				select: { id: true }
+			})) {
+				finalUserId = await getDefaultAdminUserId();
+				if (!finalUserId) {
+					console.warn(`User ${userId} not found and no admin available, skipping audit log`);
+					return;
+				}
+				console.warn(`User ${userId} not found, using admin user ${finalUserId} for audit log`);
+			}
+		} else {
+			finalUserId = await getDefaultAdminUserId();
+			if (!finalUserId) {
+				console.warn("No userId provided and no admin user found, skipping audit log");
+				return;
+			}
 		}
 		await prisma.auditLog.create({ data: {
 			user_id: finalUserId,
@@ -263,6 +273,10 @@ var ProductService = class {
 				category: { select: {
 					id: true,
 					name: true
+				} },
+				supplier: { select: {
+					id: true,
+					name: true
 				} }
 			},
 			orderBy: { created_at: "desc" }
@@ -274,7 +288,10 @@ var ProductService = class {
 	static async getProductById(id) {
 		const product = await prisma.product.findUnique({
 			where: { id },
-			include: { category: true }
+			include: {
+				category: true,
+				supplier: true
+			}
 		});
 		if (!product) throw new Error("Producto no encontrado");
 		return product;
@@ -306,6 +323,7 @@ var ProductService = class {
 			price_purchase: validated.price_purchase,
 			description: validated.description,
 			category_id: validated.category_id,
+			supplier_id: validated.supplier_id,
 			min_stock: validated.min_stock,
 			stock: initialStock
 		} });
@@ -348,7 +366,12 @@ var ProductService = class {
 				price_purchase: validated.price_purchase,
 				description: validated.description,
 				category_id: validated.category_id,
+				supplier_id: validated.supplier_id,
 				min_stock: validated.min_stock
+			},
+			include: {
+				category: true,
+				supplier: true
 			}
 		});
 		await createAuditLog({
@@ -537,20 +560,24 @@ var DashboardRepository = class {
 	* Obtiene productos con stock bajo
 	*/
 	static async getLowStockProducts(limit = 10) {
-		return prisma.product.findMany({
-			where: { stock: { lt: prisma.product.fields.min_stock } },
-			include: { category: { select: { name: true } } },
-			select: {
-				id: true,
-				sku: true,
-				name: true,
-				stock: true,
-				min_stock: true,
-				category: true
-			},
-			orderBy: { stock: "asc" },
-			take: limit
-		});
+		console.log("[DashboardRepository] Fetching low stock products with limit:", limit);
+		const formatted = (await prisma.$queryRaw`
+      SELECT p.id, p.sku, p.name, p.stock, p.min_stock, c.name as category_name
+      FROM products p
+      LEFT JOIN categories c ON p.category_id = c.id
+      WHERE p.stock <= COALESCE(p.min_stock, 5) OR p.stock = 0
+      ORDER BY p.stock ASC
+      LIMIT ${limit}
+    ` || []).map((r) => ({
+			id: r.id,
+			sku: r.sku,
+			name: r.name,
+			stock: r.stock,
+			min_stock: r.min_stock,
+			category: r.category_name ? { name: r.category_name } : null
+		}));
+		console.log("[DashboardRepository] Found low stock products:", formatted.length, formatted);
+		return formatted;
 	}
 	/**
 	* Obtiene ventas por método de pago
@@ -1879,6 +1906,146 @@ var PurchaseService = class {
 	}
 };
 //#endregion
+//#region src/main/services/BackupService.ts
+var pipelineAsync = promisify(pipeline);
+var BackupService = class {
+	static getDbPath() {
+		if (!app.isPackaged) return path.resolve(process.cwd(), "prisma", "dev.sqlite3");
+		const userDataPath = app.getPath("userData");
+		return path.join(userDataPath, "dev.sqlite3");
+	}
+	static getBackupDir() {
+		const isDev = !app.isPackaged;
+		let basePath;
+		if (isDev) basePath = process.cwd();
+		else basePath = app.getPath("userData");
+		const backupDir = path.join(basePath, "backups");
+		if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
+		return backupDir;
+	}
+	/**
+	* Create a manual backup of the database
+	*/
+	static async createBackup(label) {
+		try {
+			const dbPath = this.getDbPath();
+			if (!fs.existsSync(dbPath)) return {
+				success: false,
+				message: "Database file not found"
+			};
+			const backupDir = this.getBackupDir();
+			const backupFileName = `backup-${(/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-").split("T")[0]}${label ? `-${label}` : ""}.sqlite.gz`;
+			const backupPath = path.join(backupDir, backupFileName);
+			await pipelineAsync(fs.createReadStream(dbPath), createGzip(), fs.createWriteStream(backupPath));
+			return {
+				success: true,
+				path: backupPath
+			};
+		} catch (error) {
+			console.error("[BackupService] Error creating backup:", error);
+			return {
+				success: false,
+				message: error.message
+			};
+		}
+	}
+	/**
+	* List all available backups
+	*/
+	static async listBackups() {
+		try {
+			const backupDir = this.getBackupDir();
+			if (!fs.existsSync(backupDir)) return [];
+			return fs.readdirSync(backupDir).filter((f) => f.endsWith(".sqlite.gz")).map((filename) => {
+				const filePath = path.join(backupDir, filename);
+				const stats = fs.statSync(filePath);
+				return {
+					filename,
+					path: filePath,
+					size: stats.size,
+					created: stats.mtime
+				};
+			}).sort((a, b) => b.created.getTime() - a.created.getTime());
+		} catch (error) {
+			console.error("[BackupService] Error listing backups:", error);
+			return [];
+		}
+	}
+	/**
+	* Restore database from backup
+	*/
+	static async restoreBackup(backupPath) {
+		try {
+			if (!fs.existsSync(backupPath)) return {
+				success: false,
+				message: "Backup file not found"
+			};
+			const dbPath = this.getDbPath();
+			await this.createBackup("before-restore");
+			await pipelineAsync(fs.createReadStream(backupPath), createGunzip(), fs.createWriteStream(dbPath));
+			return {
+				success: true,
+				message: "Backup restored successfully. Restart the app to see changes."
+			};
+		} catch (error) {
+			console.error("[BackupService] Error restoring backup:", error);
+			return {
+				success: false,
+				message: error.message
+			};
+		}
+	}
+	/**
+	* Delete a backup file
+	*/
+	static async deleteBackup(backupPath) {
+		try {
+			if (!fs.existsSync(backupPath)) return {
+				success: false,
+				message: "Backup file not found"
+			};
+			fs.unlinkSync(backupPath);
+			return { success: true };
+		} catch (error) {
+			console.error("[BackupService] Error deleting backup:", error);
+			return {
+				success: false,
+				message: error.message
+			};
+		}
+	}
+	/**
+	* Create automatic scheduled backup
+	*/
+	static async createScheduledBackup() {
+		const backups = await this.listBackups();
+		const now = /* @__PURE__ */ new Date();
+		const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+		if (!backups.find((b) => {
+			const backupDate = new Date(b.created);
+			return new Date(backupDate.getFullYear(), backupDate.getMonth(), backupDate.getDate()).getTime() === today.getTime();
+		})) {
+			await this.createBackup("auto");
+			console.log("[BackupService] Automatic backup created");
+		}
+	}
+	/**
+	* Cleanup old backups (keep last N)
+	*/
+	static async cleanupOldBackups(keep = 10) {
+		try {
+			const backups = await this.listBackups();
+			if (backups.length > keep) {
+				const toDelete = backups.slice(keep);
+				for (const backup of toDelete) fs.unlinkSync(backup.path);
+				console.log(`[BackupService] Cleaned up ${toDelete.length} old backups`);
+			}
+		} catch (error) {
+			console.error("[BackupService] Error cleaning up backups:", error);
+		}
+	}
+};
+//#endregion
 //#region src/main/utils/ipcWrapper.ts
 /**
 * Wraps an IPC handler to provide consistent error handling and optional Zod validation.
@@ -1969,8 +2136,9 @@ function setupIpcHandlers() {
 	});
 	ipcMain.handle("dashboard:getLowStock", async (_, limit) => {
 		try {
-			return await DashboardRepository.getLowStockProducts(limit);
+			return await DashboardRepository.getLowStockProducts(limit || 50);
 		} catch (error) {
+			console.error("[IPC] Error getting low stock:", error);
 			return [];
 		}
 	});
@@ -2168,12 +2336,10 @@ function setupIpcHandlers() {
 	});
 	ipcMain.handle("products:getLowStock", async () => {
 		try {
-			return await ProductService.getLowStockProducts();
+			return await DashboardRepository.getLowStockProducts(50);
 		} catch (error) {
-			return {
-				success: false,
-				message: error.message || "Error al obtener productos con stock bajo"
-			};
+			console.error("Get low stock products error:", error);
+			return [];
 		}
 	});
 	ipcMain.handle("products:create", wrapIpc((productData, userId) => ProductService.createProduct(productData, userId), productSchema));
@@ -2500,6 +2666,47 @@ function setupIpcHandlers() {
 			return {
 				success: false,
 				message: error.message || "Error al cancelar compra"
+			};
+		}
+	});
+	ipcMain.handle("backup:create", async (_, label) => {
+		try {
+			return await BackupService.createBackup(label);
+		} catch (error) {
+			console.error("[IPC] Error creating backup:", error);
+			return {
+				success: false,
+				message: error.message
+			};
+		}
+	});
+	ipcMain.handle("backup:list", async () => {
+		try {
+			return await BackupService.listBackups();
+		} catch (error) {
+			console.error("[IPC] Error listing backups:", error);
+			return [];
+		}
+	});
+	ipcMain.handle("backup:restore", async (_, backupPath) => {
+		try {
+			return await BackupService.restoreBackup(backupPath);
+		} catch (error) {
+			console.error("[IPC] Error restoring backup:", error);
+			return {
+				success: false,
+				message: error.message
+			};
+		}
+	});
+	ipcMain.handle("backup:delete", async (_, backupPath) => {
+		try {
+			return await BackupService.deleteBackup(backupPath);
+		} catch (error) {
+			console.error("[IPC] Error deleting backup:", error);
+			return {
+				success: false,
+				message: error.message
 			};
 		}
 	});

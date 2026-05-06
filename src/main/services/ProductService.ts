@@ -39,6 +39,9 @@ export class ProductService {
         category: {
           select: { id: true, name: true },
         },
+        supplier: {
+          select: { id: true, name: true },
+        },
       },
       orderBy: { created_at: 'desc' },
     });
@@ -52,6 +55,7 @@ export class ProductService {
       where: { id },
       include: {
         category: true,
+        supplier: true,
       },
     });
 
@@ -119,6 +123,7 @@ export class ProductService {
         price_purchase: validated.price_purchase,
         description: validated.description,
         category_id: validated.category_id,
+        supplier_id: validated.supplier_id,
         min_stock: validated.min_stock,
         stock: initialStock,
       },
@@ -195,7 +200,12 @@ export class ProductService {
         price_purchase: validated.price_purchase,
         description: validated.description,
         category_id: validated.category_id,
+        supplier_id: validated.supplier_id,
         min_stock: validated.min_stock,
+      },
+      include: {
+        category: true,
+        supplier: true,
       },
     });
 

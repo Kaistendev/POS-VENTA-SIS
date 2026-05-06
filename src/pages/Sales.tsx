@@ -162,16 +162,31 @@ export default function Sales() {
     (p.name && p.name.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
+  // Check if product can be added to cart
+  const canAddToCart = (product: any) => {
+    if (product.stock === undefined) return true;
+    const cartItem = cart.find(item => item.id === product.id);
+    if (!cartItem) return product.stock > 0;
+    return cartItem.qty < product.stock;
+  };
+
   useEffect(() => {
     if (searchTerm.length >= 3) {
       const product = products.find(p => p.sku.toLowerCase() === searchTerm.toLowerCase());
       if (product) {
-        addItem(product);
-        setSearchTerm('');
-        success(`Añadido: ${product.name}`);
+        const cartItem = cart.find(item => item.id === product.id);
+        if (cartItem && product.stock !== undefined && cartItem.qty >= product.stock) {
+          toastError(`Stock insuficiente. Solo quedan ${product.stock} unidades de ${product.name}`);
+        } else if (product.stock !== undefined && product.stock <= 0) {
+          toastError(`${product.name} no tiene stock disponible`);
+        } else {
+          addItem(product);
+          setSearchTerm('');
+          success(`Añadido: ${product.name}`);
+        }
       }
     }
-  }, [searchTerm, products, addItem]);
+  }, [searchTerm, products, addItem, cart]);
 
   const filteredClients = clients.filter(c => 
     c.name.toLowerCase().includes(customerData.name.toLowerCase()) || 
@@ -261,11 +276,38 @@ export default function Sales() {
         <div className="flex-1 bg-[#16171d] rounded-2xl border border-[#2e303a] overflow-hidden p-4">
           <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 overflow-y-auto max-h-[calc(100vh-360px)]">
             {(filteredProducts || []).map((product) => (
-              <div key={product.id} onClick={() => addItem(product)} className="bg-[#1f2028] border border-[#2e303a] rounded-xl p-4 cursor-pointer hover:border-primary/50 hover:bg-[#252630] transition-colors group relative">
-                <div className="aspect-square bg-black/40 rounded-lg mb-3 flex items-center justify-center"><Package className="w-10 h-10 text-primary/40" /></div>
+              <div 
+                key={product.id} 
+                onClick={() => {
+                  const cartItem = cart.find(item => item.id === product.id);
+                  if (cartItem && product.stock !== undefined && cartItem.qty >= product.stock) {
+                    toastError(`Stock insuficiente. Solo quedan ${product.stock} unidades`);
+                    return;
+                  }
+                  if (product.stock !== undefined && product.stock <= 0) {
+                    toastError(`${product.name} no tiene stock disponible`);
+                    return;
+                  }
+                  addItem(product);
+                }} 
+                className={`bg-[#1f2028] border border-[#2e303a] rounded-xl p-4 cursor-pointer hover:border-primary/50 hover:bg-[#252630] transition-colors group relative ${
+                  product.stock !== undefined && product.stock <= 0 ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
+              >
+                <div className="aspect-square bg-black/40 rounded-lg mb-3 flex items-center justify-center">
+                  <Package className={`w-10 h-10 ${product.stock !== undefined && product.stock <= 0 ? 'text-red-500/30' : 'text-primary/40'}`} />
+                </div>
                 <h4 className="text-sm font-medium text-gray-200 truncate">{product.name || product.sku}</h4>
                 <p className="text-primary font-bold mt-1">$ {product.price_sale.toFixed(2)}</p>
-                <span className="absolute top-2 right-2 text-[10px] bg-white/5 px-1.5 py-0.5 rounded text-gray-500">Stock: {product.stock ?? 0}</span>
+                <span className={`absolute top-2 right-2 text-[10px] px-1.5 py-0.5 rounded ${
+                  product.stock !== undefined && product.stock <= 0 
+                    ? 'bg-red-500/20 text-red-400' 
+                    : product.stock !== undefined && product.stock <= 5
+                    ? 'bg-orange-500/20 text-orange-400'
+                    : 'bg-green-500/20 text-green-400'
+                }`}>
+                  Stock: {product.stock ?? 0}
+                </span>
               </div>
             ))}
           </div>
@@ -327,12 +369,24 @@ export default function Sales() {
                   <div key={item.id} className="flex justify-between items-center p-4 border-b border-white/5">
                     <div>
                       <p className="font-bold text-white text-lg">{item.name}</p>
-                      <p className="text-gray-500">${item.price.toFixed(2)}</p>
+                      <p className="text-gray-500">${item.price.toFixed(2)} <span className="text-xs text-gray-600">(Stock: {item.stock})</span></p>
                     </div>
                     <div className="flex items-center gap-4">
                       <button onClick={() => updateQty(item.id, item.qty - 1)} className="p-2 bg-white/10 rounded-lg">-</button>
                       <span className="text-xl font-bold">{item.qty}</span>
-                      <button onClick={() => updateQty(item.id, item.qty + 1)} className="p-2 bg-white/10 rounded-lg">+</button>
+                      <button 
+                        onClick={() => {
+                          if (item.stock !== undefined && item.qty >= item.stock) {
+                            toastError(`Stock insuficiente. Solo quedan ${item.stock} unidades`);
+                            return;
+                          }
+                          updateQty(item.id, item.qty + 1);
+                        }} 
+                        className={`p-2 rounded-lg ${item.stock !== undefined && item.qty >= item.stock ? 'bg-gray-500/20 text-gray-500 cursor-not-allowed' : 'bg-white/10 hover:bg-white/20 text-white'}`}
+                        disabled={item.stock !== undefined && item.qty >= item.stock}
+                      >
+                        +
+                      </button>
                       <button onClick={() => removeItem(item.id)} className="text-red-400 p-2"><Trash2 /></button>
                     </div>
                   </div>

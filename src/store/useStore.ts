@@ -94,12 +94,21 @@ export const useCartStore = create<CartState>()(
         const existingItem = items.find((item) => item.id === product.id);
 
         if (existingItem) {
+          const newQty = existingItem.qty + 1;
+          // Check stock limit
+          if (existingItem.stock !== undefined && newQty > existingItem.stock) {
+            return; // Silently prevent exceeding stock
+          }
           set({
             items: items.map((item) =>
-              item.id === product.id ? { ...item, qty: item.qty + 1 } : item
+              item.id === product.id ? { ...item, qty: newQty } : item
             ),
           });
         } else if (product.id !== undefined) {
+          // Check if product has stock
+          if (product.stock !== undefined && product.stock <= 0) {
+            return; // No stock available
+          }
           set({
             items: [
               ...items,
@@ -117,12 +126,23 @@ export const useCartStore = create<CartState>()(
       },
       removeItem: (id) =>
         set({ items: get().items.filter((item) => item.id !== id) }),
-      updateQty: (id, qty) =>
+      updateQty: (id, qty) => {
+        const items = get().items;
+        const item = items.find(i => i.id === id);
+        if (!item) return;
+        
+        let newQty = Math.max(1, qty);
+        // Enforce stock limit
+        if (item.stock !== undefined && newQty > item.stock) {
+          newQty = item.stock;
+        }
+        
         set({
-          items: get().items.map((item) =>
-            item.id === id ? { ...item, qty: Math.max(1, qty) } : item
+          items: items.map((item) =>
+            item.id === id ? { ...item, qty: newQty } : item
           ),
-        }),
+        });
+      },
       clearCart: () => set({ items: [] }),
       getTotal: () =>
         get().items.reduce((acc, item) => acc + item.price * item.qty, 0),

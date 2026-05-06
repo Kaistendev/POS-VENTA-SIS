@@ -37,4 +37,31 @@ export class SettingsService {
     });
     return setting ? setting.value : defaultValue;
   }
+
+  /**
+   * Get tax configuration
+   */
+  static async getTaxSettings() {
+    const taxRate = await this.getSetting('tax_rate', '0');
+    const taxType = await this.getSetting('tax_type', 'none'); // none, iva, igv
+    const taxIncluded = await this.getSetting('tax_included', 'false');
+    
+    return {
+      taxRate: parseFloat(taxRate) || 0,
+      taxType,
+      taxIncluded: taxIncluded === 'true',
+    };
+  }
+
+  /**
+   * Update tax configuration
+   */
+  static async updateTaxSettings(taxRate: number, taxType: string, taxIncluded: boolean) {
+    await this.updateSettings({
+      tax_rate: taxRate.toString(),
+      tax_type: taxType,
+      tax_included: taxIncluded.toString(),
+    });
+    return { success: true };
+  }
 }

@@ -326,7 +326,7 @@ export default function Users() {
           <div className="flex justify-end space-x-3 pt-4">
             <button
               type="button"
-              onClick={() => setIsModalEditModalOpen(false)}
+              onClick={() => setIsDeleteModalOpen(false)}
               className="px-4 py-2 bg-[#2e303a] text-gray-300 rounded-lg hover:bg-[#3e404a] transition-colors"
             >
               Cancelar

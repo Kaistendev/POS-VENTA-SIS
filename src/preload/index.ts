@@ -94,6 +94,17 @@ contextBridge.exposeInMainWorld('api', {
   // Inventory Movements
   getAllMovements: () => ipcRenderer.invoke('movements:getAll'),
 
+  // Backup & Restore
+  createBackup: (label?: string) => ipcRenderer.invoke('backup:create', label),
+  listBackups: () => ipcRenderer.invoke('backup:list'),
+  restoreBackup: (backupPath: string) => ipcRenderer.invoke('backup:restore', backupPath),
+  deleteBackup: (backupPath: string) => ipcRenderer.invoke('backup:delete', backupPath),
+
+  // Tax Settings
+  getTaxSettings: () => ipcRenderer.invoke('settings:getTax'),
+  updateTaxSettings: (taxRate: number, taxType: string, taxIncluded: boolean) => 
+    ipcRenderer.invoke('settings:updateTax', taxRate, taxType, taxIncluded),
+
   // Window management (for focus fix)
   windowFocus: () => ipcRenderer.invoke('window:focus'),
   windowIsReady: () => ipcRenderer.invoke('window:is-ready'),
