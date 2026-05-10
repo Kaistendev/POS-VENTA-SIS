@@ -90,6 +90,7 @@ contextBridge.exposeInMainWorld('api', {
   createPurchase: (data: any, userId?: number) => ipcRenderer.invoke('purchases:create', data, userId),
   receivePurchase: (purchaseId: number, userId?: number) => ipcRenderer.invoke('purchases:receive', purchaseId, userId),
   cancelPurchase: (purchaseId: number, userId?: number) => ipcRenderer.invoke('purchases:cancel', purchaseId, userId),
+  updatePurchasePaymentStatus: (purchaseId: number, paymentStatus: string) => ipcRenderer.invoke('purchases:updatePaymentStatus', purchaseId, paymentStatus),
 
   // Inventory Movements
   getAllMovements: () => ipcRenderer.invoke('movements:getAll'),
@@ -104,6 +105,14 @@ contextBridge.exposeInMainWorld('api', {
   getTaxSettings: () => ipcRenderer.invoke('settings:getTax'),
   updateTaxSettings: (taxRate: number, taxType: string, taxIncluded: boolean) => 
     ipcRenderer.invoke('settings:updateTax', taxRate, taxType, taxIncluded),
+
+  // Reports
+  generateReport: (request: import('../domain/dtos').ReportRequestDTO) => 
+    ipcRenderer.invoke('reports:generate', request),
+  generateReceipt: (saleId: number) => 
+    ipcRenderer.invoke('reports:generateReceipt', saleId),
+  generateCashClose: (registerId: number) => 
+    ipcRenderer.invoke('reports:generateCashClose', registerId),
 
   // Window management (for focus fix)
   windowFocus: () => ipcRenderer.invoke('window:focus'),

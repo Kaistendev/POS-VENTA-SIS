@@ -1,10 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { DataGrid, GridColDef } from '@mui/x-data-grid';
-import { Tag, Plus, RefreshCw, Trash2 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { Tag, Plus, RefreshCw, Trash2, Pencil } from 'lucide-react';
 import { useToast } from '../hooks/useToast.ts';
 import Modal from '../components/ui/Modal.tsx';
-import { TableSkeleton, EmptyState } from '../components/ui/Skeleton.tsx';
+import DataTable from '../components/ui/DataTable.tsx';
 
 export default function Categories() {
   const [categories, setCategories] = useState<any[]>([]);
@@ -20,6 +18,10 @@ export default function Categories() {
     description: ''
   });
   const [deleteTarget, setDeleteTarget] = useState<{id: number, name: string} | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 8;
+  const totalPages = Math.max(1, Math.ceil(categories.length / itemsPerPage));
+  const paginatedCategories = categories.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const fetchCategories = async () => {
     setLoading(true);
@@ -98,22 +100,39 @@ export default function Categories() {
     }
   };
 
-  const columns: GridColDef[] = [
-    { field: 'id', headerName: 'ID', width: 70 },
-    { field: 'name', headerName: 'Nombre de Categoría', flex: 1 },
-    { 
-      field: 'actions', 
-      headerName: 'Acciones', 
-      width: 100, 
-      sortable: false,
-      renderCell: (params) => (
-        <button 
-          onClick={() => handleDeleteClick(params.row.id, params.row.name)}
-          className="p-2 text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
-        >
-          <Trash2 className="w-4 h-4" />
-        </button>
-      )
+  const columns = [
+    {
+      header: 'ID',
+      className: 'font-medium text-white',
+      render: (cat: any) => cat.id,
+    },
+    {
+      header: 'Nombre de Categoría',
+      className: 'text-gray-300',
+      render: (cat: any) => cat.name,
+    },
+    {
+      header: 'Acciones',
+      headerClassName: 'text-right',
+      className: 'text-right',
+      render: (cat: any) => (
+        <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            onClick={() => handleOpenEditModal(cat)}
+            className="p-2 hover:bg-primary/20 rounded-lg text-primary transition-colors"
+            title="Editar"
+          >
+            <Pencil className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => handleDeleteClick(cat.id, cat.name)}
+            className="p-2 text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
+            title="Eliminar"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+      ),
     },
   ];
 
@@ -173,35 +192,20 @@ export default function Categories() {
         
         {/* Tabla */}
         <div className="lg:col-span-2 flex flex-col">
-          <div className="flex-1 w-full glass-panel rounded-2xl overflow-hidden p-1 flex flex-col border border-white/5 shadow-2xl">
-            {loading ? (
-              <TableSkeleton rows={10} />
-            ) : categories.length === 0 ? (
-              <EmptyState
-                icon={<Tag className="w-8 h-8" />}
-                title="No hay categorías"
-                description="Crea tu primera categoría para organizar productos"
-                action={{ label: 'Agregar Categoría', onClick: handleOpenCreateModal }}
-              />
-            ) : (
-              <div style={{ flexGrow: 1, width: '100%' }}>
-                <DataGrid
-                  rows={categories}
-                  columns={columns}
-                  loading={loading}
-                  getRowId={(row) => row.id}
-                  initialState={{
-                    pagination: {
-                      paginationModel: { page: 0, pageSize: 15 },
-                    },
-                  }}
-                  pageSizeOptions={[15, 30]}
-                  disableRowSelectionOnClick
-                  autoHeight={false}
-                />
-              </div>
-            )}
-          </div>
+          <DataTable
+            columns={columns}
+            data={paginatedCategories}
+            keyExtractor={(cat: any) => cat.id}
+            loading={loading}
+            emptyMessage="No hay categorías"
+            emptyDescription="Crea tu primera categoría para organizar productos"
+            emptyIcon={<Tag className="w-8 h-8" />}
+            emptyAction={{ label: 'Agregar Categoría', onClick: handleOpenCreateModal }}
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={categories.length}
+            onPageChange={setCurrentPage}
+          />
         </div>
       </div>
 

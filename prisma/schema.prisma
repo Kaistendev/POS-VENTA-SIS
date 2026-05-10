@@ -80,12 +80,16 @@ model Product {
 }
 
 model CashRegister {
-  id             Int      @id @default(autoincrement())
-  opened_at      DateTime @default(now()) @map("opened_at")
-  opening_amount Float    @map("opening_amount")
-  total_sales    Float    @default(0) @map("total_sales")
-  created_at     DateTime @default(now()) @map("created_at")
-  updated_at     DateTime @updatedAt @map("updated_at")
+  id             Int        @id @default(autoincrement())
+  opened_at      DateTime   @default(now()) @map("opened_at")
+  opening_amount Float      @map("opening_amount")
+  total_sales    Float      @default(0) @map("total_sales")
+  closed_at      DateTime?  @map("closed_at")
+  closing_amount Float?     @map("closing_amount")
+  difference     Float?
+  status         String?    // PERFECT, SURPLUS, MISSING
+  created_at     DateTime   @default(now()) @map("created_at")
+  updated_at     DateTime   @updatedAt @map("updated_at")
 
   sales          Sale[]
 
@@ -102,6 +106,7 @@ model Sale {
   subtotal         Float      @default(0)
   tax_amount       Float      @default(0)
   payment_method   String?    @default("CASH") @map("payment_method")
+  exchange_rate    Float      @default(0) @map("exchange_rate")
   created_at       DateTime   @default(now()) @map("created_at")
   updated_at       DateTime   @updatedAt @map("updated_at")
 
@@ -172,6 +177,7 @@ model Purchase {
   supplier     Supplier      @relation(fields: [supplier_id], references: [id])
   total_amount Float         @map("total_amount")
   status       String        @default("PENDING") // PENDING, RECEIVED, CANCELLED
+  payment_status String    @default("UNPAID") // UNPAID, PAID
   created_at   DateTime       @default(now()) @map("created_at")
   updated_at   DateTime       @updatedAt @map("updated_at")
   

@@ -44,6 +44,7 @@ export class PrismaPurchaseRepository implements IPurchaseRepository {
         supplier_id: data.supplier_id,
         total_amount: totalAmount,
         status: 'PENDING',
+        payment_status: data.payment_status || 'UNPAID',
         items: {
           create: data.items.map((item) => ({
             product_id: item.product_id,
@@ -105,6 +106,13 @@ export class PrismaPurchaseRepository implements IPurchaseRepository {
     await this.prisma.purchase.update({
       where: { id: purchaseId },
       data: { status: 'CANCELLED' },
+    });
+  }
+
+  async updatePaymentStatus(purchaseId: number, paymentStatus: string): Promise<void> {
+    await this.prisma.purchase.update({
+      where: { id: purchaseId },
+      data: { payment_status: paymentStatus },
     });
   }
 }

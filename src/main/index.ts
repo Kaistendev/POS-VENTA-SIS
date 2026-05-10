@@ -119,7 +119,10 @@ app.whenReady().then(async () => {
   // 2. Setup IPC Handlers
   setupIpcHandlers();
 
-  // 3. Create the main window
+  // 3. Start scheduled tasks
+  container.schedulerService.start();
+
+  // 4. Create the main window
   createWindow();
 
   app.on("activate", () => {

@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
-import { DataGrid, GridColDef } from '@mui/x-data-grid';
+import DataTable from '../components/ui/DataTable.tsx';
 import { UserPlus, RefreshCw, Pencil, Trash2, Key, Shield } from 'lucide-react';
 import { useToast } from '../hooks/useToast.ts';
-import { TableSkeleton, EmptyState } from '../components/ui/Skeleton.tsx';
 import { useAuthStore } from '../store/useStore.ts';
 import Modal from '../components/ui/Modal.tsx';
 
@@ -27,6 +26,11 @@ export default function Users() {
     confirmPassword: ''
   });
   const [deleteTarget, setDeleteTarget] = useState<{id: number, name: string} | null>(null);
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 8;
+  const totalPages = Math.max(1, Math.ceil(users.length / itemsPerPage));
+  const paginatedUsers = users.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const fetchData = async () => {
     setLoading(true);
@@ -160,75 +164,6 @@ export default function Users() {
     }
   };
 
-  const columns: GridColDef[] = [
-    { 
-      field: 'username', 
-      headerName: 'Usuario', 
-      flex: 1,
-      renderCell: (params) => (
-        <div className="flex items-center">
-          <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold mr-3">
-            {params.value?.charAt(0).toUpperCase()}
-          </div>
-          <span className="font-medium">{params.value}</span>
-        </div>
-      )
-    },
-    { 
-      field: 'role', 
-      headerName: 'Rol', 
-      width: 150,
-      renderCell: (params) => (
-        <span className={`px-2.5 py-1 rounded-lg text-xs font-bold ${
-          params.value === 'ADMIN' 
-            ? 'bg-purple-500/20 text-purple-400' 
-            : 'bg-blue-500/20 text-blue-400'
-        }`}>
-          {params.value}
-        </span>
-      )
-    },
-    { 
-      field: 'created_at', 
-      headerName: 'Creado', 
-      width: 180,
-      renderCell: (params) => params.value ? new Date(params.value).toLocaleDateString('es-ES', {
-        year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-      }) : '-'
-    },
-    { 
-      field: 'actions', 
-      headerName: 'Acciones', 
-      width: 200, 
-      sortable: false,
-      renderCell: (params) => (
-        <div className="flex items-center h-full space-x-1">
-          <button 
-            onClick={() => handleOpenPasswordModal(params.row)}
-            className="p-2 text-yellow-400 hover:bg-yellow-400/10 rounded-lg transition-colors"
-            title="Cambiar Contraseña"
-          >
-            <Key className="w-4 h-4" />
-          </button>
-          <button 
-            onClick={() => handleOpenEditModal(params.row)}
-            className="p-2 text-blue-400 hover:bg-blue-400/10 rounded-lg transition-colors"
-            title="Editar"
-          >
-            <Pencil className="w-4 h-4" />
-          </button>
-          <button 
-            onClick={() => handleDeleteClick(params.row.id, params.row.username)}
-            className="p-2 text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
-            title="Eliminar"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
-        </div>
-      )
-    },
-  ];
-
   return (
     <div className="space-y-6 h-full flex flex-col">
       <div className="flex items-center justify-between">
@@ -247,31 +182,42 @@ export default function Users() {
         )}
       </div>
       
-      <div className="flex-1 w-full glass-panel rounded-2xl overflow-hidden p-1 flex flex-col border border-white/5 shadow-2xl">
-        {loading ? (
-          <TableSkeleton rows={8} />
-        ) : users.length === 0 ? (
-          <EmptyState
-            icon={<Shield className="w-8 h-8" />}
-            title="No hay usuarios"
-            description="Agrega tu primer usuario al sistema"
-            action={{ label: 'Crear Usuario', onClick: handleOpenCreateModal }}
-          />
-        ) : (
-          <div style={{ flexGrow: 1, width: '100%' }}>
-            <DataGrid
-              rows={users}
-              columns={columns}
-              loading={loading}
-              getRowId={(row) => row.id}
-              initialState={{ pagination: { paginationModel: { page: 0, pageSize: 15 } } }}
-              pageSizeOptions={[15, 30, 50]}
-              disableRowSelectionOnClick
-              className="custom-datagrid"
-            />
-          </div>
-        )}
-      </div>
+      <DataTable
+        columns={[
+          { header: 'ID', render: (u) => <span className="font-medium text-white">{u.id}</span> },
+          { header: 'Usuario', render: (u) => <span className="text-gray-300">{u.username}</span> },
+          { header: 'Rol', render: (u) => (
+            <span className={`px-2.5 py-1 rounded-lg text-xs font-bold ${u.role === 'ADMIN' ? 'bg-purple-500/20 text-purple-400' : 'bg-blue-500/20 text-blue-400'}`}>
+              {u.role}
+            </span>
+          )},
+          { header: 'Creado', render: (u) => <span className="text-gray-400">{new Date(u.created_at).toLocaleDateString('es-ES')}</span> },
+          { header: 'Acciones', headerClassName: 'text-right', className: 'text-right', render: (u) => (
+            <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button onClick={() => handleOpenPasswordModal(u)} className="p-2 text-yellow-400 hover:bg-yellow-400/10 rounded-lg" title="Cambiar Contraseña">
+                <Key className="w-4 h-4" />
+              </button>
+              <button onClick={() => handleOpenEditModal(u)} className="p-2 text-blue-400 hover:bg-blue-400/10 rounded-lg" title="Editar">
+                <Pencil className="w-4 h-4" />
+              </button>
+              <button onClick={() => handleDeleteClick(u.id, u.username)} className="p-2 text-red-400 hover:bg-red-400/10 rounded-lg" title="Eliminar">
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          )},
+        ]}
+        data={paginatedUsers}
+        keyExtractor={(u) => u.id}
+        loading={loading}
+        emptyMessage="No hay usuarios"
+        emptyDescription="Agrega tu primer usuario al sistema"
+        emptyIcon={<Shield className="w-8 h-8" />}
+        emptyAction={currentUser?.role === 'ADMIN' ? { label: 'Crear Usuario', onClick: handleOpenCreateModal } : undefined}
+        currentPage={currentPage}
+        totalPages={totalPages}
+        totalItems={users.length}
+        onPageChange={setCurrentPage}
+      />
 
       {/* Modal para Crear/Editar Usuario */}
       <Modal

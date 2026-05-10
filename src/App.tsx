@@ -39,6 +39,7 @@ const CashHistory = lazy(() => import('./pages/CashHistory.tsx'));
 const InventoryMovements = lazy(() => import('./pages/InventoryMovements.tsx'));
 const Suppliers = lazy(() => import('./pages/Suppliers.tsx'));
 const Purchases = lazy(() => import('./pages/Purchases.tsx'));
+const Reports = lazy(() => import('./pages/Reports.tsx'));
 
 function PageLoader() {
   return (
@@ -93,6 +94,7 @@ export default function App() {
                   <Route path="movements" element={<InventoryMovements />} />
                   <Route path="suppliers" element={<Suppliers />} />
                   <Route path="purchases" element={<Purchases />} />
+                  <Route path="reports" element={<Reports />} />
                 </Route>
               </Routes>
             </Suspense>

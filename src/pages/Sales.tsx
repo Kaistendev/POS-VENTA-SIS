@@ -6,6 +6,7 @@ import 'jspdf-autotable';
 import { useCashStore, useCartStore } from '../store/useStore.ts';
 import { useToast } from '../hooks/useToast.ts';
 import { Product, Client } from '../common/types';
+import { formatCurrency } from '../lib/utils.ts';
 
 export default function Sales() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -35,6 +36,7 @@ export default function Sales() {
   const [lastSaleId, setLastSaleId] = useState<number | string | null>(null);
   const [businessInfo, setBusinessInfo] = useState<any>(null);
   const [taxSettings, setTaxSettings] = useState<{ taxRate: number; taxType: string; taxIncluded: boolean }>({ taxRate: 0, taxType: 'none', taxIncluded: false });
+  const [exchangeRate, setExchangeRate] = useState(0);
 
   const fetchData = async () => {
     if (window.api) {
@@ -48,6 +50,7 @@ export default function Sales() {
       setActiveRegister(reg || null);
       setBusinessInfo(settings);
       setTaxSettings(tax || { taxRate: 0, taxType: 'none', taxIncluded: false });
+      setExchangeRate(parseFloat(settings?.exchange_rate_usd_ves) || 0);
     }
   };
 
@@ -71,33 +74,53 @@ export default function Sales() {
 
   const taxInfo = getTaxInfo(total);
 
-  const generateTicketPDF = (saleId: number | string, cartItems: any[], clientName: string) => {
-    const doc = new jsPDF({ unit: 'mm', format: [80, 150] });
+  const generateTicketPDF = (saleId: number | string, cartItems: any[], clientName: string, rate: number) => {
+    const extraLines = rate > 0 ? cartItems.length + 3 : 0;
+    const doc = new jsPDF({ unit: 'mm', format: [80, 150 + extraLines * 3] });
     doc.setFontSize(12);
     doc.text('INVENTARIO-POS', 40, 10, { align: 'center' });
     doc.setFontSize(8);
     doc.text(`Ticket: #${saleId}`, 5, 20);
     doc.text(`Fecha: ${new Date().toLocaleString()}`, 5, 25);
     doc.text(`Cliente: ${clientName}`, 5, 30);
-    doc.text('------------------------------------------', 5, 35);
-    let y = 40;
+    if (rate > 0) {
+      doc.text(`Tasa Bs.: ${rate.toFixed(2)}`, 5, 35);
+    }
+    doc.text('------------------------------------------', 5, 40);
+    let y = 45;
     cartItems.forEach(item => {
       doc.text(`${item.qty} x ${item.name || item.sku}`, 5, y);
-      doc.text(`$${(item.price * item.qty).toFixed(2)}`, 75, y, { align: 'right' });
-      y += 5;
+      doc.text(`$${formatCurrency(item.price * item.qty)}`, 75, y, { align: 'right' });
+      y += 4;
+      if (rate > 0) {
+        doc.setFontSize(6);
+        doc.text(`Bs. ${formatCurrency(item.price * item.qty * rate)}`, 75, y, { align: 'right' });
+        doc.setFontSize(8);
+        y += 4;
+      }
     });
     doc.text('------------------------------------------', 5, y + 2);
+    y += 6;
     doc.setFontSize(9);
-    doc.text(`Subtotal:`, 5, y + 8);
-    doc.text(`$${taxInfo.subtotal.toFixed(2)}`, 75, y + 8, { align: 'right' });
+    doc.text(`Subtotal:`, 5, y);
+    doc.text(`$${formatCurrency(taxInfo.subtotal)}`, 75, y, { align: 'right' });
+    y += 5;
     if (taxInfo.taxAmount > 0) {
-      doc.text(`${taxSettings.taxType.toUpperCase()} (${taxSettings.taxRate * 100}%):`, 5, y + 13);
-      doc.text(`$${taxInfo.taxAmount.toFixed(2)}`, 75, y + 13, { align: 'right' });
+      doc.text(`${taxSettings.taxType.toUpperCase()} (${taxSettings.taxRate * 100}%):`, 5, y);
+      doc.text(`$${formatCurrency(taxInfo.taxAmount)}`, 75, y, { align: 'right' });
+      y += 5;
     }
     doc.setFontSize(10);
-    doc.text(`TOTAL: $${taxInfo.total.toFixed(2)}`, 75, taxInfo.taxAmount > 0 ? y + 20 : y + 15, { align: 'right' });
+    doc.text(`TOTAL: $${formatCurrency(taxInfo.total)}`, 75, y, { align: 'right' });
+    y += 5;
+    if (rate > 0) {
+      doc.setFontSize(8);
+      doc.text(`Total Bs.: ${formatCurrency(taxInfo.total * rate)}`, 75, y, { align: 'right' });
+      y += 5;
+    }
+    y += 3;
     doc.setFontSize(8);
-    doc.text('¡Gracias por su compra!', 40, taxInfo.taxAmount > 0 ? y + 28 : y + 23, { align: 'center' });
+    doc.text('Gracias por su compra', 40, y, { align: 'center' });
     doc.save(`Ticket_${saleId}.pdf`);
   };
 
@@ -111,6 +134,7 @@ export default function Sales() {
         client_name: customerData.name || null,
         client_dni: customerData.dni || null,
         payment_method: method === 'card' ? 'CARD' : 'CASH',
+        exchange_rate: exchangeRate,
       };
       const itemsData = cart.map(item => ({
         product_id: item.id,
@@ -122,7 +146,7 @@ export default function Sales() {
       if (result.success) {
         const finalClientName = customerData.name || selectedClient.name;
         setLastSaleId(result.id);
-        generateTicketPDF(result.id, cart, finalClientName);
+        generateTicketPDF(result.id, cart, finalClientName, exchangeRate);
         setShowSuccess(true);
         clearCart();
         setCustomerData({ name: '', dni: '' });
@@ -322,6 +346,9 @@ export default function Sales() {
                 </div>
                 <h4 className="text-sm font-medium text-gray-200 truncate">{product.name || product.sku}</h4>
                 <p className="text-primary font-bold mt-1">$ {product.price_sale.toFixed(2)}</p>
+                {exchangeRate > 0 && (
+                  <p className="text-[10px] text-orange-400/70">Bs. {formatCurrency(product.price_sale * exchangeRate)}</p>
+                )}
                 <span className={`absolute top-2 right-2 text-[10px] px-1.5 py-0.5 rounded ${
                   product.stock !== undefined && product.stock <= 0 
                     ? 'bg-red-500/20 text-red-400' 
@@ -346,16 +373,17 @@ export default function Sales() {
          {taxInfo.taxAmount > 0 && (
            <div className="flex justify-between text-gray-400"><span>{taxSettings.taxType.toUpperCase()} ({taxSettings.taxRate * 100}%)</span><span>${taxInfo.taxAmount.toFixed(2)}</span></div>
          )}
-         <div className="text-4xl font-black text-white text-right">${taxInfo.total.toFixed(2)}</div>
-              </div>
-              <div className="grid grid-cols-2 gap-3 mt-6">
-                <button onClick={() => setIsCheckout(false)} className="py-3 bg-white/5 text-white rounded-xl">Volver</button>
-                <button onClick={() => handleProcessSale('cash')} className="py-3 bg-primary text-white font-bold rounded-xl">Pagar</button>
-              </div>
-           </div>
-        ) : (
-           <div className="flex-1 flex flex-col glass-panel rounded-2xl border border-[#2e303a] overflow-hidden shadow-2xl">
-             {/* ... carrito existente ... */}
+          <div className="text-4xl font-black text-white text-right">${taxInfo.total.toFixed(2)}</div>
+               {exchangeRate > 0 && <p className="text-orange-400/70 text-right text-lg mt-1">Bs. {formatCurrency(taxInfo.total * exchangeRate)}</p>}
+               </div>
+               <div className="grid grid-cols-2 gap-3 mt-6">
+                 <button onClick={() => setIsCheckout(false)} className="py-3 bg-white/5 text-white rounded-xl">Volver</button>
+                 <button onClick={() => handleProcessSale('cash')} className="py-3 bg-primary text-white font-bold rounded-xl">Pagar</button>
+               </div>
+            </div>
+         ) : (
+            <div className="flex-1 flex flex-col glass-panel rounded-2xl border border-[#2e303a] overflow-hidden shadow-2xl">
+              {/* ... carrito existente ... */}
              <div className="bg-[#1f2028] p-6 border-t border-[#2e303a]">
               <div className="space-y-1 mb-4">
                 <div className="flex justify-between text-sm text-gray-400"><span>Subtotal</span><span>${taxInfo.subtotal.toFixed(2)}</span></div>
@@ -363,7 +391,8 @@ export default function Sales() {
                   <div className="flex justify-between text-sm text-gray-400"><span>{taxSettings.taxType.toUpperCase()} ({taxSettings.taxRate * 100}%)</span><span>${taxInfo.taxAmount.toFixed(2)}</span></div>
                 )}
               </div>
-              <div className="flex justify-between text-2xl font-bold text-white mb-6"><span>Total</span><span>${taxInfo.total.toFixed(2)}</span></div>
+               <div className="flex justify-between text-2xl font-bold text-white mb-6"><span>Total</span><span>${taxInfo.total.toFixed(2)}</span></div>
+               {exchangeRate > 0 && <div className="flex justify-between text-base text-orange-400/80 mb-6"><span>Total Bs.</span><span>Bs. {formatCurrency(taxInfo.total * exchangeRate)}</span></div>}
              <button disabled={cart.length === 0} onClick={() => setIsCheckout(true)} className="w-full py-4 bg-primary text-white font-bold rounded-xl">Ir a Pagar</button>
              </div>
            </div>
@@ -401,7 +430,9 @@ export default function Sales() {
                   <div key={item.id} className="flex justify-between items-center p-4 border-b border-white/5">
                     <div>
                       <p className="font-bold text-white text-lg">{item.name}</p>
-                      <p className="text-gray-500">${item.price.toFixed(2)} <span className="text-xs text-gray-600">(Stock: {item.stock})</span></p>
+                      <p className="text-gray-500">${item.price.toFixed(2)} <span className="text-xs text-gray-600">(Stock: {item.stock})</span>
+                        {exchangeRate > 0 && <span className="text-orange-400/60 ml-2">Bs. {formatCurrency(item.price * exchangeRate)}</span>}
+                      </p>
                     </div>
                     <div className="flex items-center gap-4">
                       <button onClick={() => updateQty(item.id, item.qty - 1)} className="p-2 bg-white/10 rounded-lg">-</button>
@@ -435,8 +466,9 @@ export default function Sales() {
                      )}
                    </div>
                    <p className="text-5xl font-black text-white">${taxInfo.total.toFixed(2)}</p>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
+                   {exchangeRate > 0 && <p className="text-orange-400/70 text-right text-xl mt-1">Bs. {formatCurrency(taxInfo.total * exchangeRate)}</p>}
+                 </div>
+                 <div className="grid grid-cols-2 gap-4">
                   <button onClick={() => handleProcessSale('cash')} className="py-6 bg-green-600 rounded-2xl font-bold text-white text-xl">Pagar Efectivo</button>
                   <button onClick={() => handleProcessSale('card')} className="py-6 bg-primary rounded-2xl font-bold text-white text-xl">Pagar Tarjeta</button>
                 </div>

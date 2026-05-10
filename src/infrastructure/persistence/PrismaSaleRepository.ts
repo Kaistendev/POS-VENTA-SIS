@@ -20,6 +20,7 @@ export class PrismaSaleRepository implements ISaleRepository {
         created_at: true, updated_at: true, cash_register_id: true, client_id: true,
         client: { select: { id: true, name: true, dni: true } },
         cash_register: { select: { id: true, opened_at: true, opening_amount: true } },
+        _count: { select: { items: true } },
       },
       orderBy: { created_at: 'desc' },
     }) as unknown as Sale[];
@@ -86,6 +87,7 @@ export class PrismaSaleRepository implements ISaleRepository {
           tax_amount: input.tax_amount,
           total: input.total,
           payment_method: input.payment_method,
+          exchange_rate: input.exchange_rate || 0,
         },
       });
 

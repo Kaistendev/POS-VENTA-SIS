@@ -87,6 +87,10 @@ export interface CashRegister {
   opening_amount: number;
   total_sales: number;
   opened_at: Date;
+  closed_at?: Date | null;
+  closing_amount?: number | null;
+  difference?: number | null;
+  status?: string | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -104,6 +108,7 @@ export interface Sale {
   subtotal: number;
   tax_amount: number;
   payment_method: string | null;
+  exchange_rate: number;
   created_at: Date;
   updated_at: Date;
   client?: Pick<Client, 'id' | 'name' | 'dni'> | null;
@@ -138,6 +143,7 @@ export interface Purchase {
   supplier_id: number;
   total_amount: number;
   status: string;
+  payment_status: string;
   created_at: Date;
   updated_at: Date;
   supplier?: Pick<Supplier, 'id' | 'name' | 'ruc'> | null;

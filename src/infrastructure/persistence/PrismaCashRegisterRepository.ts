@@ -7,11 +7,8 @@ export class PrismaCashRegisterRepository implements ICashRegisterRepository {
   constructor(private prisma: PrismaClient) {}
 
   async findOpen(): Promise<CashRegister | null> {
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
-
     return this.prisma.cashRegister.findFirst({
-      where: { opened_at: { gte: startOfDay } },
+      where: { closed_at: null },
       orderBy: { opened_at: 'desc' },
     }) as unknown as CashRegister | null;
   }
@@ -46,6 +43,13 @@ export class PrismaCashRegisterRepository implements ICashRegisterRepository {
     return this.prisma.cashRegister.create({
       data: { opening_amount: Number(openingAmount), total_sales: 0 },
     }) as unknown as CashRegister;
+  }
+
+  async close(id: number, closingAmount: number, difference: number, status: string): Promise<void> {
+    await this.prisma.cashRegister.update({
+      where: { id },
+      data: { closed_at: new Date(), closing_amount: closingAmount, difference, status },
+    });
   }
 
   async updateTotalSales(id: number, delta: number): Promise<void> {

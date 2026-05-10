@@ -60,6 +60,8 @@ export class CashRegisterService {
 
     const status = difference === 0 ? 'PERFECT' : difference > 0 ? 'SURPLUS' : 'MISSING';
 
+    await this.cashRegisterRepo.close(register.id, Number(closingAmount), difference, status);
+
     await this.auditLogRepo.create({
       userId,
       action: 'CLOSE_CASH_REGISTER',

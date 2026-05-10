@@ -3,13 +3,19 @@ import "dotenv/config";
 import { BrowserWindow, app, dialog, ipcMain } from "electron";
 import path from "path";
 import { fileURLToPath } from "url";
+import fs from "node:fs/promises";
 import { PrismaClient } from "@prisma/client";
-import fs from "fs";
+import fs$1 from "fs";
 import { pipeline } from "stream";
 import { promisify } from "util";
 import { createGunzip, createGzip } from "zlib";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
+import ExcelJS from "exceljs";
 import { ZodError, z } from "zod";
 import bcrypt from "bcryptjs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 //#region src/infrastructure/persistence/PrismaProductRepository.ts
 var PrismaProductRepository = class {
 	constructor(prisma) {
@@ -251,7 +257,8 @@ var PrismaSaleRepository = class {
 					id: true,
 					opened_at: true,
 					opening_amount: true
-				} }
+				} },
+				_count: { select: { items: true } }
 			},
 			orderBy: { created_at: "desc" }
 		});
@@ -312,7 +319,8 @@ var PrismaSaleRepository = class {
 				subtotal: input.subtotal,
 				tax_amount: input.tax_amount,
 				total: input.total,
-				payment_method: input.payment_method
+				payment_method: input.payment_method,
+				exchange_rate: input.exchange_rate || 0
 			} });
 			for (const item of input.items) {
 				await tx.saleItem.create({ data: {
@@ -374,10 +382,8 @@ var PrismaCashRegisterRepository = class {
 		this.prisma = prisma;
 	}
 	async findOpen() {
-		const startOfDay = /* @__PURE__ */ new Date();
-		startOfDay.setHours(0, 0, 0, 0);
 		return this.prisma.cashRegister.findFirst({
-			where: { opened_at: { gte: startOfDay } },
+			where: { closed_at: null },
 			orderBy: { opened_at: "desc" }
 		});
 	}
@@ -404,6 +410,17 @@ var PrismaCashRegisterRepository = class {
 			opening_amount: Number(openingAmount),
 			total_sales: 0
 		} });
+	}
+	async close(id, closingAmount, difference, status) {
+		await this.prisma.cashRegister.update({
+			where: { id },
+			data: {
+				closed_at: /* @__PURE__ */ new Date(),
+				closing_amount: closingAmount,
+				difference,
+				status
+			}
+		});
 	}
 	async updateTotalSales(id, delta) {
 		await this.prisma.cashRegister.update({
@@ -568,6 +585,7 @@ var PrismaPurchaseRepository = class {
 				supplier_id: data.supplier_id,
 				total_amount: totalAmount,
 				status: "PENDING",
+				payment_status: data.payment_status || "UNPAID",
 				items: { create: data.items.map((item) => ({
 					product_id: item.product_id,
 					quantity: item.quantity,
@@ -618,6 +636,12 @@ var PrismaPurchaseRepository = class {
 		await this.prisma.purchase.update({
 			where: { id: purchaseId },
 			data: { status: "CANCELLED" }
+		});
+	}
+	async updatePaymentStatus(purchaseId, paymentStatus) {
+		await this.prisma.purchase.update({
+			where: { id: purchaseId },
+			data: { payment_status: paymentStatus }
 		});
 	}
 };
@@ -1105,20 +1129,20 @@ var ElectronBackupService = class {
 		if (isDev) basePath = process.cwd();
 		else basePath = app.getPath("userData");
 		const backupDir = path.join(basePath, "backups");
-		if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
+		if (!fs$1.existsSync(backupDir)) fs$1.mkdirSync(backupDir, { recursive: true });
 		return backupDir;
 	}
 	async createBackup(label) {
 		try {
 			const dbPath = this.getDbPath();
-			if (!fs.existsSync(dbPath)) return {
+			if (!fs$1.existsSync(dbPath)) return {
 				success: false,
 				message: "Database file not found"
 			};
 			const backupDir = this.getBackupDir();
 			const backupFileName = `backup-${(/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-").split("T")[0]}${label ? `-${label}` : ""}.sqlite.gz`;
 			const backupPath = path.join(backupDir, backupFileName);
-			await pipelineAsync(fs.createReadStream(dbPath), createGzip(), fs.createWriteStream(backupPath));
+			await pipelineAsync(fs$1.createReadStream(dbPath), createGzip(), fs$1.createWriteStream(backupPath));
 			return {
 				success: true,
 				path: backupPath
@@ -1134,10 +1158,10 @@ var ElectronBackupService = class {
 	async listBackups() {
 		try {
 			const backupDir = this.getBackupDir();
-			if (!fs.existsSync(backupDir)) return [];
-			return fs.readdirSync(backupDir).filter((f) => f.endsWith(".sqlite.gz")).map((filename) => {
+			if (!fs$1.existsSync(backupDir)) return [];
+			return fs$1.readdirSync(backupDir).filter((f) => f.endsWith(".sqlite.gz")).map((filename) => {
 				const filePath = path.join(backupDir, filename);
-				const stats = fs.statSync(filePath);
+				const stats = fs$1.statSync(filePath);
 				return {
 					filename,
 					path: filePath,
@@ -1152,13 +1176,13 @@ var ElectronBackupService = class {
 	}
 	async restoreBackup(backupPath) {
 		try {
-			if (!fs.existsSync(backupPath)) return {
+			if (!fs$1.existsSync(backupPath)) return {
 				success: false,
 				message: "Backup file not found"
 			};
 			const dbPath = this.getDbPath();
 			await this.createBackup("before-restore");
-			await pipelineAsync(fs.createReadStream(backupPath), createGunzip(), fs.createWriteStream(dbPath));
+			await pipelineAsync(fs$1.createReadStream(backupPath), createGunzip(), fs$1.createWriteStream(dbPath));
 			return {
 				success: true,
 				message: "Backup restored successfully. Restart the app to see changes."
@@ -1173,11 +1197,11 @@ var ElectronBackupService = class {
 	}
 	async deleteBackup(backupPath) {
 		try {
-			if (!fs.existsSync(backupPath)) return {
+			if (!fs$1.existsSync(backupPath)) return {
 				success: false,
 				message: "Backup file not found"
 			};
-			fs.unlinkSync(backupPath);
+			fs$1.unlinkSync(backupPath);
 			return { success: true };
 		} catch (error) {
 			console.error("[ElectronBackupService] Error deleting backup:", error);
@@ -1204,12 +1228,690 @@ var ElectronBackupService = class {
 			const backups = await this.listBackups();
 			if (backups.length > keep) {
 				const toDelete = backups.slice(keep);
-				for (const backup of toDelete) fs.unlinkSync(backup.path);
+				for (const backup of toDelete) fs$1.unlinkSync(backup.path);
 				console.log(`[ElectronBackupService] Cleaned up ${toDelete.length} old backups`);
 			}
 		} catch (error) {
 			console.error("[ElectronBackupService] Error cleaning up backups:", error);
 		}
+	}
+};
+//#endregion
+//#region src/infrastructure/reports/PDFReportGenerator.ts
+var PDFReportGenerator = class {
+	async generateSalesReport(rows, totals, title = "Reporte de Ventas", showTable = true) {
+		const doc = new jsPDF({
+			unit: "mm",
+			format: "a4"
+		});
+		doc.setFontSize(16);
+		doc.text(title, 14, 20);
+		doc.setFontSize(10);
+		doc.text(`Generado: ${(/* @__PURE__ */ new Date()).toLocaleDateString("es-PE")}`, 14, 28);
+		let finalY = 34;
+		if (showTable && rows.length > 0) {
+			autoTable(doc, {
+				head: [[
+					"Fecha",
+					"# Factura",
+					"Cliente",
+					"Items",
+					"Subtotal",
+					"Impuesto",
+					"Total",
+					"Pago"
+				]],
+				body: rows.map((r) => [
+					r.date,
+					String(r.invoiceNumber),
+					r.client,
+					String(r.itemsCount),
+					`$ ${r.subtotal.toFixed(2)}`,
+					`$ ${r.tax.toFixed(2)}`,
+					`$ ${r.total.toFixed(2)}`,
+					r.paymentMethod
+				]),
+				startY: 34,
+				styles: { fontSize: 7 },
+				headStyles: { fillColor: [
+					41,
+					128,
+					185
+				] },
+				tableWidth: "auto"
+			});
+			finalY = doc.lastAutoTable.finalY + 10;
+		}
+		doc.setFontSize(10);
+		doc.text(`Total Ventas: ${totals.totalSales}`, 14, finalY);
+		doc.text(`Ingreso Total: $ ${totals.totalRevenue.toFixed(2)}`, 14, finalY + 6);
+		doc.text(`Promedio: $ ${totals.averageSale.toFixed(2)}`, 14, finalY + 12);
+		if (totals.cashSales !== void 0 || totals.cardSales !== void 0) {
+			doc.text(`Efectivo: ${totals.cashSales ?? 0} ventas  |  $ ${(totals.cashRevenue ?? 0).toFixed(2)}`, 14, finalY + 18);
+			doc.text(`Tarjeta: ${totals.cardSales ?? 0} ventas  |  $ ${(totals.cardRevenue ?? 0).toFixed(2)}`, 14, finalY + 24);
+		}
+		return new Uint8Array(doc.output("arraybuffer"));
+	}
+	async generateInventoryReport(rows, metrics, title = "Reporte de Inventario") {
+		const doc = new jsPDF({
+			unit: "mm",
+			format: "a4"
+		});
+		doc.setFontSize(16);
+		doc.text(title, 14, 20);
+		doc.setFontSize(10);
+		doc.text(`Generado: ${(/* @__PURE__ */ new Date()).toLocaleDateString("es-PE")}`, 14, 28);
+		autoTable(doc, {
+			head: [[
+				"SKU",
+				"Producto",
+				"Categoría",
+				"Stock",
+				"Stock Min",
+				"P. Compra",
+				"P. Venta",
+				"Estado"
+			]],
+			body: rows.map((r) => [
+				r.sku,
+				r.name,
+				r.category,
+				String(r.stock),
+				r.minStock !== null ? String(r.minStock) : "-",
+				`$ ${r.purchasePrice.toFixed(2)}`,
+				`$ ${r.salePrice.toFixed(2)}`,
+				r.status === "ok" ? "OK" : r.status === "low" ? "Stock Bajo" : "Sin Stock"
+			]),
+			startY: 34,
+			styles: { fontSize: 7 },
+			headStyles: { fillColor: [
+				39,
+				174,
+				96
+			] },
+			tableWidth: "auto",
+			didParseCell: (data) => {
+				if (data.section === "body" && data.column.index === 7) {
+					const status = data.cell.raw;
+					if (status === "Sin Stock") data.cell.styles.textColor = [
+						255,
+						0,
+						0
+					];
+					else if (status === "Stock Bajo") data.cell.styles.textColor = [
+						255,
+						165,
+						0
+					];
+					else data.cell.styles.textColor = [
+						0,
+						128,
+						0
+					];
+				}
+			}
+		});
+		const finalY = doc.lastAutoTable.finalY + 10 || 50;
+		doc.setFontSize(10);
+		doc.text(`Total Productos: ${metrics.totalProducts}`, 14, finalY);
+		doc.text(`Con Stock: ${metrics.productsWithStock}  |  Sin Stock: ${metrics.productsWithoutStock}  |  Stock Bajo: ${metrics.lowStockProducts}`, 14, finalY + 6);
+		doc.text(`Valor Compra: $ ${metrics.totalPurchaseValue.toFixed(2)}  |  Valor Venta: $ ${metrics.totalSaleValue.toFixed(2)}`, 14, finalY + 12);
+		doc.text(`Ganancia Potencial: $ ${metrics.potentialProfit.toFixed(2)}`, 14, finalY + 18);
+		return new Uint8Array(doc.output("arraybuffer"));
+	}
+	async generateSaleReceipt(data) {
+		const doc = new jsPDF({
+			unit: "mm",
+			format: [80, 120 + data.items.length * 6]
+		});
+		let y = 10;
+		if (data.logoBase64) try {
+			doc.addImage(data.logoBase64, "PNG", 30, y, 20, 20);
+			y += 22;
+		} catch {}
+		doc.setFontSize(10);
+		doc.text(data.businessName, 40, y, { align: "center" });
+		y += 5;
+		doc.setFontSize(7);
+		if (data.businessAddress) {
+			doc.text(data.businessAddress, 40, y, { align: "center" });
+			y += 4;
+		}
+		if (data.businessPhone) {
+			doc.text(`Tel: ${data.businessPhone}`, 40, y, { align: "center" });
+			y += 4;
+		}
+		if (data.businessTaxId) {
+			doc.text(`RUC: ${data.businessTaxId}`, 40, y, { align: "center" });
+			y += 4;
+		}
+		y += 3;
+		doc.setFontSize(8);
+		doc.text("=".repeat(32), 5, y);
+		y += 4;
+		doc.text(`Ticket: #${data.saleId}`, 5, y);
+		y += 4;
+		doc.text(`Fecha: ${data.createdAt.toLocaleString("es-PE")}`, 5, y);
+		y += 4;
+		doc.text(`Cliente: ${data.clientName}`, 5, y);
+		y += 4;
+		if (data.clientDni) {
+			doc.text(`DNI: ${data.clientDni}`, 5, y);
+			y += 4;
+		}
+		if (data.clientTaxId) {
+			doc.text(`RUC: ${data.clientTaxId}`, 5, y);
+			y += 4;
+		}
+		doc.text(`Pago: ${data.paymentMethod === "CASH" ? "EFECTIVO" : "TARJETA"}`, 5, y);
+		y += 4;
+		doc.text("-".repeat(32), 5, y);
+		y += 5;
+		data.items.forEach((item) => {
+			doc.text(`${item.quantity} x ${item.productName}`, 5, y);
+			doc.text(`$ ${item.totalPrice.toFixed(2)}`, 75, y, { align: "right" });
+			y += 5;
+		});
+		doc.text("-".repeat(32), 5, y + 2);
+		y += 6;
+		doc.setFontSize(8);
+		doc.text(`Subtotal:`, 5, y);
+		doc.text(`$ ${data.subtotal.toFixed(2)}`, 75, y, { align: "right" });
+		y += 5;
+		if (data.taxAmount > 0) {
+			doc.text(`${data.taxType.toUpperCase()} (${(data.taxRate * 100).toFixed(1)}%):`, 5, y);
+			doc.text(`$ ${data.taxAmount.toFixed(2)}`, 75, y, { align: "right" });
+			y += 5;
+		}
+		doc.setFontSize(10);
+		doc.text(`TOTAL:`, 5, y + 2);
+		doc.text(`$ ${data.total.toFixed(2)}`, 75, y + 2, { align: "right" });
+		y += 8;
+		doc.setFontSize(7);
+		doc.text(data.ticketFooter || "Gracias por su compra", 40, y, { align: "center" });
+		return new Uint8Array(doc.output("arraybuffer"));
+	}
+	async generateCashCloseReport(data) {
+		const doc = new jsPDF({
+			unit: "mm",
+			format: "a4"
+		});
+		let y = 20;
+		doc.setFontSize(16);
+		doc.text("Reporte de Cierre de Caja", 14, y);
+		y += 8;
+		doc.setFontSize(10);
+		doc.text(data.businessName, 14, y);
+		y += 6;
+		doc.setFontSize(8);
+		doc.text(`Generado: ${(/* @__PURE__ */ new Date()).toLocaleDateString("es-PE")}`, 14, y);
+		y += 6;
+		doc.text(`Caja #${data.registerId}`, 14, y);
+		y += 5;
+		doc.text(`Apertura: ${data.openDate.toLocaleString("es-PE")}`, 14, y);
+		y += 5;
+		doc.text(`Cierre: ${data.closeDate.toLocaleString("es-PE")}`, 14, y);
+		y += 8;
+		const leftX = 14;
+		const rightX = 100;
+		const rowH = 7;
+		doc.setFontSize(9);
+		[
+			["Ventas Realizadas", String(data.salesCount)],
+			["Ventas Efectivo", `$ ${data.cashSales.toFixed(2)}`],
+			["Ventas Tarjeta", `$ ${data.cardSales.toFixed(2)}`]
+		].forEach(([label, value]) => {
+			doc.text(label, leftX, y);
+			doc.text(value, rightX, y);
+			y += rowH;
+		});
+		y += 4;
+		doc.setDrawColor(100, 100, 100);
+		doc.line(leftX, y, 190, y);
+		y += 6;
+		doc.setFontSize(10);
+		doc.text("RESUMEN", leftX, y);
+		y += 6;
+		[
+			["Fondo Inicial", `$ ${data.openingAmount.toFixed(2)}`],
+			["Total Ventas", `$ ${data.totalSales.toFixed(2)}`],
+			["Esperado (Fondo + Ventas)", `$ ${data.expectedCash.toFixed(2)}`],
+			["Real (Declarado)", `$ ${data.realCash.toFixed(2)}`]
+		].forEach(([label, value]) => {
+			doc.text(label, leftX, y);
+			doc.text(value, rightX, y);
+			y += rowH;
+		});
+		y += 3;
+		doc.setDrawColor(100, 100, 100);
+		doc.line(leftX, y, 190, y);
+		y += 6;
+		const diffLabel = data.difference >= 0 ? "SOBRANTE" : "FALTANTE";
+		const diffColor = data.difference === 0 ? [
+			0,
+			128,
+			0
+		] : [
+			200,
+			0,
+			0
+		];
+		doc.setTextColor(...diffColor);
+		doc.setFontSize(12);
+		doc.text(`${diffLabel}: $ ${Math.abs(data.difference).toFixed(2)}`, leftX, y);
+		doc.setTextColor(0, 0, 0);
+		y += 8;
+		doc.setFontSize(8);
+		doc.setTextColor(100, 100, 100);
+		doc.text(`Estado: ${data.status === "PERFECT" ? "Cuadra Perfectamente" : data.status === "SURPLUS" ? "Sobrante detectado" : "Faltante detectado"}`, leftX, y);
+		y += 6;
+		doc.text(`Firma del responsable: _______________________________`, leftX, y);
+		return new Uint8Array(doc.output("arraybuffer"));
+	}
+};
+//#endregion
+//#region src/infrastructure/reports/ExcelReportGenerator.ts
+var ExcelReportGenerator = class {
+	async generateSalesReport(rows, totals, title = "Reporte de Ventas", _showTable = true) {
+		const workbook = new ExcelJS.Workbook();
+		workbook.creator = "POS Venta SIS";
+		workbook.created = /* @__PURE__ */ new Date();
+		const sheet = workbook.addWorksheet("Ventas");
+		sheet.mergeCells("A1:H1");
+		const titleCell = sheet.getCell("A1");
+		titleCell.value = title;
+		titleCell.font = {
+			size: 16,
+			bold: true
+		};
+		sheet.getCell("A2").value = `Generado: ${(/* @__PURE__ */ new Date()).toLocaleDateString("es-PE")}`;
+		sheet.getCell("A2").font = {
+			size: 10,
+			italic: true
+		};
+		sheet.columns = [
+			{
+				header: "Fecha",
+				key: "date",
+				width: 14
+			},
+			{
+				header: "# Factura",
+				key: "invoiceNumber",
+				width: 12
+			},
+			{
+				header: "Cliente",
+				key: "client",
+				width: 30
+			},
+			{
+				header: "Items",
+				key: "itemsCount",
+				width: 8
+			},
+			{
+				header: "Subtotal",
+				key: "subtotal",
+				width: 14
+			},
+			{
+				header: "Impuesto",
+				key: "tax",
+				width: 14
+			},
+			{
+				header: "Total",
+				key: "total",
+				width: 14
+			},
+			{
+				header: "Pago",
+				key: "paymentMethod",
+				width: 16
+			}
+		];
+		const headerRow = sheet.getRow(4);
+		headerRow.font = {
+			bold: true,
+			color: { argb: "FFFFFFFF" }
+		};
+		headerRow.fill = {
+			type: "pattern",
+			pattern: "solid",
+			fgColor: { argb: "FF2980B9" }
+		};
+		headerRow.alignment = { horizontal: "center" };
+		rows.forEach((r) => {
+			sheet.addRow({
+				date: r.date,
+				invoiceNumber: r.invoiceNumber,
+				client: r.client,
+				itemsCount: r.itemsCount,
+				subtotal: r.subtotal,
+				tax: r.tax,
+				total: r.total,
+				paymentMethod: r.paymentMethod
+			});
+		});
+		const dataStartRow = 5;
+		const dataEndRow = dataStartRow + rows.length - 1;
+		sheet.addRow({});
+		const summaryRow = sheet.addRow({
+			date: "TOTALES",
+			itemsCount: totals.totalSales,
+			subtotal: { formula: `SUM(E${dataStartRow}:E${dataEndRow})` },
+			tax: { formula: `SUM(F${dataStartRow}:F${dataEndRow})` },
+			total: { formula: `SUM(G${dataStartRow}:G${dataEndRow})` }
+		});
+		summaryRow.font = { bold: true };
+		summaryRow.getCell(1).font = {
+			bold: true,
+			size: 11
+		};
+		const avgRow = sheet.addRow({
+			date: "Promedio",
+			total: totals.averageSale
+		});
+		avgRow.font = { italic: true };
+		if (totals.cashSales !== void 0 || totals.cardSales !== void 0) {
+			sheet.addRow({});
+			sheet.addRow({
+				date: "Efectivo",
+				itemsCount: totals.cashSales ?? 0,
+				total: totals.cashRevenue ?? 0
+			});
+			sheet.addRow({
+				date: "Tarjeta",
+				itemsCount: totals.cardSales ?? 0,
+				total: totals.cardRevenue ?? 0
+			});
+		}
+		const buffer = await workbook.xlsx.writeBuffer();
+		return new Uint8Array(buffer);
+	}
+	async generateInventoryReport(rows, metrics, title = "Reporte de Inventario") {
+		const workbook = new ExcelJS.Workbook();
+		workbook.creator = "POS Venta SIS";
+		workbook.created = /* @__PURE__ */ new Date();
+		const sheet = workbook.addWorksheet("Inventario");
+		sheet.mergeCells("A1:H1");
+		const titleCell = sheet.getCell("A1");
+		titleCell.value = title;
+		titleCell.font = {
+			size: 16,
+			bold: true
+		};
+		sheet.getCell("A2").value = `Generado: ${(/* @__PURE__ */ new Date()).toLocaleDateString("es-PE")}`;
+		sheet.getCell("A2").font = {
+			size: 10,
+			italic: true
+		};
+		sheet.columns = [
+			{
+				header: "SKU",
+				key: "sku",
+				width: 16
+			},
+			{
+				header: "Producto",
+				key: "name",
+				width: 35
+			},
+			{
+				header: "Categoría",
+				key: "category",
+				width: 20
+			},
+			{
+				header: "Stock",
+				key: "stock",
+				width: 10
+			},
+			{
+				header: "Stock Min",
+				key: "minStock",
+				width: 12
+			},
+			{
+				header: "P. Compra",
+				key: "purchasePrice",
+				width: 14
+			},
+			{
+				header: "P. Venta",
+				key: "salePrice",
+				width: 14
+			},
+			{
+				header: "Estado",
+				key: "status",
+				width: 14
+			}
+		];
+		const headerRow = sheet.getRow(4);
+		headerRow.font = {
+			bold: true,
+			color: { argb: "FFFFFFFF" }
+		};
+		headerRow.fill = {
+			type: "pattern",
+			pattern: "solid",
+			fgColor: { argb: "FF27AE60" }
+		};
+		headerRow.alignment = { horizontal: "center" };
+		rows.forEach((r) => {
+			const statusCell = sheet.addRow({
+				sku: r.sku,
+				name: r.name,
+				category: r.category,
+				stock: r.stock,
+				minStock: r.minStock ?? "-",
+				purchasePrice: r.purchasePrice,
+				salePrice: r.salePrice,
+				status: r.status === "ok" ? "OK" : r.status === "low" ? "Stock Bajo" : "Sin Stock"
+			}).getCell(8);
+			if (r.status === "out") statusCell.font = {
+				color: { argb: "FFFF0000" },
+				bold: true
+			};
+			else if (r.status === "low") statusCell.font = {
+				color: { argb: "FFFFA500" },
+				bold: true
+			};
+			else statusCell.font = { color: { argb: "FF008000" } };
+		});
+		sheet.addRow({});
+		const summaryRow = sheet.addRow({
+			sku: "RESUMEN",
+			stock: metrics.totalProducts,
+			purchasePrice: metrics.totalPurchaseValue,
+			salePrice: metrics.totalSaleValue
+		});
+		summaryRow.font = { bold: true };
+		sheet.addRow({
+			sku: "Con Stock",
+			stock: metrics.productsWithStock
+		});
+		sheet.addRow({
+			sku: "Sin Stock",
+			stock: metrics.productsWithoutStock
+		});
+		sheet.addRow({
+			sku: "Stock Bajo",
+			stock: metrics.lowStockProducts
+		});
+		const buffer = await workbook.xlsx.writeBuffer();
+		return new Uint8Array(buffer);
+	}
+	async generateSaleReceipt(data) {
+		const workbook = new ExcelJS.Workbook();
+		workbook.creator = "POS Venta SIS";
+		workbook.created = /* @__PURE__ */ new Date();
+		const sheet = workbook.addWorksheet("Comprobante");
+		sheet.mergeCells("A1:D1");
+		const titleCell = sheet.getCell("A1");
+		titleCell.value = `${data.businessName} - Ticket #${data.saleId}`;
+		titleCell.font = {
+			size: 14,
+			bold: true
+		};
+		sheet.getCell("A2").value = `Fecha: ${data.createdAt.toLocaleString("es-PE")}`;
+		sheet.getCell("A2").font = {
+			size: 10,
+			italic: true
+		};
+		sheet.getCell("A3").value = `Cliente: ${data.clientName}`;
+		sheet.getCell("A4").value = `Pago: ${data.paymentMethod === "CASH" ? "EFECTIVO" : "TARJETA"}`;
+		sheet.columns = [
+			{
+				header: "Cant.",
+				key: "quantity",
+				width: 8
+			},
+			{
+				header: "Producto",
+				key: "productName",
+				width: 35
+			},
+			{
+				header: "P. Unit.",
+				key: "unitPrice",
+				width: 14
+			},
+			{
+				header: "Total",
+				key: "totalPrice",
+				width: 14
+			}
+		];
+		const headerRow = sheet.getRow(6);
+		headerRow.font = {
+			bold: true,
+			color: { argb: "FFFFFFFF" }
+		};
+		headerRow.fill = {
+			type: "pattern",
+			pattern: "solid",
+			fgColor: { argb: "FF2980B9" }
+		};
+		data.items.forEach((item) => {
+			sheet.addRow({
+				quantity: item.quantity,
+				productName: item.productName,
+				unitPrice: item.unitPrice,
+				totalPrice: item.totalPrice
+			});
+		});
+		const summaryRow = 6 + data.items.length + 1;
+		sheet.addRow({});
+		sheet.getCell(`A${summaryRow + 1}`).value = "Subtotal:";
+		sheet.getCell(`D${summaryRow + 1}`).value = data.subtotal;
+		sheet.getCell(`D${summaryRow + 1}`).numFmt = "#,##0.00";
+		if (data.taxAmount > 0) {
+			sheet.getCell(`A${summaryRow + 2}`).value = `${data.taxType.toUpperCase()} (${(data.taxRate * 100).toFixed(1)}%):`;
+			sheet.getCell(`D${summaryRow + 2}`).value = data.taxAmount;
+			sheet.getCell(`D${summaryRow + 2}`).numFmt = "#,##0.00";
+		}
+		const totalRow = data.taxAmount > 0 ? summaryRow + 3 : summaryRow + 2;
+		sheet.getCell(`A${totalRow}`).value = "TOTAL:";
+		sheet.getCell(`A${totalRow}`).font = {
+			bold: true,
+			size: 12
+		};
+		sheet.getCell(`D${totalRow}`).value = data.total;
+		sheet.getCell(`D${totalRow}`).font = {
+			bold: true,
+			size: 12
+		};
+		sheet.getCell(`D${totalRow}`).numFmt = "#,##0.00";
+		const buffer = await workbook.xlsx.writeBuffer();
+		return new Uint8Array(buffer);
+	}
+	async generateCashCloseReport(data) {
+		const workbook = new ExcelJS.Workbook();
+		workbook.creator = "POS Venta SIS";
+		workbook.created = /* @__PURE__ */ new Date();
+		const sheet = workbook.addWorksheet("Cierre de Caja");
+		sheet.mergeCells("A1:B1");
+		const titleCell = sheet.getCell("A1");
+		titleCell.value = `${data.businessName} - Cierre de Caja #${data.registerId}`;
+		titleCell.font = {
+			size: 14,
+			bold: true
+		};
+		sheet.getCell("A3").value = `Apertura: ${data.openDate.toLocaleString("es-PE")}`;
+		sheet.getCell("A4").value = `Cierre: ${data.closeDate.toLocaleString("es-PE")}`;
+		sheet.columns = [{
+			header: "Concepto",
+			key: "concept",
+			width: 30
+		}, {
+			header: "Valor",
+			key: "value",
+			width: 20
+		}];
+		sheet.addRow({});
+		const summaryHeaderRow = sheet.addRow({
+			concept: "RESUMEN",
+			value: ""
+		});
+		summaryHeaderRow.font = {
+			bold: true,
+			size: 11
+		};
+		[
+			{
+				concept: "Ventas Realizadas",
+				value: data.salesCount
+			},
+			{
+				concept: "Ventas Efectivo",
+				value: data.cashSales
+			},
+			{
+				concept: "Ventas Tarjeta",
+				value: data.cardSales
+			},
+			{
+				concept: "",
+				value: ""
+			},
+			{
+				concept: "Fondo Inicial",
+				value: data.openingAmount
+			},
+			{
+				concept: "Total Ventas",
+				value: data.totalSales
+			},
+			{
+				concept: "Esperado",
+				value: data.expectedCash
+			},
+			{
+				concept: "Real (Declarado)",
+				value: data.realCash
+			}
+		].forEach((r) => {
+			const row = sheet.addRow({
+				concept: r.concept,
+				value: typeof r.value === "number" ? r.value : r.value
+			});
+			if (typeof r.value === "number" && r.concept) row.getCell(2).numFmt = r.concept.includes("Realizadas") ? "#,##0" : "#,##0.00";
+		});
+		const diffRow = sheet.addRow({
+			concept: data.difference >= 0 ? "SOBRANTE" : "FALTANTE",
+			value: Math.abs(data.difference)
+		});
+		diffRow.font = {
+			bold: true,
+			size: 12,
+			color: { argb: data.difference === 0 ? "FF008000" : "FFC80000" }
+		};
+		diffRow.getCell(2).numFmt = "#,##0.00";
+		const buffer = await workbook.xlsx.writeBuffer();
+		return new Uint8Array(buffer);
 	}
 };
 //#endregion
@@ -1533,7 +2235,8 @@ var SaleService = class {
 			tax_amount: taxAmount,
 			total,
 			items: itemsWithPurchasePrice,
-			payment_method: validated.payment_method
+			payment_method: validated.payment_method,
+			exchange_rate: saleData.exchange_rate || 0
 		};
 		const saleId = await this.saleRepo.registerSale(registerInput);
 		this.dashboardService.invalidateCache();
@@ -1602,6 +2305,7 @@ var CashRegisterService = class {
 		const difference = Number(closingAmount) - expectedCash;
 		const salesCount = await this.cashRegisterRepo.getSalesCount(register.id, register.opened_at);
 		const status = difference === 0 ? "PERFECT" : difference > 0 ? "SURPLUS" : "MISSING";
+		await this.cashRegisterRepo.close(register.id, Number(closingAmount), difference, status);
 		await this.auditLogRepo.create({
 			userId,
 			action: "CLOSE_CASH_REGISTER",
@@ -1768,6 +2472,16 @@ var PurchaseService = class {
 			return { success: true };
 		} catch (error) {
 			console.error("Receive purchase error:", error);
+			if (error.code === "P2025") throw new NotFoundError("Compra");
+			throw error;
+		}
+	}
+	async updatePaymentStatus(purchaseId, paymentStatus) {
+		try {
+			await this.purchaseRepo.updatePaymentStatus(purchaseId, paymentStatus);
+			return { success: true };
+		} catch (error) {
+			console.error("Update payment status error:", error);
 			if (error.code === "P2025") throw new NotFoundError("Compra");
 			throw error;
 		}
@@ -2169,6 +2883,289 @@ var CacheService = class {
 	}
 };
 //#endregion
+//#region src/main/services/ReportService.ts
+var ReportService = class {
+	constructor(pdfGenerator, excelGenerator, dashboardService, saleService, productService, cashRegisterService, settingsService) {
+		this.pdfGenerator = pdfGenerator;
+		this.excelGenerator = excelGenerator;
+		this.dashboardService = dashboardService;
+		this.saleService = saleService;
+		this.productService = productService;
+		this.cashRegisterService = cashRegisterService;
+		this.settingsService = settingsService;
+	}
+	async generateReport(request) {
+		const generator = request.format === "pdf" ? this.pdfGenerator : this.excelGenerator;
+		const title = request.title ?? this.getDefaultTitle(request.type);
+		switch (request.type) {
+			case "daily_sales": return this.generateSalesReport(generator, request, title, true);
+			case "sales_summary": return this.generateSalesReport(generator, request, title, false);
+			case "profit_summary": return this.generateProfitReport(generator, request, title);
+			case "inventory": return this.generateInventoryReport(generator, false, title);
+			case "low_stock": return this.generateInventoryReport(generator, true, title);
+			case "top_products": return this.generateTopProductsReport(generator, request, title);
+			case "sale_receipt": return this.generateSaleReceipt(request);
+			case "cash_close": return this.generateCashCloseReport(generator, request, title);
+		}
+	}
+	async generateSalesReport(generator, request, title, showTable = true) {
+		const sales = await this.saleService.getAllSales(request.startDate, request.endDate);
+		const stats = await this.saleService.getSalesStats(request.startDate, request.endDate);
+		const paymentBreakdown = await this.dashboardService.getSalesByPaymentMethod(request.startDate, request.endDate);
+		const cash = paymentBreakdown.find((p) => p.payment_method === "CASH");
+		const card = paymentBreakdown.find((p) => p.payment_method === "CARD");
+		const totals = {
+			totalSales: stats.totalSales,
+			totalRevenue: stats.totalRevenue,
+			averageSale: stats.averageSale,
+			cashSales: cash?._count?.id ?? 0,
+			cashRevenue: cash?._sum?.total ?? 0,
+			cardSales: card?._count?.id ?? 0,
+			cardRevenue: card?._sum?.total ?? 0
+		};
+		const rows = sales.map((s) => {
+			const date = s.created_at instanceof Date ? s.created_at : new Date(s.created_at);
+			const saleWithCount = s;
+			return {
+				date: date.toLocaleDateString("es-PE"),
+				invoiceNumber: s.id,
+				client: s.client?.name ?? "N/A",
+				itemsCount: saleWithCount._count?.items ?? 0,
+				subtotal: Number(s.subtotal),
+				tax: Number(s.tax_amount),
+				total: Number(s.total),
+				paymentMethod: s.payment_method ?? "N/A"
+			};
+		});
+		return generator.generateSalesReport(rows, totals, title, showTable);
+	}
+	async generateProfitReport(generator, request, title) {
+		const stats = await this.dashboardService.getStats(request.startDate, request.endDate);
+		const totals = {
+			totalSales: stats.totalSales,
+			totalRevenue: stats.totalRevenue,
+			averageSale: stats.averageSale
+		};
+		const rows = [{
+			date: `${request.startDate?.toLocaleDateString("es-PE") ?? "Inicio"} - ${request.endDate?.toLocaleDateString("es-PE") ?? "Hoy"}`,
+			invoiceNumber: 0,
+			client: "-",
+			itemsCount: 0,
+			subtotal: 0,
+			tax: 0,
+			total: stats.totalRevenue,
+			paymentMethod: "-"
+		}];
+		return generator.generateSalesReport(rows, totals, title);
+	}
+	async generateInventoryReport(generator, lowStockOnly, title) {
+		const products = await this.productService.getAllProducts();
+		const metrics = await this.dashboardService.getInventoryMetrics();
+		const rows = (lowStockOnly ? products.filter((p) => p.stock <= (p.min_stock ?? 5) || p.stock === 0) : products).map((p) => ({
+			sku: p.sku,
+			name: p.name,
+			category: p.category?.name ?? "Sin categoría",
+			stock: p.stock,
+			minStock: p.min_stock,
+			purchasePrice: Number(p.price_purchase),
+			salePrice: Number(p.price_sale),
+			status: p.stock === 0 ? "out" : p.min_stock !== null && p.stock <= p.min_stock ? "low" : "ok"
+		}));
+		return generator.generateInventoryReport(rows, metrics, title);
+	}
+	async generateTopProductsReport(generator, request, title) {
+		const topProducts = await this.dashboardService.getTopProducts(50, request.startDate, request.endDate);
+		const metrics = await this.dashboardService.getInventoryMetrics();
+		const rows = topProducts.map((p) => ({
+			sku: p.product_sku,
+			name: p.product_name,
+			category: p.category,
+			stock: p.total_quantity,
+			minStock: null,
+			purchasePrice: 0,
+			salePrice: p.avg_price,
+			status: "ok"
+		}));
+		return generator.generateInventoryReport(rows, metrics, title);
+	}
+	async generateSaleReceipt(request) {
+		if (!request.saleId) throw new Error("Se requiere saleId para generar un comprobante");
+		const sale = await this.saleService.getSaleDetails(request.saleId);
+		const settings = await this.settingsService.getSettings();
+		const items = (sale.items || []).map((item) => ({
+			quantity: item.quantity,
+			productName: item.product?.name ?? "Producto",
+			unitPrice: Number(item.unit_price),
+			totalPrice: Number(item.unit_price) * item.quantity
+		}));
+		const taxSettings = await this.settingsService.getTaxSettings();
+		const receiptData = {
+			saleId: sale.id,
+			businessName: settings.business_name || "INVENTARIO-POS",
+			businessAddress: settings.business_address || "",
+			businessPhone: settings.business_phone || "",
+			businessTaxId: settings.business_tax_id || "",
+			ticketFooter: settings.ticket_footer || "Gracias por su compra",
+			logoBase64: settings.business_logo || void 0,
+			clientName: sale.client?.name ?? "Cliente General",
+			clientDni: sale.client?.dni ?? "",
+			clientTaxId: sale.client?.tax_id ?? null,
+			createdAt: sale.created_at,
+			paymentMethod: sale.payment_method ?? "CASH",
+			items,
+			subtotal: Number(sale.subtotal),
+			taxAmount: Number(sale.tax_amount),
+			taxType: taxSettings.taxType || "iva",
+			taxRate: taxSettings.taxRate || 0,
+			total: Number(sale.total)
+		};
+		return this.pdfGenerator.generateSaleReceipt(receiptData);
+	}
+	async generateCashCloseReport(generator, request, title) {
+		if (!request.registerId) throw new Error("Se requiere registerId para generar reporte de cierre");
+		const details = await this.cashRegisterService.getRegisterDetails(request.registerId);
+		const settings = await this.settingsService.getSettings();
+		const totalCash = details.sales?.filter((s) => s.payment_method === "CASH").reduce((sum, s) => sum + Number(s.total), 0) ?? 0;
+		const totalCard = details.sales?.filter((s) => s.payment_method === "CARD").reduce((sum, s) => sum + Number(s.total), 0) ?? 0;
+		const expectedCash = Number(details.opening_amount) + Number(details.total_sales);
+		const cashCloseData = {
+			registerId: details.id,
+			openDate: details.opened_at,
+			closeDate: details.closed_at || details.updated_at,
+			openingAmount: Number(details.opening_amount),
+			totalSales: Number(details.total_sales),
+			cashSales: totalCash,
+			cardSales: totalCard,
+			salesCount: details.sales?.length ?? 0,
+			expectedCash,
+			realCash: Number(details.closing_amount) || expectedCash,
+			difference: Number(details.difference) || 0,
+			status: details.status || "PERFECT",
+			businessName: settings.business_name || "INVENTARIO-POS"
+		};
+		return generator.generateCashCloseReport(cashCloseData);
+	}
+	getDefaultTitle(type) {
+		return {
+			daily_sales: "Reporte de Ventas del Día",
+			sales_summary: "Resumen de Ventas",
+			profit_summary: "Reporte de Ganancias",
+			inventory: "Reporte de Inventario",
+			low_stock: "Productos con Stock Bajo",
+			top_products: "Productos Más Vendidos",
+			sale_receipt: "Comprobante de Venta",
+			cash_close: "Reporte de Cierre de Caja"
+		}[type] ?? "Reporte";
+	}
+};
+//#endregion
+//#region src/main/services/SchedulerService.ts
+var SCHEDULER_PREFIX = "scheduler_";
+var SchedulerService = class {
+	dailyTimer = null;
+	weeklyTimer = null;
+	statePath;
+	constructor(reportService, backupService) {
+		this.reportService = reportService;
+		this.backupService = backupService;
+		this.statePath = join(process.cwd(), "scheduler-state.json");
+	}
+	start() {
+		console.log("[Scheduler] Starting scheduled tasks...");
+		this.scheduleDailyReport();
+		this.scheduleWeeklyReport();
+		this.scheduleDailyBackup();
+	}
+	stop() {
+		if (this.dailyTimer) clearInterval(this.dailyTimer);
+		if (this.weeklyTimer) clearInterval(this.weeklyTimer);
+		console.log("[Scheduler] Stopped scheduled tasks");
+	}
+	scheduleDailyReport() {
+		const runDaily = async () => {
+			try {
+				const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+				if (this.getLastRun("daily_report") === today) return;
+				console.log("[Scheduler] Generating daily report...");
+				await this.reportService.generateReport({
+					type: "daily_sales",
+					format: "pdf",
+					title: `Reporte Diario - ${(/* @__PURE__ */ new Date()).toLocaleDateString("es-PE")}`
+				});
+				this.setLastRun("daily_report", today);
+				console.log("[Scheduler] Daily report saved");
+			} catch (err) {
+				console.error("[Scheduler] Error generating daily report:", err);
+			}
+		};
+		runDaily();
+		this.dailyTimer = setInterval(runDaily, 3600 * 1e3);
+	}
+	scheduleWeeklyReport() {
+		const runWeekly = async () => {
+			try {
+				const now = /* @__PURE__ */ new Date();
+				const weekNum = this.getWeekNumber(now);
+				if (this.getLastRun("weekly_report") === String(weekNum)) return;
+				const startOfWeek = new Date(now);
+				startOfWeek.setDate(now.getDate() - now.getDay());
+				startOfWeek.setHours(0, 0, 0, 0);
+				console.log("[Scheduler] Generating weekly report...");
+				await this.reportService.generateReport({
+					type: "sales_summary",
+					format: "pdf",
+					startDate: startOfWeek,
+					endDate: now,
+					title: `Reporte Semanal - Semana ${weekNum}`
+				});
+				this.setLastRun("weekly_report", String(weekNum));
+				console.log("[Scheduler] Weekly report saved");
+			} catch (err) {
+				console.error("[Scheduler] Error generating weekly report:", err);
+			}
+		};
+		runWeekly();
+		this.weeklyTimer = setInterval(runWeekly, 360 * 60 * 1e3);
+	}
+	scheduleDailyBackup() {
+		const runBackup = async () => {
+			try {
+				const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+				if (this.getLastRun("daily_backup") === today) return;
+				console.log("[Scheduler] Creating daily backup...");
+				await this.backupService.createBackup(`auto-${today}`);
+				this.setLastRun("daily_backup", today);
+				console.log("[Scheduler] Daily backup created");
+			} catch (err) {
+				console.error("[Scheduler] Error creating daily backup:", err);
+			}
+		};
+		runBackup();
+		setInterval(runBackup, 3600 * 1e3);
+	}
+	getLastRun(key) {
+		try {
+			if (!existsSync(this.statePath)) return "";
+			return JSON.parse(readFileSync(this.statePath, "utf-8"))[SCHEDULER_PREFIX + key] ?? "";
+		} catch {
+			return "";
+		}
+	}
+	setLastRun(key, value) {
+		try {
+			let data = {};
+			if (existsSync(this.statePath)) data = JSON.parse(readFileSync(this.statePath, "utf-8"));
+			data[SCHEDULER_PREFIX + key] = value;
+			writeFileSync(this.statePath, JSON.stringify(data, null, 2));
+		} catch {}
+	}
+	getWeekNumber(date) {
+		const startOfYear = new Date(date.getFullYear(), 0, 1);
+		const diff = date.getTime() - startOfYear.getTime();
+		return Math.ceil((diff / 864e5 + startOfYear.getDay() + 1) / 7);
+	}
+};
+//#endregion
 //#region src/main/di/container.ts
 var prisma = new PrismaClient();
 var productRepo = new PrismaProductRepository(prisma);
@@ -2184,6 +3181,8 @@ var auditLogRepo = new PrismaAuditLogRepository(prisma);
 var dashboardRepo = new PrismaDashboardRepository(prisma);
 var cacheService = new CacheService();
 var backupAdapter = new ElectronBackupService();
+var pdfReportGenerator = new PDFReportGenerator();
+var excelReportGenerator = new ExcelReportGenerator();
 var dashboardService = new DashboardService(dashboardRepo, cacheService);
 var productService = new ProductService(productRepo, categoryRepo, auditLogRepo);
 var clientService = new ClientService(clientRepo, auditLogRepo);
@@ -2195,6 +3194,8 @@ var supplierService = new SupplierService(supplierRepo, auditLogRepo);
 var purchaseService = new PurchaseService(purchaseRepo, supplierRepo, productRepo, auditLogRepo);
 var saleService = new SaleService(saleRepo, productRepo, clientRepo, cashRegisterRepo, settingsRepo, auditLogRepo, dashboardService);
 var backupService = new BackupService(backupAdapter);
+var categoryService = new CategoryService(categoryRepo, auditLogRepo);
+var reportService = new ReportService(pdfReportGenerator, excelReportGenerator, dashboardService, saleService, productService, cashRegisterService, settingsService);
 var container = {
 	prisma,
 	productService,
@@ -2206,9 +3207,11 @@ var container = {
 	authService,
 	supplierService,
 	purchaseService,
-	categoryService: new CategoryService(categoryRepo, auditLogRepo),
+	categoryService,
 	dashboardService,
 	backupService,
+	reportService,
+	schedulerService: new SchedulerService(reportService, backupService),
 	cacheService
 };
 //#endregion
@@ -2839,6 +3842,16 @@ function setupIpcHandlers() {
 			};
 		}
 	});
+	ipcMain.handle("purchases:updatePaymentStatus", async (_, purchaseId, paymentStatus) => {
+		try {
+			return await container.purchaseService.updatePaymentStatus(purchaseId, paymentStatus);
+		} catch (error) {
+			return {
+				success: false,
+				message: error.message || "Error al actualizar estado de pago"
+			};
+		}
+	});
 	ipcMain.handle("backup:create", async (_, label) => {
 		try {
 			return await container.backupService.createBackup(label);
@@ -2897,6 +3910,115 @@ function setupIpcHandlers() {
 			return await container.settingsService.updateTaxSettings(taxRate, taxType, taxIncluded);
 		} catch (error) {
 			console.error("[IPC] Error updating tax settings:", error);
+			return {
+				success: false,
+				message: error.message
+			};
+		}
+	});
+	ipcMain.handle("reports:generate", async (_, raw) => {
+		try {
+			const startDate = raw.startDate ? new Date(raw.startDate) : void 0;
+			let endDate;
+			if (raw.endDate) {
+				endDate = new Date(raw.endDate);
+				endDate.setHours(23, 59, 59, 999);
+			} else if (startDate) {
+				endDate = new Date(startDate);
+				endDate.setHours(23, 59, 59, 999);
+			}
+			const request = {
+				...raw,
+				startDate,
+				endDate
+			};
+			const buffer = await container.reportService.generateReport(request);
+			const ext = request.format === "pdf" ? "pdf" : "xlsx";
+			const { filePath, canceled } = await dialog.showSaveDialog({
+				defaultPath: `${request.type}-${Date.now()}.${ext}`,
+				filters: request.format === "pdf" ? [{
+					name: "PDF",
+					extensions: ["pdf"]
+				}] : [{
+					name: "Excel",
+					extensions: ["xlsx"]
+				}]
+			});
+			if (canceled || !filePath) return {
+				success: false,
+				message: "Cancelado por el usuario"
+			};
+			await fs.writeFile(filePath, buffer);
+			return {
+				success: true,
+				path: filePath
+			};
+		} catch (error) {
+			console.error("[IPC] Error generating report:", error);
+			return {
+				success: false,
+				message: error.message
+			};
+		}
+	});
+	ipcMain.handle("reports:generateReceipt", async (_, saleId) => {
+		try {
+			const request = {
+				type: "sale_receipt",
+				format: "pdf",
+				saleId
+			};
+			const buffer = await container.reportService.generateReport(request);
+			const { filePath, canceled } = await dialog.showSaveDialog({
+				defaultPath: `comprobante-${saleId}-${Date.now()}.pdf`,
+				filters: [{
+					name: "PDF",
+					extensions: ["pdf"]
+				}]
+			});
+			if (canceled || !filePath) return {
+				success: false,
+				message: "Cancelado por el usuario"
+			};
+			await fs.writeFile(filePath, buffer);
+			return {
+				success: true,
+				path: filePath
+			};
+		} catch (error) {
+			console.error("[IPC] Error generating receipt:", error);
+			return {
+				success: false,
+				message: error.message
+			};
+		}
+	});
+	ipcMain.handle("reports:generateCashClose", async (_, registerId) => {
+		try {
+			const request = {
+				type: "cash_close",
+				format: "pdf",
+				registerId
+			};
+			const buffer = await container.reportService.generateReport(request);
+			const { filePath, canceled } = await dialog.showSaveDialog({
+				defaultPath: `cierre-caja-${registerId}-${Date.now()}.pdf`,
+				filters: [{
+					name: "PDF",
+					extensions: ["pdf"]
+				}]
+			});
+			if (canceled || !filePath) return {
+				success: false,
+				message: "Cancelado por el usuario"
+			};
+			await fs.writeFile(filePath, buffer);
+			return {
+				success: true,
+				path: filePath
+			};
+		} catch (error) {
+			console.error("[IPC] Error generating cash close report:", error);
 			return {
 				success: false,
 				message: error.message
@@ -2985,6 +4107,7 @@ app.whenReady().then(async () => {
 		console.error("❌ Failed to connect to SQLite:", err);
 	}
 	setupIpcHandlers();
+	container.schedulerService.start();
 	createWindow();
 	app.on("activate", () => {
 		if (BrowserWindow.getAllWindows().length === 0) createWindow();

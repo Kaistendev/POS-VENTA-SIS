@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react';
-import { DataGrid, GridColDef } from '@mui/x-data-grid';
-import { ShoppingBag, RefreshCw, X, PlusCircle, Truck, CheckCircle, XCircle, Clock, Search } from 'lucide-react';
+import { ShoppingBag, RefreshCw, X, PlusCircle, Truck, CheckCircle, XCircle, Clock, Search, DollarSign } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '../hooks/useToast.ts';
-import { TableSkeleton, EmptyState } from '../components/ui/Skeleton.tsx';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog.tsx';
+import DataTable from '../components/ui/DataTable.tsx';
  
 export default function Purchases() {
   const [purchases, setPurchases] = useState<any[]>([]);
@@ -17,9 +16,15 @@ export default function Purchases() {
   
   const [formData, setFormData] = useState({
     supplier_id: '',
+    payment_status: 'UNPAID',
     items: [] as { product_id: number; quantity: number; unit_cost: number }[],
   });
   const [error, setError] = useState('');
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 8;
+  const totalPages = Math.max(1, Math.ceil(purchases.length / itemsPerPage));
+  const paginatedPurchases = purchases.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const [confirmConfig, setConfirmConfig] = useState<{
     isOpen: boolean;
@@ -271,6 +276,7 @@ export default function Purchases() {
     try {
       const result = await window.api.createPurchase({
         supplier_id: Number(formData.supplier_id),
+        payment_status: formData.payment_status,
         items: formData.items.map(item => ({
           product_id: item.product_id,
           quantity: item.quantity,
@@ -336,84 +342,6 @@ export default function Purchases() {
     });
   };
 
-  const columns: GridColDef[] = [
-    { field: 'id', headerName: 'ID', width: 80 },
-    {
-      field: 'supplier',
-      headerName: 'Proveedor',
-      flex: 1,
-      renderCell: (params) => (
-        <div>
-          <div className="font-medium">{params.value?.name}</div>
-          <div className="text-xs text-gray-500">{params.value?.ruc}</div>
-        </div>
-      ),
-    },
-    {
-      field: 'total_amount',
-      headerName: 'Total',
-      width: 140,
-      renderCell: (params) => (
-        <span className="text-primary font-medium">
-          ${params.value?.toFixed(2)}
-        </span>
-      ),
-    },
-    {
-      field: 'status',
-      headerName: 'Estado',
-      width: 140,
-      renderCell: (params) => getStatusBadge(params.value),
-    },
-    {
-      field: 'created_at',
-      headerName: 'Fecha',
-      width: 180,
-      valueFormatter: (value) => new Date(value).toLocaleDateString('es-ES', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      }),
-    },
-    {
-      field: 'actions',
-      headerName: 'Acciones',
-      width: 200,
-      sortable: false,
-      renderCell: (params) => (
-        <div className="flex items-center h-full space-x-1">
-          <button
-            onClick={() => handleOpenDetails(params.row)}
-            className="p-2 text-blue-400 hover:bg-blue-400/10 rounded-lg transition-colors"
-            title="Ver detalles"
-          >
-            <ShoppingBag className="w-4 h-4" />
-          </button>
-          {params.row.status === 'PENDING' && (
-            <>
-              <button
-                onClick={() => handleReceivePurchase(params.row.id)}
-                className="p-2 text-green-400 hover:bg-green-400/10 rounded-lg transition-colors"
-                title="Recibir compra"
-              >
-                <CheckCircle className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => handleCancelPurchase(params.row.id)}
-                className="p-2 text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
-                title="Cancelar"
-              >
-                <XCircle className="w-4 h-4" />
-              </button>
-            </>
-          )}
-        </div>
-      ),
-    },
-  ];
-
   return (
     <div className="space-y-6 h-full flex flex-col">
       <div className="flex items-center justify-between">
@@ -438,35 +366,84 @@ export default function Purchases() {
         </div>
       </div>
 
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="flex-1 w-full glass-panel rounded-2xl overflow-hidden p-1 flex flex-col border border-white/5 shadow-2xl"
-      >
-        {loading ? (
-          <TableSkeleton rows={10} />
-        ) : purchases.length === 0 ? (
-          <EmptyState
-            icon={<ShoppingBag className="w-8 h-8" />}
-            title="No hay compras"
-            description="Crea tu primera orden de compra a un proveedor"
-            action={{ label: 'Crear Orden', onClick: handleOpenCreateModal }}
-          />
-        ) : (
-          <div style={{ flexGrow: 1, width: '100%' }}>
-            <DataGrid
-              rows={purchases}
-              columns={columns}
-              loading={loading}
-              getRowId={(row) => row.id}
-              initialState={{ pagination: { paginationModel: { page: 0, pageSize: 15 } } }}
-              pageSizeOptions={[15, 30, 50]}
-              disableRowSelectionOnClick
-              className="custom-datagrid"
-            />
-          </div>
-        )}
-      </motion.div>
+      <DataTable
+        columns={[
+          { header: 'ID', render: (p: any) => <span className="font-medium text-white">#{p.id}</span> },
+          { header: 'Proveedor', render: (p: any) => <span className="text-gray-300">{p.supplier?.name || 'N/A'}</span> },
+          { header: 'Total', render: (p: any) => <span className="text-white font-medium">${Number(p.total_amount).toFixed(2)}</span> },
+          { header: 'Estado', render: (p: any) => {
+            const statusStyles: Record<string, string> = {
+              PENDING: 'bg-yellow-500/20 text-yellow-400',
+              RECEIVED: 'bg-green-500/20 text-green-400',
+              CANCELLED: 'bg-red-500/20 text-red-400',
+            };
+            const statusLabels: Record<string, string> = {
+              PENDING: 'Pendiente',
+              RECEIVED: 'Recibida',
+              CANCELLED: 'Anulada',
+            };
+            return (
+              <span className={`px-2.5 py-1 rounded-lg text-xs font-bold ${statusStyles[p.status] || 'bg-gray-500/20 text-gray-400'}`}>
+                {statusLabels[p.status] || p.status}
+              </span>
+            );
+          }},
+          { header: 'Pago', render: (p: any) => (
+            <span className={`px-2.5 py-1 rounded-lg text-xs font-bold ${
+              p.payment_status === 'PAID'
+                ? 'bg-green-500/20 text-green-400'
+                : 'bg-orange-500/20 text-orange-400'
+            }`}>
+              {p.payment_status === 'PAID' ? 'Pagado' : 'Por Pagar'}
+            </span>
+          )},
+          { header: 'Fecha', render: (p: any) => <span className="text-gray-400">{new Date(p.created_at).toLocaleDateString('es-ES')}</span> },
+          { header: 'Acciones', headerClassName: 'text-right', className: 'text-right', render: (p: any) => (
+            <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button onClick={() => handleOpenDetails(p)} className="p-2 text-blue-400 hover:bg-blue-400/10 rounded-lg" title="Ver detalles">
+                <ShoppingBag className="w-4 h-4" />
+              </button>
+              {p.status === 'PENDING' && (
+                <>
+                  <button onClick={() => handleReceivePurchase(p.id)} className="p-2 text-green-400 hover:bg-green-400/10 rounded-lg" title="Recibir compra">
+                    <CheckCircle className="w-4 h-4" />
+                  </button>
+                  <button onClick={() => handleCancelPurchase(p.id)} className="p-2 text-red-400 hover:bg-red-400/10 rounded-lg" title="Cancelar">
+                    <XCircle className="w-4 h-4" />
+                  </button>
+                </>
+              )}
+              <button
+                onClick={async () => {
+                  const newStatus = p.payment_status === 'PAID' ? 'UNPAID' : 'PAID';
+                  await window.api.updatePurchasePaymentStatus(p.id, newStatus);
+                  success(newStatus === 'PAID' ? 'Pagado' : 'Por Pagar');
+                  fetchData();
+                }}
+                className={`p-2 rounded-lg transition-colors ${
+                  p.payment_status === 'PAID'
+                    ? 'text-orange-400 hover:bg-orange-400/10'
+                    : 'text-green-400 hover:bg-green-400/10'
+                }`}
+                title={p.payment_status === 'PAID' ? 'Marcar como Por Pagar' : 'Marcar como Pagado'}
+              >
+                <DollarSign className="w-4 h-4" />
+              </button>
+            </div>
+          )},
+        ]}
+        data={paginatedPurchases}
+        keyExtractor={(p: any) => p.id}
+        loading={loading}
+        emptyMessage="No hay compras"
+        emptyDescription="Crea tu primera orden de compra a un proveedor"
+        emptyIcon={<ShoppingBag className="w-8 h-8" />}
+        emptyAction={{ label: 'Crear Orden', onClick: handleOpenCreateModal }}
+        currentPage={currentPage}
+        totalPages={totalPages}
+        totalItems={purchases.length}
+        onPageChange={setCurrentPage}
+      />
 
       {/* Modal para Crear/Ver Detalles */}
       <AnimatePresence>
@@ -503,6 +480,18 @@ export default function Purchases() {
                       <div>
                         <p className="text-xs text-gray-500 uppercase font-bold">Estado</p>
                         <div className="mt-1">{getStatusBadge(selectedPurchase.status)}</div>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500 uppercase font-bold">Pago</p>
+                        <div className="mt-1">
+                          <span className={`px-2.5 py-1 rounded-lg text-xs font-bold ${
+                            selectedPurchase.payment_status === 'PAID'
+                              ? 'bg-green-500/20 text-green-400'
+                              : 'bg-orange-500/20 text-orange-400'
+                          }`}>
+                            {selectedPurchase.payment_status === 'PAID' ? 'Pagado' : 'Por Pagar'}
+                          </span>
+                        </div>
                       </div>
                       <div>
                         <p className="text-xs text-gray-500 uppercase font-bold">Fecha</p>
@@ -544,8 +533,29 @@ export default function Purchases() {
                     </span>
                   </div>
 
+                  <div className="mt-6 flex space-x-3">
+                    <button
+                      onClick={async () => {
+                        const newStatus = selectedPurchase.payment_status === 'PAID' ? 'UNPAID' : 'PAID';
+                        await window.api.updatePurchasePaymentStatus(selectedPurchase.id, newStatus);
+                        selectedPurchase.payment_status = newStatus;
+                        setSelectedPurchase({ ...selectedPurchase });
+                        success(newStatus === 'PAID' ? 'Compra marcada como pagada' : 'Compra marcada como por pagar');
+                        fetchData();
+                      }}
+                      className={`flex-1 py-3 font-bold rounded-xl transition-all ${
+                        selectedPurchase.payment_status === 'PAID'
+                          ? 'bg-orange-600 hover:bg-orange-700 text-white'
+                          : 'bg-green-600 hover:bg-green-700 text-white'
+                      }`}
+                    >
+                      <DollarSign className="w-5 h-5 inline mr-2" />
+                      {selectedPurchase.payment_status === 'PAID' ? 'Marcar como Por Pagar' : 'Marcar como Pagado'}
+                    </button>
+                  </div>
+
                   {selectedPurchase.status === 'PENDING' && (
-                    <div className="mt-6 flex space-x-3">
+                    <div className="mt-3 flex space-x-3">
                       <button
                         onClick={() => {
                           setIsModalOpen(false);
@@ -593,6 +603,36 @@ export default function Purchases() {
                         <option key={s.id} value={s.id}>{s.name} - {s.ruc}</option>
                       ))}
                     </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] uppercase font-bold text-gray-500 mb-1 tracking-widest">
+                      Estado de Pago
+                    </label>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, payment_status: 'UNPAID' })}
+                        className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                          formData.payment_status === 'UNPAID'
+                            ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
+                            : 'bg-black/20 text-gray-500 border border-white/10'
+                        }`}
+                      >
+                        Por Pagar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, payment_status: 'PAID' })}
+                        className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                          formData.payment_status === 'PAID'
+                            ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                            : 'bg-black/20 text-gray-500 border border-white/10'
+                        }`}
+                      >
+                        Pagado
+                      </button>
+                    </div>
                   </div>
 
                   <div>

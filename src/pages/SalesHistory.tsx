@@ -5,6 +5,7 @@ import { useToast } from '../hooks/useToast.ts';
 import { Sale } from '../common/types';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
+import DataTable from '../components/ui/DataTable.tsx';
 
 export default function SalesHistory() {
   const [sales, setSales] = useState<Sale[]>([]);
@@ -14,6 +15,8 @@ export default function SalesHistory() {
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [businessInfo, setBusinessInfo] = useState<any>(null);
   const [taxSettings, setTaxSettings] = useState<{ taxRate: number; taxType: string; taxIncluded: boolean }>({ taxRate: 0, taxType: 'none', taxIncluded: false });
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 8;
   const { success, error: toastError } = useToast();
 
   const fetchSales = async () => {
@@ -67,56 +70,115 @@ export default function SalesHistory() {
       toastError('Error de comunicación');
     }
   };
-const downloadTicket = (sale: any) => {
-  const doc = new jsPDF({ unit: 'mm', format: [80, 150] });
-  const bizName = businessInfo?.business_name || 'INVENTARIO-POS';
-  const bizAddress = businessInfo?.business_address || '';
-  const bizPhone = businessInfo?.business_phone || '';
-  const footer = businessInfo?.ticket_footer || '¡Gracias por su compra!';
-  const taxAmt = sale.tax_amount || 0;
-  const subtotal = sale.subtotal || sale.total;
 
-  doc.setFontSize(12);
-  doc.text(bizName, 40, 10, { align: 'center' });
-  doc.setFontSize(7);
-  if (bizAddress) {
-    doc.text(bizAddress, 40, 14, { align: 'center' });
-  }
-  if (bizPhone) {
-    doc.text(`Tel: ${bizPhone}`, 40, 17, { align: 'center' });
-  }
+  const downloadTicket = (sale: any) => {
+    const rate = sale.exchange_rate || 0;
+    const extraLines = rate > 0 ? sale.items.length + 3 : 0;
+    const doc = new jsPDF({ unit: 'mm', format: [80, 150 + extraLines * 3] });
+    const bizName = businessInfo?.business_name || 'INVENTARIO-POS';
+    const bizAddress = businessInfo?.business_address || '';
+    const bizPhone = businessInfo?.business_phone || '';
+    const footer = businessInfo?.ticket_footer || '¡Gracias por su compra!';
+    const taxAmt = sale.tax_amount || 0;
+    const subtotal = sale.subtotal || sale.total;
 
-  doc.setFontSize(8);
-  doc.text(`Ticket: #${sale.id} (REIMPRESIÓN)`, 5, 25);
-  doc.text(`Fecha: ${new Date(sale.created_at!).toLocaleString()}`, 5, 30);
-  doc.text(`Cliente: ${sale.client?.name || 'Cliente General'}`, 5, 35);
-  doc.text('------------------------------------------', 5, 40);
+    doc.setFontSize(12);
+    doc.text(bizName, 40, 10, { align: 'center' });
+    doc.setFontSize(7);
+    if (bizAddress) {
+      doc.text(bizAddress, 40, 14, { align: 'center' });
+    }
+    if (bizPhone) {
+      doc.text(`Tel: ${bizPhone}`, 40, 17, { align: 'center' });
+    }
 
-  let y = 45;
-  sale.items.forEach((item: any) => {
-    doc.text(`${item.quantity} x ${item.product?.name || 'Producto'}`, 5, y);
-    doc.text(`$${(item.unit_price * item.quantity).toFixed(2)}`, 75, y, { align: 'right' });
-    y += 5;
-  });
+    doc.setFontSize(8);
+    doc.text(`Ticket: #${sale.id} (REIMPRESIÓN)`, 5, 25);
+    doc.text(`Fecha: ${new Date(sale.created_at!).toLocaleString()}`, 5, 30);
+    doc.text(`Cliente: ${sale.client?.name || 'Cliente General'}`, 5, 35);
+    if (rate > 0) {
+      doc.text(`Tasa Bs.: ${rate.toFixed(2)}`, 5, 40);
+    }
+    doc.text('------------------------------------------', 5, rate > 0 ? 45 : 40);
 
-  doc.text('------------------------------------------', 5, y + 2);
-  doc.setFontSize(9);
-  doc.text(`Subtotal:`, 5, y + 8);
-  doc.text(`$${subtotal.toFixed(2)}`, 75, y + 8, { align: 'right' });
-  if (taxAmt > 0) {
-    doc.text(`${taxSettings.taxType.toUpperCase()} (${taxSettings.taxRate * 100}%):`, 5, y + 13);
-    doc.text(`$${taxAmt.toFixed(2)}`, 75, y + 13, { align: 'right' });
-  }
-  doc.setFontSize(10);
-  doc.text(`TOTAL: $${sale.total.toFixed(2)}`, 75, taxAmt > 0 ? y + 20 : y + 15, { align: 'right' });
-  doc.setFontSize(8);
-  doc.text(footer, 40, taxAmt > 0 ? y + 28 : y + 23, { align: 'center' });
-  doc.save(`Ticket_Reimpresion_${sale.id}.pdf`);
-};
+    let y = rate > 0 ? 50 : 45;
+    sale.items.forEach((item: any) => {
+      doc.text(`${item.quantity} x ${item.product?.name || 'Producto'}`, 5, y);
+      doc.text(`$${(item.unit_price * item.quantity).toFixed(2)}`, 75, y, { align: 'right' });
+      y += 5;
+    });
+
+    doc.text('------------------------------------------', 5, y + 2);
+    doc.setFontSize(9);
+    doc.text(`Subtotal:`, 5, y + 8);
+    doc.text(`$${subtotal.toFixed(2)}`, 75, y + 8, { align: 'right' });
+    if (taxAmt > 0) {
+      doc.text(`${taxSettings.taxType.toUpperCase()} (${taxSettings.taxRate * 100}%):`, 5, y + 13);
+      doc.text(`$${taxAmt.toFixed(2)}`, 75, y + 13, { align: 'right' });
+    }
+    doc.setFontSize(10);
+    doc.text(`TOTAL: $${sale.total.toFixed(2)}`, 75, taxAmt > 0 ? y + 20 : y + 15, { align: 'right' });
+    if (rate > 0) {
+      doc.setFontSize(8);
+      doc.text(`Tasa Bs. ${rate.toFixed(2)} = Bs. ${(sale.total * rate).toFixed(2)}`, 5, (taxAmt > 0 ? y + 20 : y + 15) + 5);
+    }
+    doc.setFontSize(8);
+    doc.text(footer, 40, (taxAmt > 0 ? y + 28 : y + 23) + (rate > 0 ? 5 : 0), { align: 'center' });
+    doc.save(`Ticket_Reimpresion_${sale.id}.pdf`);
+  };
+
   const filteredSales = sales.filter(s => 
     s.id?.toString().includes(searchTerm) || 
     (s.client?.name || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
+  const totalPages = Math.max(1, Math.ceil(filteredSales.length / itemsPerPage));
+  const paginatedSales = filteredSales.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  const columns = [
+    {
+      header: 'ID',
+      render: (sale: Sale) => <span className="font-medium text-white">#{sale.id}</span>,
+    },
+    {
+      header: 'Fecha',
+      render: (sale: Sale) => (
+        <div className="flex items-center italic">
+          <Calendar className="w-3 h-3 mr-2 text-primary/60" />
+          {new Date(sale.created_at!).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+        </div>
+      ),
+    },
+    {
+      header: 'Cliente',
+      render: (sale: Sale) => <span className="text-gray-300">{sale.client?.name || 'Cliente General'}</span>,
+    },
+    {
+      header: 'Método',
+      render: (sale: Sale) => (
+        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${sale.payment_method === 'CASH' ? 'bg-green-500/10 text-green-400' : 'bg-blue-500/10 text-blue-400'}`}>
+          {sale.payment_method === 'CASH' ? 'EFECTIVO' : 'TARJETA'}
+        </span>
+      ),
+    },
+    {
+      header: 'Total',
+      headerClassName: 'text-right',
+      className: 'text-right',
+      render: (sale: Sale) => <span className="font-bold text-white">${sale.total.toFixed(2)}</span>,
+    },
+    {
+      header: 'Acciones',
+      headerClassName: 'text-right',
+      className: 'text-right',
+      render: (sale: Sale) => (
+        <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button onClick={() => handleShowDetail(sale.id!)} className="p-2 hover:bg-primary/20 rounded-lg text-primary transition-colors" title="Ver Detalles">
+            <Eye className="w-4 h-4" />
+          </button>
+        </div>
+      ),
+    },
+  ];
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -129,60 +191,24 @@ const downloadTicket = (sale: any) => {
               type="text" 
               placeholder="Buscar por ID o cliente..." 
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
               className="bg-[#1f2028] border border-[#2e303a] rounded-xl py-2 pl-10 pr-4 text-sm text-white focus:border-primary outline-none transition-all"
             />
           </div>
         </div>
       </div>
 
-      <div className="glass-panel rounded-2xl border border-white/5 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="bg-white/5 text-gray-400 text-xs uppercase tracking-wider">
-                <th className="px-6 py-4 font-semibold">ID</th>
-                <th className="px-6 py-4 font-semibold">Fecha</th>
-                <th className="px-6 py-4 font-semibold">Cliente</th>
-                <th className="px-6 py-4 font-semibold">Método</th>
-                <th className="px-6 py-4 font-semibold">Total</th>
-                <th className="px-6 py-4 font-semibold text-right">Acciones</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/5">
-              {loading ? (
-                <tr><td colSpan={6} className="px-6 py-10 text-center text-gray-500">Cargando ventas...</td></tr>
-              ) : filteredSales.length > 0 ? filteredSales.map((sale) => (
-                <tr key={sale.id} className="hover:bg-white/5 transition-colors group">
-                  <td className="px-6 py-4 text-sm font-medium text-white">#{sale.id}</td>
-                  <td className="px-6 py-4 text-sm text-gray-400">
-                    <div className="flex items-center italic">
-                      <Calendar className="w-3 h-3 mr-2 text-primary/60" />
-                      {new Date(sale.created_at!).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-300">{sale.client?.name || 'Cliente General'}</td>
-                  <td className="px-6 py-4">
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${sale.payment_method === 'CASH' ? 'bg-green-500/10 text-green-400' : 'bg-blue-500/10 text-blue-400'}`}>
-                      {sale.payment_method === 'CASH' ? 'EFECTIVO' : 'TARJETA'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-sm font-bold text-white">${sale.total.toFixed(2)}</td>
-                  <td className="px-6 py-4 text-right">
-                    <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => handleShowDetail(sale.id!)} className="p-2 hover:bg-primary/20 rounded-lg text-primary transition-colors" title="Ver Detalles">
-                        <Eye className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              )) : (
-                <tr><td colSpan={6} className="px-6 py-10 text-center text-gray-500">No se encontraron ventas</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <DataTable
+        columns={columns}
+        data={paginatedSales}
+        keyExtractor={(sale) => sale.id!}
+        loading={loading}
+        emptyMessage="No se encontraron ventas"
+        currentPage={currentPage}
+        totalPages={totalPages}
+        totalItems={filteredSales.length}
+        onPageChange={setCurrentPage}
+      />
 
       {/* Modal de Detalle */}
       <AnimatePresence>

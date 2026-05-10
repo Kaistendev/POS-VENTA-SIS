@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
-import { DataGrid, GridColDef } from '@mui/x-data-grid';
-import { Package, RefreshCw, ArrowUpCircle, ArrowDownCircle, History, Search, Filter, X } from 'lucide-react';
+import DataTable from '../components/ui/DataTable.tsx';
+import { Package, RefreshCw, ArrowUpCircle, ArrowDownCircle, History, Search, Filter, X, Calendar } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { TableSkeleton, EmptyState } from '../components/ui/Skeleton.tsx';
 
 export default function InventoryMovements() {
   const [movements, setMovements] = useState<any[]>([]);
@@ -15,6 +14,7 @@ export default function InventoryMovements() {
   const [filterReason, setFilterReason] = useState<string>('');
   const [filterDateFrom, setFilterDateFrom] = useState<string>('');
   const [filterDateTo, setFilterDateTo] = useState<string>('');
+  const [currentPage, setCurrentPage] = useState(1);
 
   const fetchData = async () => {
     setLoading(true);
@@ -133,56 +133,9 @@ export default function InventoryMovements() {
   const totalEntradas = displayMovements.filter(m => m.type === 'ENTRADA').length;
   const totalSalidas = displayMovements.filter(m => m.type === 'SALIDA').length;
 
-  const columns: GridColDef[] = [
-    {
-      field: 'id',
-      headerName: 'ID',
-      width: 70,
-      renderCell: (params) => (
-        <span className="text-gray-500 text-sm">#{params.value}</span>
-      ),
-    },
-    {
-      field: 'type',
-      headerName: 'Tipo',
-      width: 110,
-      renderCell: (params) => getTypeBadge(params.value),
-    },
-    {
-      field: 'product',
-      headerName: 'Producto',
-      flex: 1,
-      minWidth: 200,
-      renderCell: (params) => (
-        <div className="py-1">
-          <div className="font-medium text-white">{params.value?.name || `Producto #${params.row.product_id}`}</div>
-          <div className="text-xs text-gray-500 mt-0.5">{params.value?.sku}</div>
-        </div>
-      ),
-    },
-    {
-      field: 'quantity',
-      headerName: 'Cantidad',
-      width: 100,
-      renderCell: (params) => (
-        <span className={`font-bold ${params.row.type === 'ENTRADA' ? 'text-green-400' : 'text-red-400'}`}>
-          {params.row.type === 'ENTRADA' ? '+' : '-'}{params.value} u.
-        </span>
-      ),
-    },
-    {
-      field: 'reason',
-      headerName: 'Motivo',
-      width: 130,
-      renderCell: (params) => getReasonBadge(params.value),
-    },
-    {
-      field: 'created_at',
-      headerName: 'Fecha',
-      width: 160,
-      valueFormatter: (value) => formatDate(value),
-    },
-  ];
+  const itemsPerPage = 8;
+  const totalPages = Math.max(1, Math.ceil(displayMovements.length / itemsPerPage));
+  const paginatedMovements = displayMovements.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   return (
     <div className="space-y-4 h-full flex flex-col">
@@ -380,38 +333,42 @@ export default function InventoryMovements() {
         </AnimatePresence>
       </div>
 
-      {/* Data Grid */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="flex-1 w-full bg-[#1f2028] border border-[#2e303a] rounded-xl overflow-hidden flex flex-col shadow-2xl"
-      >
-        {loading ? (
-          <TableSkeleton rows={8} />
-        ) : displayMovements.length === 0 ? (
-          <EmptyState
-            icon={<History className="w-12 h-12 text-gray-600" />}
-            title="No hay movimientos"
-            description={searchTerm || filterType || filterReason || filterDateFrom ? "No se encontraron movimientos con los filtros aplicados" : "No hay movimientos de inventario registrados"}
-          />
-        ) : (
-          <div style={{ flexGrow: 1, width: '100%' }}>
-            <DataGrid
-              rows={displayMovements}
-              columns={columns}
-              loading={loading}
-              getRowId={(row) => row.id}
-              getRowClassName={(params) =>
-                params.row.type === 'ENTRADA' ? 'bg-green-500/5' : 'bg-red-500/5'
-              }
-              initialState={{ pagination: { paginationModel: { page: 0, pageSize: 8 } } }}
-              pageSizeOptions={[8, 16, 32]}
-              disableRowSelectionOnClick
-              className="custom-datagrid"
-            />
-          </div>
-        )}
-      </motion.div>
+      <DataTable
+        columns={[
+          { header: 'ID', render: (m) => <span className="font-medium text-white">{m.id}</span> },
+          { header: 'Fecha', render: (m) => (
+            <div className="flex items-center italic text-gray-400">
+              <Calendar className="w-3 h-3 mr-2 text-primary/60" />
+              {new Date(m.created_at).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+            </div>
+          )},
+          { header: 'Tipo', render: (m) => (
+            <div className="flex items-center">
+              {m.type === 'ENTRADA' ? (
+                <ArrowUpCircle className="w-4 h-4 mr-1.5 text-green-400" />
+              ) : (
+                <ArrowDownCircle className="w-4 h-4 mr-1.5 text-red-400" />
+              )}
+              <span className={`px-2.5 py-1 rounded-lg text-xs font-bold ${m.type === 'ENTRADA' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                {m.type === 'ENTRADA' ? 'ENTRADA' : 'SALIDA'}
+              </span>
+            </div>
+          )},
+          { header: 'Producto', render: (m) => <span className="text-gray-300">{m.product?.name}</span> },
+          { header: 'Cantidad', render: (m) => <span className="font-medium text-white">{m.quantity}</span> },
+          { header: 'Motivo', render: (m) => <span className="text-gray-400">{m.reason}</span> },
+        ]}
+        data={paginatedMovements}
+        keyExtractor={(m) => m.id}
+        loading={loading}
+        emptyMessage="No hay movimientos"
+        emptyDescription={searchTerm || filterType || filterReason || filterDateFrom ? "No se encontraron movimientos con los filtros aplicados" : "No hay movimientos de inventario registrados"}
+        emptyIcon={<History className="w-8 h-8" />}
+        currentPage={currentPage}
+        totalPages={totalPages}
+        totalItems={displayMovements.length}
+        onPageChange={setCurrentPage}
+      />
     </div>
   );
 }

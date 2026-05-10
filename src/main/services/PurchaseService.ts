@@ -78,6 +78,17 @@ export class PurchaseService {
     }
   }
 
+  async updatePaymentStatus(purchaseId: number, paymentStatus: string) {
+    try {
+      await this.purchaseRepo.updatePaymentStatus(purchaseId, paymentStatus);
+      return { success: true };
+    } catch (error: any) {
+      console.error('Update payment status error:', error);
+      if (error.code === 'P2025') throw new NotFoundError('Compra');
+      throw error;
+    }
+  }
+
   async cancelPurchase(purchaseId: number, cancelledBy: number) {
     try {
       await this.purchaseRepo.cancel(purchaseId);

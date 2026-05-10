@@ -7,4 +7,5 @@ export interface IPurchaseRepository {
   create(data: CreatePurchaseDTO): Promise<Purchase>;
   receive(purchaseId: number): Promise<void>;
   cancel(purchaseId: number): Promise<void>;
+  updatePaymentStatus(purchaseId: number, paymentStatus: string): Promise<void>;
 }

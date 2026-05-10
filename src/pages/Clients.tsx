@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
-import { DataGrid, GridColDef } from '@mui/x-data-grid';
+import DataTable from '../components/ui/DataTable.tsx';
 import { UserPlus, RefreshCw, Pencil, Trash2 } from 'lucide-react';
 import { useToast } from '../hooks/useToast.ts';
-import { TableSkeleton, EmptyState } from '../components/ui/Skeleton.tsx';
 import Modal from '../components/ui/Modal.tsx';
 
 export default function Clients() {
@@ -22,6 +21,10 @@ export default function Clients() {
     phone: ''
   });
   const [deleteTarget, setDeleteTarget] = useState<{id: number, name: string} | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 8;
+  const totalPages = Math.max(1, Math.ceil(clients.length / itemsPerPage));
+  const paginatedClients = clients.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const fetchClients = async () => {
     setLoading(true);
@@ -109,39 +112,6 @@ export default function Clients() {
     }
   };
 
-  const columns: GridColDef[] = [
-    { field: 'id', headerName: 'ID', width: 70 },
-    { field: 'code', headerName: 'Código', width: 120 },
-    { field: 'name', headerName: 'Nombre / Razón Social', flex: 1 },
-    { field: 'dni', headerName: 'DNI / ID', width: 130 },
-    { field: 'tax_id', headerName: 'RFC/NIF', width: 130 },
-    { field: 'phone', headerName: 'Teléfono', width: 130 },
-    { 
-      field: 'actions', 
-      headerName: 'Acciones', 
-      width: 120, 
-      sortable: false,
-      renderCell: (params) => (
-        <div className="flex items-center h-full space-x-2">
-          <button 
-            onClick={() => handleOpenEditModal(params.row)}
-            className="p-1.5 text-blue-400 hover:bg-blue-400/10 rounded-lg transition-colors"
-            title="Editar"
-          >
-            <Pencil className="w-4 h-4" />
-          </button>
-          <button 
-            onClick={() => handleDeleteClick(params.row.id, params.row.name)}
-            className="p-1.5 text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
-            title="Eliminar"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
-        </div>
-      )
-    },
-  ];
-
   return (
     <div className="space-y-6 h-full flex flex-col">
       <div className="flex items-center justify-between">
@@ -163,31 +133,49 @@ export default function Clients() {
         </div>
       </div>
       
-      <div className="flex-1 w-full glass-panel rounded-2xl overflow-hidden p-1 flex flex-col border border-white/5 shadow-2xl">
-        {loading ? (
-          <TableSkeleton rows={10} />
-        ) : clients.length === 0 ? (
-          <EmptyState
-            icon={<UserPlus className="w-8 h-8" />}
-            title="No hay clientes"
-            description="Agrega tu primer cliente al sistema"
-            action={{ label: 'Agregar Cliente', onClick: handleOpenCreateModal }}
-          />
-        ) : (
-          <div style={{ flexGrow: 1, width: '100%' }}>
-            <DataGrid
-              rows={clients}
-              columns={columns}
-              loading={loading}
-              getRowId={(row) => row.id}
-              initialState={{ pagination: { paginationModel: { page: 0, pageSize: 15 } } }}
-               pageSizeOptions={[15, 30, 50]}
-               disableRowSelectionOnClick
-               className="custom-datagrid"
-            />
-          </div>
-        )}
-      </div>
+      <DataTable
+        columns={[
+          { header: 'ID', className: 'font-medium text-white', render: (c) => `#${c.id}` },
+          { header: 'Código', render: (c) => c.code },
+          { header: 'Nombre / Razón Social', render: (c) => c.name },
+          { header: 'DNI / ID', render: (c) => c.dni || '—' },
+          { header: 'RFC/NIF', render: (c) => c.tax_id || '—' },
+          { header: 'Teléfono', render: (c) => c.phone || '—' },
+          {
+            header: 'Acciones',
+            headerClassName: 'text-right',
+            render: (c) => (
+              <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button
+                  onClick={() => handleOpenEditModal(c)}
+                  className="p-2 hover:bg-blue-400/10 rounded-lg text-blue-400 transition-colors"
+                  title="Editar"
+                >
+                  <Pencil className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => handleDeleteClick(c.id, c.name)}
+                  className="p-2 hover:bg-red-400/10 rounded-lg text-red-400 transition-colors"
+                  title="Eliminar"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ),
+          },
+        ]}
+        data={paginatedClients}
+        keyExtractor={(c) => c.id}
+        loading={loading}
+        emptyMessage="No hay clientes"
+        emptyDescription="Agrega tu primer cliente al sistema"
+        emptyIcon={<UserPlus className="w-8 h-8" />}
+        emptyAction={{ label: 'Agregar Cliente', onClick: handleOpenCreateModal }}
+        currentPage={currentPage}
+        totalPages={totalPages}
+        totalItems={clients.length}
+        onPageChange={setCurrentPage}
+      />
 
       {/* Modal para Crear/Editar Cliente */}
       <Modal

@@ -6,7 +6,7 @@ import { useCashStore } from '../store/useStore.ts';
 export default function Cash() {
   const { activeRegister, setActiveRegister } = useCashStore();
   const [loading, setLoading] = useState(true);
-  const [openingAmount, setOpeningAmount] = useState('');
+  const [openingAmount, setOpeningAmount] = useState(0);
   const [closingAmount, setClosingAmount] = useState('');
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState('');
@@ -58,7 +58,7 @@ export default function Cash() {
 
   return (
     <div className="h-full max-w-4xl mx-auto space-y-8 py-6">
-      
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -72,7 +72,7 @@ export default function Cash() {
       </div>
 
       <AnimatePresence mode="wait">
-        
+
         {/* RESULTADO DEL CIERRE (MOSTRAR DESPUÉS DE CERRAR) */}
         {result && !activeRegister && (
           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="glass-panel p-8 rounded-3xl border border-white/5 text-center space-y-6">
@@ -83,7 +83,7 @@ export default function Cash() {
               <h3 className="text-2xl font-bold text-white">Resumen de Cierre</h3>
               <p className="text-gray-400">Caja cerrada correctamente.</p>
             </div>
-            
+
             <div className="grid grid-cols-3 gap-4 max-w-lg mx-auto">
               <div className="p-4 bg-black/20 rounded-2xl border border-white/5">
                 <span className="text-[10px] text-gray-500 block uppercase">Esperado</span>
@@ -134,18 +134,18 @@ export default function Cash() {
         {/* MODO CIERRE / RESUMEN */}
         {activeRegister && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-            
+
             {/* Resumen Izquierdo */}
             <div className="lg:col-span-3 space-y-6">
               <div className="glass-panel p-6 rounded-3xl border border-white/5 grid grid-cols-2 gap-6">
                 <div className="col-span-2 p-4 bg-black/20 rounded-2xl border border-white/5 flex justify-between items-center">
-                   <div className="flex items-center">
-                      <div className="p-3 bg-blue-500/10 rounded-xl mr-4"><TrendingUp className="text-blue-400 w-5 h-5" /></div>
-                      <div><span className="text-[10px] text-gray-500 uppercase block">Total Ventas</span><span className="text-2xl font-black text-white">${Number(activeRegister.total_sales).toFixed(2)}</span></div>
-                   </div>
-                   <div className="text-right"><span className="text-[10px] text-gray-500 block uppercase">Inició con</span><span className="text-sm font-medium text-gray-400">${Number(activeRegister.opening_amount).toFixed(2)}</span></div>
+                  <div className="flex items-center">
+                    <div className="p-3 bg-blue-500/10 rounded-xl mr-4"><TrendingUp className="text-blue-400 w-5 h-5" /></div>
+                    <div><span className="text-[10px] text-gray-500 uppercase block">Total Ventas</span><span className="text-2xl font-black text-white">${Number(activeRegister.total_sales).toFixed(2)}</span></div>
+                  </div>
+                  <div className="text-right"><span className="text-[10px] text-gray-500 block uppercase">Inició con</span><span className="text-sm font-medium text-gray-400">${Number(activeRegister.opening_amount).toFixed(2)}</span></div>
                 </div>
-                
+
                 <div className="p-6 bg-green-500/5 border border-green-500/10 rounded-2xl text-center">
                   <Banknote className="w-8 h-8 text-green-400 mx-auto mb-2" />
                   <span className="text-[10px] text-green-400/50 uppercase block mb-1 font-bold">Ventas Efectivo</span>
@@ -160,11 +160,11 @@ export default function Cash() {
               </div>
 
               <div className="p-6 bg-orange-400/5 border border-orange-400/10 rounded-3xl flex items-start gap-4">
-                 <AlertCircle className="w-6 h-6 text-orange-400 shrink-0" />
-                 <p className="text-sm text-orange-400/80 leading-relaxed">
-                   <strong>Recordatorio de Arqueo:</strong> Al cerrar, debes contar físicamente el dinero en el cajón. 
-                   La suma debe ser igual a: <span className="text-white font-bold underline">Fondo Inicial + Ventas Efectivo</span>. Las ventas con tarjeta no se incluyen en el conteo físico.
-                 </p>
+                <AlertCircle className="w-6 h-6 text-orange-400 shrink-0" />
+                <p className="text-sm text-orange-400/80 leading-relaxed">
+                  <strong>Recordatorio de Arqueo:</strong> Al cerrar, debes contar físicamente el dinero en el cajón.
+                  La suma debe ser igual a: <span className="text-white font-bold underline">Fondo Inicial + Ventas Efectivo</span>. Las ventas con tarjeta no se incluyen en el conteo físico.
+                </p>
               </div>
             </div>
 
@@ -188,7 +188,7 @@ export default function Cash() {
                 </form>
 
                 <div className="pt-6 border-t border-white/5 text-center">
-                   <p className="text-[10px] text-gray-500 uppercase tracking-widest">Abierto el {activeRegister.opened_at ? new Date(activeRegister.opened_at).toLocaleString() : 'N/A'}</p>
+                  <p className="text-[10px] text-gray-500 uppercase tracking-widest">Abierto el {activeRegister.opened_at ? new Date(activeRegister.opened_at).toLocaleString() : 'N/A'}</p>
                 </div>
               </div>
             </div>

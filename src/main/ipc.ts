@@ -1,4 +1,5 @@
 import { ipcMain, dialog } from "electron";
+import fs from "node:fs/promises";
 import { container } from "./di/container.js";
 import { wrapIpc } from "./utils/ipcWrapper.js";
 import {
@@ -547,6 +548,14 @@ export function setupIpcHandlers() {
     }
   });
 
+  ipcMain.handle("purchases:updatePaymentStatus", async (_, purchaseId, paymentStatus) => {
+    try {
+      return await container.purchaseService.updatePaymentStatus(purchaseId, paymentStatus);
+    } catch (error: any) {
+      return { success: false, message: error.message || "Error al actualizar estado de pago" };
+    }
+  });
+
   // Backup & Restore
   ipcMain.handle("backup:create", async (_, label?: string) => {
     try {
@@ -599,6 +608,88 @@ export function setupIpcHandlers() {
       return await container.settingsService.updateTaxSettings(taxRate, taxType, taxIncluded);
     } catch (error: any) {
       console.error('[IPC] Error updating tax settings:', error);
+      return { success: false, message: error.message };
+    }
+  });
+
+  // Reports
+  ipcMain.handle("reports:generate", async (_, raw: any) => {
+    try {
+      const startDate = raw.startDate ? new Date(raw.startDate) : undefined;
+      let endDate: Date | undefined;
+      if (raw.endDate) {
+        endDate = new Date(raw.endDate);
+        endDate.setHours(23, 59, 59, 999);
+      } else if (startDate) {
+        endDate = new Date(startDate);
+        endDate.setHours(23, 59, 59, 999);
+      }
+      const request: import('../domain/dtos.js').ReportRequestDTO = {
+        ...raw,
+        startDate,
+        endDate,
+      };
+      const buffer = await container.reportService.generateReport(request);
+      const ext = request.format === 'pdf' ? 'pdf' : 'xlsx';
+      const { filePath, canceled } = await dialog.showSaveDialog({
+        defaultPath: `${request.type}-${Date.now()}.${ext}`,
+        filters: request.format === 'pdf'
+          ? [{ name: 'PDF', extensions: ['pdf'] }]
+          : [{ name: 'Excel', extensions: ['xlsx'] }],
+      });
+      if (canceled || !filePath) {
+        return { success: false, message: 'Cancelado por el usuario' };
+      }
+      await fs.writeFile(filePath, buffer);
+      return { success: true, path: filePath };
+    } catch (error: any) {
+      console.error('[IPC] Error generating report:', error);
+      return { success: false, message: error.message };
+    }
+  });
+
+  ipcMain.handle("reports:generateReceipt", async (_, saleId: number) => {
+    try {
+      const request: import('../domain/dtos.js').ReportRequestDTO = {
+        type: 'sale_receipt',
+        format: 'pdf',
+        saleId,
+      };
+      const buffer = await container.reportService.generateReport(request);
+      const { filePath, canceled } = await dialog.showSaveDialog({
+        defaultPath: `comprobante-${saleId}-${Date.now()}.pdf`,
+        filters: [{ name: 'PDF', extensions: ['pdf'] }],
+      });
+      if (canceled || !filePath) {
+        return { success: false, message: 'Cancelado por el usuario' };
+      }
+      await fs.writeFile(filePath, buffer);
+      return { success: true, path: filePath };
+    } catch (error: any) {
+      console.error('[IPC] Error generating receipt:', error);
+      return { success: false, message: error.message };
+    }
+  });
+
+  ipcMain.handle("reports:generateCashClose", async (_, registerId: number) => {
+    try {
+      const request: import('../domain/dtos.js').ReportRequestDTO = {
+        type: 'cash_close',
+        format: 'pdf',
+        registerId,
+      };
+      const buffer = await container.reportService.generateReport(request);
+      const { filePath, canceled } = await dialog.showSaveDialog({
+        defaultPath: `cierre-caja-${registerId}-${Date.now()}.pdf`,
+        filters: [{ name: 'PDF', extensions: ['pdf'] }],
+      });
+      if (canceled || !filePath) {
+        return { success: false, message: 'Cancelado por el usuario' };
+      }
+      await fs.writeFile(filePath, buffer);
+      return { success: true, path: filePath };
+    } catch (error: any) {
+      console.error('[IPC] Error generating cash close report:', error);
       return { success: false, message: error.message };
     }
   });

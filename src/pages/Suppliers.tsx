@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react';
-import { DataGrid, GridColDef } from '@mui/x-data-grid';
 import { Truck, RefreshCw, Pencil, Trash2, PlusCircle } from 'lucide-react';
 import { useToast } from '../hooks/useToast.ts';
-import { TableSkeleton, EmptyState } from '../components/ui/Skeleton.tsx';
 import Modal from '../components/ui/Modal.tsx';
+import DataTable from '../components/ui/DataTable.tsx';
 
 export default function Suppliers() {
   const [suppliers, setSuppliers] = useState<any[]>([]);
@@ -12,6 +11,10 @@ export default function Suppliers() {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [selectedSupplier, setSelectedSupplier] = useState<any>(null);
   const { success, error: toastError } = useToast();
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 8;
+  const totalPages = Math.max(1, Math.ceil(suppliers.length / itemsPerPage));
+  const paginatedSuppliers = suppliers.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
   
   // Form state
   const [formData, setFormData] = useState({ 
@@ -22,6 +25,69 @@ export default function Suppliers() {
     address: '' 
   });
   const [deleteTarget, setDeleteTarget] = useState<{id: number, name: string} | null>(null);
+
+  const columns = [
+    {
+      header: 'Nombre',
+      render: (supplier: any) => (
+        <div>
+          <div className="font-medium text-white">{supplier.name}</div>
+          <div className="text-xs text-gray-500">{supplier.ruc}</div>
+        </div>
+      ),
+    },
+    {
+      header: 'RUC',
+      render: (supplier: any) => (
+        supplier.ruc || <span className="text-gray-600">-</span>
+      ),
+    },
+    {
+      header: 'Teléfono',
+      render: (supplier: any) => (
+        supplier.phone || <span className="text-gray-600">-</span>
+      ),
+    },
+    {
+      header: 'Email',
+      render: (supplier: any) => (
+        supplier.email || <span className="text-gray-600">-</span>
+      ),
+    },
+    {
+      header: 'Productos',
+      headerClassName: 'text-center',
+      className: 'text-center',
+      render: (supplier: any) => (
+        <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-500/20 text-blue-400">
+          {supplier._count?.products ?? 0}
+        </span>
+      ),
+    },
+    {
+      header: 'Acciones',
+      headerClassName: 'text-right',
+      className: 'text-right',
+      render: (supplier: any) => (
+        <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button 
+            onClick={() => handleOpenEditModal(supplier)} 
+            className="p-2 text-blue-400 hover:bg-blue-400/10 rounded-lg transition-colors" 
+            title="Editar"
+          >
+            <Pencil className="w-4 h-4" />
+          </button>
+          <button 
+            onClick={() => handleDeleteClick(supplier.id, supplier.name)} 
+            className="p-2 text-red-400 hover:bg-red-400/10 rounded-lg transition-colors" 
+            title="Eliminar"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+      ),
+    },
+  ];
 
   const fetchData = async () => {
     setLoading(true);
@@ -108,72 +174,6 @@ export default function Suppliers() {
     }
   };
 
-  const columns: GridColDef[] = [
-    { 
-      field: 'name', 
-      headerName: 'Nombre', 
-      flex: 1,
-      renderCell: (params) => (
-        <div>
-          <div className="font-medium text-white">{params.value}</div>
-          <div className="text-xs text-gray-500">{params.row.ruc}</div>
-        </div>
-      )
-    },
-    { 
-      field: 'ruc', 
-      headerName: 'RUC', 
-      width: 150,
-      renderCell: (params) => params.value || <span className="text-gray-600">-</span>
-    },
-    { 
-      field: 'phone', 
-      headerName: 'Teléfono', 
-      width: 130,
-      renderCell: (params) => params.value || <span className="text-gray-600">-</span>
-    },
-    { 
-      field: 'email', 
-      headerName: 'Email', 
-      width: 200,
-      renderCell: (params) => params.value || <span className="text-gray-600">-</span>
-    },
-    { 
-      field: '_count', 
-      headerName: 'Productos', 
-      width: 100,
-      renderCell: (params) => (
-        <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-500/20 text-blue-400">
-          {params.value?.products || 0}
-        </span>
-      )
-    },
-    { 
-      field: 'actions', 
-      headerName: 'Acciones', 
-      width: 150, 
-      sortable: false,
-      renderCell: (params) => (
-        <div className="flex items-center h-full space-x-1">
-          <button 
-            onClick={() => handleOpenEditModal(params.row)} 
-            className="p-2 text-blue-400 hover:bg-blue-400/10 rounded-lg transition-colors" 
-            title="Editar"
-          >
-            <Pencil className="w-4 h-4" />
-          </button>
-          <button 
-            onClick={() => handleDeleteClick(params.row.id, params.row.name)} 
-            className="p-2 text-red-400 hover:bg-red-400/10 rounded-lg transition-colors" 
-            title="Eliminar"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
-        </div>
-      )
-    },
-  ];
-
   return (
     <div className="space-y-6 h-full flex flex-col">
       <div className="flex items-center justify-between">
@@ -183,7 +183,7 @@ export default function Suppliers() {
         </div>
         <div className="flex space-x-3">
           <button 
-            onClick={fetchData} 
+            onClick={() => { setCurrentPage(1); fetchData(); }} 
             className="p-2 rounded-lg bg-[#1f2028] text-gray-300 hover:text-white border border-[#2e303a] transition-colors shadow-sm"
           >
             <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
@@ -198,31 +198,20 @@ export default function Suppliers() {
         </div>
       </div>
       
-      <div className="flex-1 w-full glass-panel rounded-2xl overflow-hidden p-1 flex flex-col border border-white/5 shadow-2xl">
-        {loading ? (
-          <TableSkeleton rows={10} />
-        ) : suppliers.length === 0 ? (
-          <EmptyState
-            icon={<Truck className="w-8 h-8" />}
-            title="No hay proveedores"
-            description="Agrega tu primer proveedor para gestionar compras"
-            action={{ label: 'Agregar Proveedor', onClick: handleOpenCreateModal }}
-          />
-        ) : (
-          <div style={{ flexGrow: 1, width: '100%' }}>
-            <DataGrid
-              rows={suppliers}
-              columns={columns}
-              loading={loading}
-              getRowId={(row) => row.id}
-              initialState={{ pagination: { paginationModel: { page: 0, pageSize: 15 } } }}
-               pageSizeOptions={[15, 30, 50]}
-               disableRowSelectionOnClick
-               className="custom-datagrid"
-            />
-          </div>
-        )}
-      </div>
+      <DataTable
+        columns={columns}
+        data={paginatedSuppliers}
+        keyExtractor={(supplier) => supplier.id}
+        loading={loading}
+        emptyMessage="No hay proveedores"
+        emptyDescription="Agrega tu primer proveedor para gestionar compras"
+        emptyIcon={<Truck className="w-8 h-8" />}
+        emptyAction={{ label: 'Agregar Proveedor', onClick: handleOpenCreateModal }}
+        currentPage={currentPage}
+        totalPages={totalPages}
+        totalItems={suppliers.length}
+        onPageChange={setCurrentPage}
+      />
 
       {/* Modal para Crear/Editar */}
       <Modal

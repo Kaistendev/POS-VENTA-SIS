@@ -107,6 +107,7 @@ interface Window {
     createPurchase: (data: import('./domain/dtos').CreatePurchaseDTO, userId?: number) => Promise<{ success: true; purchase: import('./domain/models').Purchase } | { success: false; message: string }>;
     receivePurchase: (purchaseId: number, userId?: number) => Promise<{ success: boolean }>;
     cancelPurchase: (purchaseId: number, userId?: number) => Promise<{ success: boolean }>;
+    updatePurchasePaymentStatus: (purchaseId: number, paymentStatus: string) => Promise<{ success: boolean }>;
 
     // Inventory Movements
     getAllMovements: () => Promise<import('./domain/models').InventoryMovement[]>;
@@ -131,6 +132,11 @@ interface Window {
       showOpenDialog: (options: Record<string, unknown>) => Promise<Record<string, unknown>>;
       showSaveDialog: (options: Record<string, unknown>) => Promise<Record<string, unknown>>;
     };
+
+    // Reports
+    generateReport: (request: import('./domain/dtos').ReportRequestDTO) => Promise<{ success: boolean; path?: string; message?: string }>;
+    generateReceipt: (saleId: number) => Promise<{ success: boolean; path?: string; message?: string }>;
+    generateCashClose: (registerId: number) => Promise<{ success: boolean; path?: string; message?: string }>;
 
     // Modal API
     modal: {

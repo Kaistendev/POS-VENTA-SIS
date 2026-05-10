@@ -13,6 +13,8 @@ import { PrismaCategoryRepository } from '../../infrastructure/persistence/Prism
 import { PrismaAuditLogRepository } from '../../infrastructure/persistence/PrismaAuditLogRepository.js';
 import { PrismaDashboardRepository } from '../../infrastructure/persistence/PrismaDashboardRepository.js';
 import { ElectronBackupService } from '../../infrastructure/backup/ElectronBackupService.js';
+import { PDFReportGenerator } from '../../infrastructure/reports/PDFReportGenerator.js';
+import { ExcelReportGenerator } from '../../infrastructure/reports/ExcelReportGenerator.js';
 
 // Servicios de aplicación
 import { ProductService } from '../services/ProductService.js';
@@ -28,6 +30,8 @@ import { CategoryService } from '../services/CategoryService.js';
 import { BackupService } from '../services/BackupService.js';
 import { DashboardService } from '../services/DashboardService.js';
 import { CacheService } from '../services/CacheService.js';
+import { ReportService } from '../services/ReportService.js';
+import { SchedulerService } from '../services/SchedulerService.js';
 
 const prisma = new PrismaClient();
 
@@ -47,6 +51,8 @@ const dashboardRepo = new PrismaDashboardRepository(prisma);
 // --- Servicios de infraestructura ---
 const cacheService = new CacheService();
 const backupAdapter = new ElectronBackupService();
+const pdfReportGenerator = new PDFReportGenerator();
+const excelReportGenerator = new ExcelReportGenerator();
 
 // --- Servicios de aplicación ---
 const dashboardService = new DashboardService(dashboardRepo, cacheService);
@@ -69,6 +75,16 @@ const saleService = new SaleService(
 );
 const backupService = new BackupService(backupAdapter);
 const categoryService = new CategoryService(categoryRepo, auditLogRepo);
+const reportService = new ReportService(
+  pdfReportGenerator,
+  excelReportGenerator,
+  dashboardService,
+  saleService,
+  productService,
+  cashRegisterService,
+  settingsService,
+);
+const schedulerService = new SchedulerService(reportService, backupService);
 
 export const container = {
   prisma,
@@ -86,6 +102,8 @@ export const container = {
   categoryService,
   dashboardService,
   backupService,
+  reportService,
+  schedulerService,
   // Utilidades
   cacheService,
 };

@@ -122,6 +122,7 @@ export class SaleService {
       total,
       items: itemsWithPurchasePrice,
       payment_method: validated.payment_method,
+      exchange_rate: saleData.exchange_rate || 0,
     };
 
     const saleId = await this.saleRepo.registerSale(registerInput);

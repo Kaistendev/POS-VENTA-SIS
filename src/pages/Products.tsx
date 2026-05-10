@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { DataGrid, GridColDef } from '@mui/x-data-grid';
-import { PackagePlus, RefreshCw, Pencil, Trash2, PlusCircle, MinusCircle, AlertCircle, Package } from 'lucide-react';
+import DataTable from '../components/ui/DataTable.tsx';
+import { PackagePlus, RefreshCw, Pencil, Trash2, PlusCircle, MinusCircle, AlertCircle, Package, Search } from 'lucide-react';
 import { useToast } from '../hooks/useToast.ts';
 import { TableSkeleton, EmptyState } from '../components/ui/Skeleton.tsx';
 import Modal from '../components/ui/Modal.tsx';
+import { formatCurrency } from '../lib/utils.ts';
 
 export default function Products() {
   const [products, setProducts] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [exchangeRate, setExchangeRate] = useState(0);
   const [loading, setLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isStockModalOpen, setIsStockModalOpen] = useState(false);
@@ -33,19 +35,23 @@ export default function Products() {
     type: 'ENTRADA' 
   });
   const [deleteTarget, setDeleteTarget] = useState<{id: number, name: string} | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 8;
 
   const fetchData = async () => {
     setLoading(true);
     try {
       if (window.api) {
-        const [prodData, catData, supData] = await Promise.all([
+        const [prodData, catData, supData, settings] = await Promise.all([
           window.api.getAllProducts(),
           window.api.getAllCategories(),
-          window.api.getAllSuppliers()
+          window.api.getAllSuppliers(),
+          window.api.getSettings(),
         ]);
         setProducts(prodData || []);
         setCategories(catData || []);
         setSuppliers(supData || []);
+        setExchangeRate(parseFloat(settings?.exchange_rate_usd_ves) || 0);
       }
     } catch (error) {
       console.error(error);
@@ -183,65 +189,25 @@ export default function Products() {
     }
   };
 
-  const columns: GridColDef[] = [
-    { field: 'sku', headerName: 'SKU', width: 120 },
-    { field: 'name', headerName: 'Nombre', flex: 1 },
-    { 
-      field: 'category', 
-      headerName: 'Categoría', 
-      width: 150,
-      renderCell: (params) => <span className="text-gray-400">{params.value?.name || 'General'}</span>
-    },
-    { 
-      field: 'supplier', 
-      headerName: 'Proveedor', 
-      width: 180,
-      renderCell: (params) => (
-        <span className="text-gray-300 text-sm">
-          {params.value?.name || <span className="text-gray-600 italic">Sin proveedor</span>}
-        </span>
-      )
-    },
-    { field: 'price_sale', headerName: 'Precio Venta', type: 'number', width: 120, renderCell: (params) => `$${params.value?.toFixed(2)}` },
-    { 
-      field: 'stock', 
-      headerName: 'Stock', 
-      type: 'number', 
-      width: 120,
-      renderCell: (params) => {
-        const isLow = params.value <= params.row.min_stock;
-        return (
-          <div className="flex items-center">
-            <span className={`px-2.5 py-1 rounded-lg text-xs font-bold ${params.value === 0 ? 'bg-red-500/20 text-red-500' : isLow ? 'bg-orange-500/20 text-orange-500' : 'bg-green-500/20 text-green-500'}`}>
-              {params.value} u.
-            </span>
-            {isLow && params.value > 0 && <AlertCircle className="w-3 h-3 ml-2 text-orange-500" />}
-          </div>
-        );
-      }
-    },
-    { 
-      field: 'actions', 
-      headerName: 'Acciones', 
-      width: 180,
-      sortable: false,
-      renderCell: (params) => (
-        <div className="flex items-center h-full space-x-1">
-          <button onClick={() => handleOpenStockModal(params.row, 'ENTRADA')} className="p-2 text-green-400 hover:bg-green-400/10 rounded-lg transition-colors" title="Aumentar Stock"><PlusCircle className="w-4 h-4" /></button>
-          <button onClick={() => handleOpenStockModal(params.row, 'SALIDA')} className="p-2 text-orange-400 hover:bg-orange-400/10 rounded-lg transition-colors" title="Retirar Stock"><MinusCircle className="w-4 h-4" /></button>
-          <button onClick={() => handleOpenEditModal(params.row)} className="p-2 text-blue-400 hover:bg-blue-400/10 rounded-lg transition-colors" title="Editar"><Pencil className="w-4 h-4" /></button>
-          <button onClick={() => handleDeleteClick(params.row.id, params.row.name)} className="p-2 text-red-400 hover:bg-red-400/10 rounded-lg transition-colors" title="Eliminar"><Trash2 className="w-4 h-4" /></button>
-        </div>
-      )
-    },
-  ];
 
-  // Supplier filter state
+
+  // Filter state
+  const [searchTerm, setSearchTerm] = useState('');
   const [selectedSupplier, setSelectedSupplier] = useState<string>('');
 
-  const filteredProducts = selectedSupplier
-    ? products.filter(p => p.supplier_id === parseInt(selectedSupplier))
-    : products;
+  const filteredProducts = products.filter(p => {
+    if (selectedSupplier && p.supplier_id !== parseInt(selectedSupplier)) return false;
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      const matchesName = p.name?.toLowerCase().includes(term);
+      const matchesSku = p.sku?.toLowerCase().includes(term);
+      if (!matchesName && !matchesSku) return false;
+    }
+    return true;
+  });
+
+  const totalPages = Math.max(1, Math.ceil(filteredProducts.length / itemsPerPage));
+  const paginatedProducts = filteredProducts.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   return (
     <div className="space-y-6 h-full flex flex-col">
@@ -251,9 +217,19 @@ export default function Products() {
           <p className="text-gray-400 mt-1">Gestión de inventario y alertas de stock</p>
         </div>
         <div className="flex items-center space-x-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+            <input
+              type="text"
+              placeholder="Buscar por nombre o código..."
+              value={searchTerm}
+              onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+              className="bg-[#1f2028] border border-[#2e303a] rounded-xl py-2 pl-10 pr-4 text-sm text-white focus:border-primary outline-none transition-all w-64"
+            />
+          </div>
           <select
             value={selectedSupplier}
-            onChange={(e) => setSelectedSupplier(e.target.value)}
+            onChange={(e) => { setSelectedSupplier(e.target.value); setCurrentPage(1); }}
             className="bg-[#1f2028] border border-[#2e303a] rounded-lg px-4 py-2 text-white text-sm"
           >
             <option value="">Todos los proveedores</option>
@@ -274,31 +250,43 @@ export default function Products() {
         </div>
       </div>
       
-      <div className="flex-1 w-full glass-panel rounded-2xl overflow-hidden p-1 flex flex-col border border-white/5 shadow-2xl">
-        {loading ? (
-          <TableSkeleton rows={10} />
-        ) : filteredProducts.length === 0 ? (
-          <EmptyState
-            icon={<Package className="w-8 h-8" />}
-            title="No hay productos"
-            description={selectedSupplier ? "No hay productos de este proveedor" : "Agrega tu primer producto al inventario"}
-            action={{ label: 'Agregar Producto', onClick: handleOpenCreateModal }}
-          />
-        ) : (
-          <div style={{ flexGrow: 1, width: '100%' }}>
-            <DataGrid
-              rows={filteredProducts}
-              columns={columns}
-              loading={loading}
-              getRowId={(row) => row.id}
-              initialState={{ pagination: { paginationModel: { page: 0, pageSize: 15 } } }}
-              pageSizeOptions={[15, 30, 50]}
-              disableRowSelectionOnClick
-              className="custom-datagrid"
-            />
-          </div>
-        )}
-      </div>
+      <DataTable
+        columns={[
+          { header: 'SKU', render: (p) => <span className="font-medium text-white">{p.sku}</span> },
+          { header: 'Nombre', render: (p) => <span className="text-gray-300">{p.name}</span> },
+          { header: 'Categoría', render: (p) => <span className="text-gray-400">{p.category?.name || 'General'}</span> },
+          { header: 'Proveedor', render: (p) => p.supplier?.name || <span className="text-gray-600 italic">Sin proveedor</span> },
+          { header: 'Precio USD', className: 'text-white', render: (p) => `$${p.price_sale?.toFixed(2)}` },
+          { header: 'Precio Bs.', className: 'text-orange-400 font-medium', render: (p) => `Bs. ${formatCurrency((p.price_sale || 0) * exchangeRate)}` },
+          { header: 'Stock', render: (p) => (
+            <div className="flex items-center">
+              <span className={`px-2.5 py-1 rounded-lg text-xs font-bold ${p.stock === 0 ? 'bg-red-500/20 text-red-500' : p.stock <= (p.min_stock ?? 0) ? 'bg-orange-500/20 text-orange-500' : 'bg-green-500/20 text-green-500'}`}>
+                {p.stock} u.
+              </span>
+              {p.stock <= (p.min_stock ?? 0) && p.stock > 0 && <AlertCircle className="w-3 h-3 ml-1 inline text-orange-500" />}
+            </div>
+          )},
+          { header: 'Acciones', headerClassName: 'text-right', className: 'text-right', render: (p) => (
+            <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button onClick={() => handleOpenStockModal(p, 'ENTRADA')} className="p-2 text-green-400 hover:bg-green-400/10 rounded-lg" title="Aumentar Stock"><PlusCircle className="w-4 h-4" /></button>
+              <button onClick={() => handleOpenStockModal(p, 'SALIDA')} className="p-2 text-orange-400 hover:bg-orange-400/10 rounded-lg" title="Retirar Stock"><MinusCircle className="w-4 h-4" /></button>
+              <button onClick={() => handleOpenEditModal(p)} className="p-2 text-blue-400 hover:bg-blue-400/10 rounded-lg" title="Editar"><Pencil className="w-4 h-4" /></button>
+              <button onClick={() => handleDeleteClick(p.id, p.name)} className="p-2 text-red-400 hover:bg-red-400/10 rounded-lg" title="Eliminar"><Trash2 className="w-4 h-4" /></button>
+            </div>
+          )},
+        ]}
+        data={paginatedProducts}
+        keyExtractor={(p) => p.id}
+        loading={loading}
+        emptyMessage="No hay productos"
+        emptyDescription={searchTerm ? "No se encontraron productos con ese nombre o código" : selectedSupplier ? "No hay productos de este proveedor" : "Agrega tu primer producto al inventario"}
+        emptyIcon={<Package className="w-8 h-8" />}
+        emptyAction={{ label: 'Agregar Producto', onClick: handleOpenCreateModal }}
+        currentPage={currentPage}
+        totalPages={totalPages}
+        totalItems={filteredProducts.length}
+        onPageChange={setCurrentPage}
+      />
 
       {/* Modal para Crear/Editar Producto */}
       <Modal

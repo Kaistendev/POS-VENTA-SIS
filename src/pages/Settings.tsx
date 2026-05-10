@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Store, Phone, MapPin, Save, TrendingUp, DollarSign, Calendar, RefreshCw, Database, Download, Upload, Trash2 } from 'lucide-react';
+import { Store, Phone, MapPin, Save, TrendingUp, DollarSign, Calendar, RefreshCw, Database, Download, Upload, Trash2, Image as ImageIcon, X } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useToast } from '../hooks/useToast.ts';
 
@@ -10,7 +10,9 @@ export default function Settings() {
     business_address: '',
     business_phone: '',
     business_tax_id: '',
-    ticket_footer: '¡Gracias por su compra!'
+    ticket_footer: '¡Gracias por su compra!',
+    business_logo: '',
+    exchange_rate_usd_ves: '0',
   });
   
   const [reportData, setReportsData] = useState<any>(null);
@@ -211,6 +213,62 @@ export default function Settings() {
                     onChange={(e) => setSettings({...settings, ticket_footer: e.target.value})}
                     className="w-full bg-black/20 border border-white/10 rounded-xl py-3 px-4 text-white outline-none focus:border-primary transition-all resize-none"
                   />
+                </div>
+
+                <div className="col-span-full space-y-2">
+                  <label className="text-[10px] uppercase font-bold text-gray-500 tracking-widest flex items-center">
+                    <ImageIcon className="w-3 h-3 mr-2" /> Logo del Negocio
+                  </label>
+                  <div className="flex items-center gap-4">
+                    {settings.business_logo ? (
+                      <div className="relative">
+                        <img src={settings.business_logo} alt="Logo" className="w-20 h-20 object-contain rounded-xl bg-white/5 border border-white/10" />
+                        <button
+                          type="button"
+                          onClick={() => setSettings({...settings, business_logo: ''})}
+                          className="absolute -top-2 -right-2 p-1 bg-red-500 rounded-full text-white"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ) : null}
+                    <label className="flex items-center gap-2 px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-gray-300 hover:text-white hover:bg-white/10 cursor-pointer transition-all">
+                      <Upload className="w-4 h-4" />
+                      <span className="text-sm">{settings.business_logo ? 'Cambiar Logo' : 'Subir Logo'}</span>
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onload = (ev) => {
+                              setSettings({...settings, business_logo: ev.target?.result as string});
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                      />
+                    </label>
+                  </div>
+                  <p className="text-xs text-gray-500">PNG o JPG. Se mostrará en los comprobantes de venta.</p>
+                </div>
+
+                <div className="col-span-full space-y-2">
+                  <label className="text-[10px] uppercase font-bold text-gray-500 tracking-widest flex items-center">
+                    <DollarSign className="w-3 h-3 mr-2" /> Tasa de Cambio (USD → Bs.)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={settings.exchange_rate_usd_ves}
+                    onChange={(e) => setSettings({...settings, exchange_rate_usd_ves: e.target.value})}
+                    placeholder="Ej: 36.50"
+                    className="w-full bg-black/20 border border-white/10 rounded-xl py-3 px-4 text-white outline-none focus:border-primary transition-all"
+                  />
+                  <p className="text-xs text-gray-500">Precio en bolívares = Precio en USD × Tasa de cambio. Se usará en productos y ventas.</p>
                 </div>
               </div>
               <button type="submit" className="flex items-center justify-center gap-2 w-full py-4 bg-primary text-white font-bold rounded-xl shadow-lg shadow-primary/20 hover:scale-[1.01] active:scale-[0.99] transition-all">
