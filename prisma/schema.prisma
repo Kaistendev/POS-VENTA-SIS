@@ -99,6 +99,8 @@ model Sale {
   client_id        Int
   client           Client     @relation(fields: [client_id], references: [id])
   total            Float
+  subtotal         Float      @default(0)
+  tax_amount       Float      @default(0)
   payment_method   String?    @default("CASH") @map("payment_method")
   created_at       DateTime   @default(now()) @map("created_at")
   updated_at       DateTime   @updatedAt @map("updated_at")

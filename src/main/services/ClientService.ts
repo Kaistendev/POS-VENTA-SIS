@@ -1,86 +1,41 @@
-import { prisma } from '../prisma/client.js';
+import { IClientRepository } from '../../domain/ports/IClientRepository.js';
+import { IAuditLogRepository } from '../../domain/ports/IAuditLogRepository.js';
+import { CreateClientDTO, UpdateClientDTO } from '../../domain/dtos.js';
+import { NotFoundError, ConflictError, BusinessRuleError } from '../../shared/errors.js';
+import { findOrThrow } from '../../shared/helpers.js';
 import { clientSchema } from '../../common/schemas.js';
-import { createAuditLog } from '../utils/auditLog.js';
 
 export class ClientService {
-  /**
-   * Obtiene todos los clientes con búsqueda opcional
-   */
-  static async getAllClients(search?: string) {
-    const where = search
-      ? {
-          OR: [
-            { dni: { contains: search, mode: 'insensitive' as const } },
-            { name: { contains: search, mode: 'insensitive' as const } },
-            { code: { contains: search, mode: 'insensitive' as const } },
-            { tax_id: { contains: search, mode: 'insensitive' as const } },
-          ],
-        }
-      : {};
+  constructor(
+    private clientRepo: IClientRepository,
+    private auditLogRepo: IAuditLogRepository,
+  ) {}
 
-    return prisma.client.findMany({
-      where,
-      orderBy: { created_at: 'desc' },
-    });
+  async getAllClients(search?: string) {
+    return this.clientRepo.findAll(search);
   }
 
-  /**
-   * Obtiene un cliente por ID
-   */
-  static async getClientById(id: number) {
-    const client = await prisma.client.findUnique({
-      where: { id },
-    });
-
-    if (!client) {
-      throw new Error('Cliente no encontrado');
-    }
-
-    return client;
+  async getClientById(id: number) {
+    return await findOrThrow(() => this.clientRepo.findById(id), 'Cliente', id);
   }
 
-  /**
-   * Crea un cliente y deja la trazabilidad de la creación
-   */
-  static async createClient(clientData: any, userId: number = 1) {
-    // Validar con Zod
-    const validated = clientSchema.parse(clientData);
+  async createClient(data: CreateClientDTO, userId: number = 1) {
+    const validated = clientSchema.parse(data);
 
-    // Verificar DNI duplicado
-    const existingDni = await prisma.client.findFirst({
-      where: { dni: validated.dni },
-    });
+    const existingDni = await this.clientRepo.findByDni(validated.dni);
+    if (existingDni) throw new ConflictError(`El DNI ${validated.dni} ya se encuentra registrado.`);
 
-    if (existingDni) {
-      throw new Error(`El DNI ${validated.dni} ya se encuentra registrado.`);
-    }
+    const existingCode = await this.clientRepo.findByCode(validated.code);
+    if (existingCode) throw new ConflictError(`El código ${validated.code} ya se encuentra registrado.`);
 
-    // Verificar código duplicado
-    const existingCode = await prisma.client.findFirst({
-      where: { code: validated.code },
-    });
-
-    if (existingCode) {
-      throw new Error(`El código ${validated.code} ya se encuentra registrado.`);
-    }
-
-    // Verificar tax_id duplicado (si existe)
     if (validated.tax_id) {
-      const existingTaxId = await prisma.client.findFirst({
-        where: { tax_id: validated.tax_id },
-      });
-
-      if (existingTaxId) {
-        throw new Error(`El RUC ${validated.tax_id} ya se encuentra registrado.`);
-      }
+      const existingTaxId = await this.clientRepo.findByTaxId(validated.tax_id);
+      if (existingTaxId) throw new ConflictError(`El RUC ${validated.tax_id} ya se encuentra registrado.`);
     }
 
-    const client = await prisma.client.create({
-      data: validated,
-    });
+    const client = await this.clientRepo.create(validated);
 
-    // Registrar en auditoría
-    await createAuditLog({
+    await this.auditLogRepo.create({
       userId,
       action: 'CREATE_CLIENT',
       entity: 'clients',
@@ -90,67 +45,25 @@ export class ClientService {
     return { success: true, id: client.id };
   }
 
-  /**
-   * Actualiza un cliente y deja la trazabilidad de la actualización
-   */
-  static async updateClient(id: number, clientData: any, userId: number = 1) {
-    // Verificar que el cliente existe
-    const existingClient = await prisma.client.findUnique({
-      where: { id },
-    });
+  async updateClient(id: number, data: UpdateClientDTO, userId: number = 1) {
+    await findOrThrow(() => this.clientRepo.findById(id), 'Cliente', id);
 
-    if (!existingClient) {
-      throw new Error('Cliente no encontrado');
-    }
+    const validated = clientSchema.parse(data);
 
-    // Validar datos de entrada
-    const validated = clientSchema.parse(clientData);
+    const existingDni = await this.clientRepo.findByDni(validated.dni);
+    if (existingDni && existingDni.id !== id) throw new ConflictError(`El DNI ${validated.dni} ya se encuentra registrado.`);
 
-    // Verificar DNI duplicado (excluyendo el cliente actual)
-    const existingDni = await prisma.client.findFirst({
-      where: {
-        dni: validated.dni,
-        NOT: { id },
-      },
-    });
+    const existingCode = await this.clientRepo.findByCode(validated.code);
+    if (existingCode && existingCode.id !== id) throw new ConflictError(`El código ${validated.code} ya se encuentra registrado.`);
 
-    if (existingDni) {
-      throw new Error(`El DNI ${validated.dni} ya se encuentra registrado.`);
-    }
-
-    // Verificar código duplicado (excluyendo el cliente actual)
-    const existingCode = await prisma.client.findFirst({
-      where: {
-        code: validated.code,
-        NOT: { id },
-      },
-    });
-
-    if (existingCode) {
-      throw new Error(`El código ${validated.code} ya se encuentra registrado.`);
-    }
-
-    // Verificar tax_id duplicado (si existe y excluyendo el cliente actual)
     if (validated.tax_id) {
-      const existingTaxId = await prisma.client.findFirst({
-        where: {
-          tax_id: validated.tax_id,
-          NOT: { id },
-        },
-      });
-
-      if (existingTaxId) {
-        throw new Error(`El RUC ${validated.tax_id} ya se encuentra registrado.`);
-      }
+      const existingTaxId = await this.clientRepo.findByTaxId(validated.tax_id);
+      if (existingTaxId && existingTaxId.id !== id) throw new ConflictError(`El RUC ${validated.tax_id} ya se encuentra registrado.`);
     }
 
-    const client = await prisma.client.update({
-      where: { id },
-      data: validated,
-    });
+    const client = await this.clientRepo.update(id, validated);
 
-    // Registrar en auditoría
-    await createAuditLog({
+    await this.auditLogRepo.create({
       userId,
       action: 'UPDATE_CLIENT',
       entity: 'clients',
@@ -160,34 +73,17 @@ export class ClientService {
     return { success: true, client };
   }
 
-  /**
-   * Elimina un cliente y deja la trazabilidad de la eliminación
-   */
-  static async deleteClient(id: number, userId: number = 1) {
-    // Verificar que el cliente existe
-    const existingClient = await prisma.client.findUnique({
-      where: { id },
-    });
+  async deleteClient(id: number, userId: number = 1) {
+    await findOrThrow(() => this.clientRepo.findById(id), 'Cliente', id);
 
-    if (!existingClient) {
-      throw new Error('Cliente no encontrado');
-    }
-
-    // Verificar si el cliente tiene ventas asociadas
-    const salesCount = await prisma.sale.count({
-      where: { client_id: id },
-    });
-
+    const salesCount = await this.clientRepo.getSalesCount(id);
     if (salesCount > 0) {
-      throw new Error(`No se puede eliminar el cliente porque tiene ${salesCount} venta(s) asociada(s).`);
+      throw new BusinessRuleError(`No se puede eliminar el cliente porque tiene ${salesCount} venta(s) asociada(s).`);
     }
 
-    await prisma.client.delete({
-      where: { id },
-    });
+    await this.clientRepo.delete(id);
 
-    // Registrar en auditoría
-    await createAuditLog({
+    await this.auditLogRepo.create({
       userId,
       action: 'DELETE_CLIENT',
       entity: 'clients',

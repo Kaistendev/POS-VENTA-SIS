@@ -5,7 +5,7 @@ import { app, BrowserWindow, ipcMain, dialog } from "electron";
 import path from "path";
 import { fileURLToPath } from "url";
 import { setupIpcHandlers } from "./ipc.js";
-import { prisma } from "./prisma/client.js";
+import { container } from "./di/container.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -104,9 +104,13 @@ app.on("window-all-closed", () => {
 });
 
 app.whenReady().then(async () => {
-  // 1. Test Prisma connection
+  // 1. Test Prisma connection and setup SQLite optimizations
   try {
-    await prisma.$connect();
+    await container.prisma.$connect();
+    await container.prisma.$queryRaw`PRAGMA journal_mode=WAL`;
+    await container.prisma.$queryRaw`PRAGMA synchronous=NORMAL`;
+    await container.prisma.$queryRaw`PRAGMA cache_size=10000`;
+    await container.prisma.$queryRaw`PRAGMA temp_store=MEMORY`;
     console.log("✅ Prisma connected to SQLite successfully.");
   } catch (err) {
     console.error("❌ Failed to connect to SQLite:", err);

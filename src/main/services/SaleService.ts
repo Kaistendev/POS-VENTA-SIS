@@ -1,312 +1,134 @@
-import { prisma } from '../prisma/client.js';
+import { ISaleRepository } from '../../domain/ports/ISaleRepository.js';
+import { IProductRepository } from '../../domain/ports/IProductRepository.js';
+import { IClientRepository } from '../../domain/ports/IClientRepository.js';
+import { ICashRegisterRepository } from '../../domain/ports/ICashRegisterRepository.js';
+import { ISettingsRepository } from '../../domain/ports/ISettingsRepository.js';
+import { IAuditLogRepository } from '../../domain/ports/IAuditLogRepository.js';
+import { SaleFilterDTO, RegisterSaleDTO } from '../../domain/dtos.js';
+import { IDashboardRepository } from '../../domain/ports/IDashboardRepository.js';
+import { NotFoundError, BusinessRuleError } from '../../shared/errors.js';
 import { saleSchema } from '../../common/schemas.js';
-import { DashboardRepository } from '../repositories/DashboardRepository.js';
-import { createAuditLog } from '../utils/auditLog.js';
 
 export class SaleService {
-  /**
-   * Obtiene todas las ventas con filtros opcionales
-   */
-  static async getAllSales(
-    startDate?: Date,
-    endDate?: Date,
-    clientId?: number,
-    cashRegisterId?: number,
-  ) {
-    const where: any = {};
+  constructor(
+    private saleRepo: ISaleRepository,
+    private productRepo: IProductRepository,
+    private clientRepo: IClientRepository,
+    private cashRegisterRepo: ICashRegisterRepository,
+    private settingsRepo: ISettingsRepository,
+    private auditLogRepo: IAuditLogRepository,
+    private dashboardService: IDashboardRepository,
+  ) {}
 
-    // Filtro por fecha
-    if (startDate || endDate) {
-      where.created_at = {};
-      if (startDate) {
-        where.created_at.gte = startDate;
-      }
-      if (endDate) {
-        where.created_at.lte = endDate;
-      }
-    }
+  async getAllSales(startDate?: Date, endDate?: Date, clientId?: number, cashRegisterId?: number) {
+    const filter: SaleFilterDTO = {};
+    if (startDate) filter.startDate = startDate;
+    if (endDate) filter.endDate = endDate;
+    if (clientId) filter.clientId = clientId;
+    if (cashRegisterId) filter.cashRegisterId = cashRegisterId;
 
-    // Filtro por cliente
-    if (clientId) {
-      where.client_id = clientId;
-    }
-
-    // Filtro por caja
-    if (cashRegisterId) {
-      where.cash_register_id = cashRegisterId;
-    }
-
-    return prisma.sale.findMany({
-      where,
-      select: {
-        id: true,
-        total: true,
-        payment_method: true,
-        created_at: true,
-        client: {
-          select: { id: true, name: true, dni: true },
-        },
-        cash_register: {
-          select: { id: true, opened_at: true, opening_amount: true },
-        },
-      },
-      orderBy: { created_at: 'desc' },
-    });
+    return this.saleRepo.findAll(filter);
   }
 
-  /**
-   * Obtiene una venta por ID con todos sus detalles
-   */
-  static async getSaleDetails(id: number) {
-    const sale = await prisma.sale.findUnique({
-      where: { id },
-      include: {
-        items: {
-          include: {
-            product: true,
-          },
-        },
-        client: true,
-        cash_register: true,
-      },
-    });
-
-    if (!sale) {
-      throw new Error('Venta no encontrada');
-    }
-
+  async getSaleDetails(id: number) {
+    const sale = await this.saleRepo.findById(id);
+    if (!sale) throw new NotFoundError('Venta');
     return sale;
   }
 
-  /**
-   * Obtiene ventas del día actual
-   */
-  static async getTodaySales() {
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
-
-    const endOfDay = new Date();
-    endOfDay.setHours(23, 59, 59, 999);
-
-    return prisma.sale.findMany({
-      where: {
-        created_at: {
-          gte: startOfDay,
-          lte: endOfDay,
-        },
-      },
-      include: {
-        client: true,
-        cash_register: true,
-      },
-      orderBy: { created_at: 'desc' },
-    });
+  async getTodaySales() {
+    return this.saleRepo.findToday();
   }
 
-  /**
-   * Obtiene estadísticas de ventas
-   */
-  static async getSalesStats(startDate?: Date, endDate?: Date) {
-    const where: any = {};
-
-    if (startDate || endDate) {
-      where.created_at = {};
-      if (startDate) {
-        where.created_at.gte = startDate;
-      }
-      if (endDate) {
-        where.created_at.lte = endDate;
-      }
-    }
-
-    const stats = await prisma.sale.aggregate({
-      where,
-      _count: {
-        id: true,
-      },
-      _sum: {
-        total: true,
-      },
-      _avg: {
-        total: true,
-      },
-    });
-
-    return {
-      totalSales: stats._count.id,
-      totalRevenue: stats._sum.total || 0,
-      averageSale: stats._avg.total || 0,
-    };
+  async getSalesStats(startDate?: Date, endDate?: Date) {
+    return this.saleRepo.getStats(startDate, endDate);
   }
 
-  /**
-   * Obtiene la última venta registrada
-   */
-  static async getLastSale() {
-    return prisma.sale.findFirst({
-      orderBy: { created_at: 'desc' },
-      include: { items: true },
-    });
+  async getLastSale() {
+    return this.saleRepo.findLast();
   }
 
-  /**
-   * Registra una nueva venta con actualización de inventario
-   */
-  static async registerSale(
-    saleData: any,
-    itemsData: any[],
-    userId: number = 1,
-  ) {
-    // Validar con Zod
+  async registerSale(saleData: any, itemsData: any[], userId: number = 1) {
     const validated = saleSchema.parse({ ...saleData, items: itemsData });
 
-    // Verificar que la caja existe y está abierta
-    const cashRegister = await prisma.cashRegister.findFirst({
-      where: {
-        id: validated.cash_register_id,
-        opened_at: {
-          gte: new Date(new Date().setHours(0, 0, 0, 0)),
-        },
-      },
-    });
-
-    if (!cashRegister) {
-      throw new Error('La caja no está abierta o no existe.');
-    }
+    const cashRegister = await this.cashRegisterRepo.findOpen();
+    if (!cashRegister) throw new BusinessRuleError('La caja no está abierta o no existe.');
 
     let finalClientId = validated.client_id;
 
-    // Lógica de Cliente Dinámico: Si se provee nombre y DNI, buscamos o creamos
     if (validated.client_dni && validated.client_name && !finalClientId) {
-      const existingClient = await prisma.client.findFirst({
-        where: { dni: validated.client_dni },
-      });
-
+      const existingClient = await this.clientRepo.findByDni(validated.client_dni);
       if (existingClient) {
         finalClientId = existingClient.id;
       } else {
-        // Crear cliente al vuelo
-        const client = await prisma.client.create({
-          data: {
-            dni: validated.client_dni,
-            name: validated.client_name,
-            code: `CLI-${Date.now()}`,
-          },
+        const client = await this.clientRepo.create({
+          dni: validated.client_dni,
+          name: validated.client_name,
+          code: `CLI-${Date.now()}`,
         });
         finalClientId = client.id;
       }
     }
 
-    // Verificar que el cliente existe (si se proporciona client_id directamente)
     if (finalClientId) {
-      const client = await prisma.client.findUnique({
-        where: { id: finalClientId },
-      });
+      const client = await this.clientRepo.findById(finalClientId);
+      if (!client) throw new NotFoundError('Cliente');
+    }
 
-      if (!client) {
-        throw new Error('El cliente no existe.');
+    const productIds = validated.items.map((item: any) => item.product_id);
+    const products = await this.productRepo.findByIds(productIds);
+    const productMap = new Map(products.map((p: any) => [p.id, p]));
+
+    for (const item of validated.items) {
+      const product = productMap.get(item.product_id);
+      if (!product) throw new NotFoundError(`Producto`, item.product_id);
+      if (product.stock < item.quantity) {
+        throw new BusinessRuleError(
+          `Stock insuficiente para "${product.name}". Stock actual: ${product.stock}, Cantidad solicitada: ${item.quantity}`,
+        );
       }
     }
 
-    // Usamos una transacción para asegurar consistencia
-    const saleId = await prisma.$transaction(async (tx) => {
-      // Obtener productos para calcular purchase_price y verificar stock
-      const productIds = validated.items.map((item: any) => item.product_id);
-      const products = await tx.product.findMany({
-        where: { id: { in: productIds } },
-      });
-
-      const productMap = new Map(products.map((p) => [p.id, p]));
-
-      // Verificar stock suficiente para todos los productos
-      for (const item of validated.items) {
-        const product = productMap.get(item.product_id);
-
-        if (!product) {
-          throw new Error(`El producto ID ${item.product_id} no existe.`);
-        }
-
-        if (product.stock < item.quantity) {
-          throw new Error(
-            `Stock insuficiente para "${product.name}". Stock actual: ${product.stock}, Cantidad solicitada: ${item.quantity}`,
-          );
-        }
-      }
-
-      const itemsWithPurchasePrice = validated.items.map((item: any) => {
-        const product = productMap.get(item.product_id);
-        return {
-          ...item,
-          purchase_price: product?.price_purchase || 0,
-        };
-      });
-
-      const total = itemsWithPurchasePrice.reduce(
-        (acc: number, item: any) => acc + item.unit_price * item.quantity,
-        0,
-      );
-
-      // Crear la venta
-      const sale = await tx.sale.create({
-        data: {
-          cash_register_id: validated.cash_register_id,
-          client_id: finalClientId || 1, // Default to a generic client if not provided
-          total,
-        },
-      });
-
-      // Crear los items de la venta y actualizar stock
-      for (const item of itemsWithPurchasePrice) {
-        // Crear item de venta
-        await tx.saleItem.create({
-          data: {
-            sale_id: sale.id,
-            product_id: item.product_id,
-            quantity: item.quantity,
-            unit_price: item.unit_price,
-            purchase_price: item.purchase_price,
-          },
-        });
-
-        // Actualizar stock del producto (decrementar)
-        await tx.product.update({
-          where: { id: item.product_id },
-          data: {
-            stock: {
-              decrement: item.quantity,
-            },
-          },
-        });
-
-        // Crear movimiento de inventario (SALIDA)
-        await tx.inventoryMovement.create({
-          data: {
-            product_id: item.product_id,
-            type: 'SALIDA',
-            quantity: item.quantity,
-            reason: 'VENTA',
-          },
-        });
-      }
-
-      // Actualizar total de ventas de la caja
-      await tx.cashRegister.update({
-        where: { id: validated.cash_register_id },
-        data: {
-          total_sales: {
-            increment: total,
-          },
-        },
-      });
-
-      return sale.id;
+    const itemsWithPurchasePrice = validated.items.map((item: any) => {
+      const product = productMap.get(item.product_id);
+      return {
+        product_id: item.product_id,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        purchase_price: product?.price_purchase || 0,
+      };
     });
 
-    // Invalidar cache del dashboard
-    DashboardRepository.invalidateCache();
+    const rawTotal = itemsWithPurchasePrice.reduce(
+      (acc: number, item: any) => acc + item.unit_price * item.quantity,
+      0,
+    );
 
-    // Registrar en auditoría
-    await createAuditLog({
+    const taxSettings = await this.settingsRepo.getTaxSettings();
+    let subtotal = rawTotal;
+    let taxAmount = 0;
+    let total = rawTotal;
+
+    if (taxSettings.taxType !== 'none' && taxSettings.taxRate > 0) {
+      taxAmount = parseFloat((rawTotal * taxSettings.taxRate).toFixed(2));
+      total = parseFloat((subtotal + taxAmount).toFixed(2));
+    }
+
+    const registerInput: RegisterSaleDTO = {
+      cash_register_id: validated.cash_register_id,
+      client_id: finalClientId || 1,
+      subtotal,
+      tax_amount: taxAmount,
+      total,
+      items: itemsWithPurchasePrice,
+      payment_method: validated.payment_method,
+    };
+
+    const saleId = await this.saleRepo.registerSale(registerInput);
+
+    this.dashboardService.invalidateCache();
+
+    await this.auditLogRepo.create({
       userId,
       action: 'CREATE_SALE',
       entity: 'sales',
@@ -316,70 +138,15 @@ export class SaleService {
     return { success: true, id: saleId };
   }
 
-  /**
-   * Anula una venta (devolución completa)
-   */
-  static async cancelSale(saleId: number, userId: number = 1) {
-    // Verificar que la venta existe
-    const sale = await prisma.sale.findUnique({
-      where: { id: saleId },
-      include: {
-        items: true,
-      },
-    });
+  async cancelSale(saleId: number, userId: number = 1) {
+    const sale = await this.saleRepo.findById(saleId);
+    if (!sale) throw new NotFoundError('Venta');
 
-    if (!sale) {
-      throw new Error('Venta no encontrada');
-    }
+    await this.saleRepo.cancelSale(saleId);
 
-    // Verificar si ya fue anulada (buscar en auditoría)
-    // Nota: Podríamos agregar un campo "status" o "cancelled" en el futuro
+    this.dashboardService.invalidateCache();
 
-    await prisma.$transaction(async (tx) => {
-      // Devolver stock de los productos
-      for (const item of sale.items) {
-        // Actualizar stock del producto (incrementar)
-        await tx.product.update({
-          where: { id: item.product_id },
-          data: {
-            stock: {
-              increment: item.quantity,
-            },
-          },
-        });
-
-        // Crear movimiento de inventario (ENTRADA por devolución)
-        await tx.inventoryMovement.create({
-          data: {
-            product_id: item.product_id,
-            type: 'ENTRADA',
-            quantity: item.quantity,
-            reason: 'DEVOLUCION',
-          },
-        });
-      }
-
-      // Actualizar total de ventas de la caja (decrementar)
-      await tx.cashRegister.update({
-        where: { id: sale.cash_register_id },
-        data: {
-          total_sales: {
-            decrement: sale.total,
-          },
-        },
-      });
-
-      // Eliminar la venta y sus items (cascade delete)
-      await tx.sale.delete({
-        where: { id: saleId },
-      });
-    });
-
-    // Invalidar cache del dashboard
-    DashboardRepository.invalidateCache();
-
-    // Registrar en auditoría
-    await createAuditLog({
+    await this.auditLogRepo.create({
       userId,
       action: 'CANCEL_SALE',
       entity: 'sales',

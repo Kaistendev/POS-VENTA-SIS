@@ -9,6 +9,8 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "test": "vitest",
+    "test:run": "vitest run",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",
@@ -53,6 +55,8 @@
     "@types/node": "^25.5.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
+    "@typescript-eslint/eslint-plugin": "^8.59.2",
+    "@typescript-eslint/parser": "^8.59.2",
     "@vitejs/plugin-react": "^6.0.1",
     "autoprefixer": "^10.4.27",
     "bcryptjs": "^3.0.3",
@@ -67,6 +71,7 @@
     "typescript": "^6.0.2",
     "vite": "^8.0.4",
     "vite-plugin-electron": "^0.29.1",
-    "vite-plugin-electron-renderer": "^0.14.6"
+    "vite-plugin-electron-renderer": "^0.14.6",
+    "vitest": "^4.1.5"
   }
 }

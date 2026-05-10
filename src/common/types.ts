@@ -1,3 +1,10 @@
+/**
+ * @deprecated Use domain models from `src/domain/models.ts` instead.
+ * These legacy types are kept for frontend compatibility and will be
+ * migrated in a future sprint. Differences from domain models:
+ * - `id?: number` (optional, for new entities)
+ * - Dates allow `string` for ISO serialization
+ */
 export interface User {
   id?: number;
   username: string;
@@ -55,6 +62,8 @@ export interface Sale {
   cash_register_id: number;
   client_id: number;
   total: number;
+  subtotal?: number;
+  tax_amount?: number;
   payment_method?: string;
   created_at?: Date | string;
   updated_at?: Date | string;

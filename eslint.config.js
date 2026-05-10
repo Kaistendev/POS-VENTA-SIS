@@ -2,10 +2,12 @@ import js from '@eslint/js'
 import globals from 'globals'
 import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
+import tsPlugin from '@typescript-eslint/eslint-plugin'
+import tsParser from '@typescript-eslint/parser'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  globalIgnores(['dist', 'dist-electron']),
   {
     files: ['**/*.{js,jsx}'],
     extends: [
@@ -24,6 +26,23 @@ export default defineConfig([
     },
     rules: {
       'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+    },
+  },
+  {
+    files: ['**/*.{ts,tsx}'],
+    plugins: { '@typescript-eslint': tsPlugin },
+    languageOptions: {
+      parser: tsParser,
+      parserOptions: {
+        project: './tsconfig.json',
+        ecmaVersion: 'latest',
+        sourceType: 'module',
+      },
+      globals: globals.browser,
+    },
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
     },
   },
 ])

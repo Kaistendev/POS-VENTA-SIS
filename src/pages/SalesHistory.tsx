@@ -13,18 +13,21 @@ export default function SalesHistory() {
   const [selectedSale, setSelectedSale] = useState<any>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [businessInfo, setBusinessInfo] = useState<any>(null);
+  const [taxSettings, setTaxSettings] = useState<{ taxRate: number; taxType: string; taxIncluded: boolean }>({ taxRate: 0, taxType: 'none', taxIncluded: false });
   const { success, error: toastError } = useToast();
 
   const fetchSales = async () => {
     setLoading(true);
     try {
       if (window.api) {
-        const [data, settings] = await Promise.all([
+        const [data, settings, tax] = await Promise.all([
             window.api.getAllSales(),
-            window.api.getSettings()
+            window.api.getSettings(),
+            window.api.getTaxSettings()
         ]);
         setSales(data || []);
         setBusinessInfo(settings);
+        setTaxSettings(tax || { taxRate: 0, taxType: 'none', taxIncluded: false });
       }
     } catch (err) {
       toastError('Error al cargar el historial');
@@ -70,6 +73,8 @@ const downloadTicket = (sale: any) => {
   const bizAddress = businessInfo?.business_address || '';
   const bizPhone = businessInfo?.business_phone || '';
   const footer = businessInfo?.ticket_footer || '¡Gracias por su compra!';
+  const taxAmt = sale.tax_amount || 0;
+  const subtotal = sale.subtotal || sale.total;
 
   doc.setFontSize(12);
   doc.text(bizName, 40, 10, { align: 'center' });
@@ -95,10 +100,17 @@ const downloadTicket = (sale: any) => {
   });
 
   doc.text('------------------------------------------', 5, y + 2);
+  doc.setFontSize(9);
+  doc.text(`Subtotal:`, 5, y + 8);
+  doc.text(`$${subtotal.toFixed(2)}`, 75, y + 8, { align: 'right' });
+  if (taxAmt > 0) {
+    doc.text(`${taxSettings.taxType.toUpperCase()} (${taxSettings.taxRate * 100}%):`, 5, y + 13);
+    doc.text(`$${taxAmt.toFixed(2)}`, 75, y + 13, { align: 'right' });
+  }
   doc.setFontSize(10);
-  doc.text(`TOTAL: $${sale.total.toFixed(2)}`, 75, y + 10, { align: 'right' });
+  doc.text(`TOTAL: $${sale.total.toFixed(2)}`, 75, taxAmt > 0 ? y + 20 : y + 15, { align: 'right' });
   doc.setFontSize(8);
-  doc.text(footer, 40, y + 20, { align: 'center' });
+  doc.text(footer, 40, taxAmt > 0 ? y + 28 : y + 23, { align: 'center' });
   doc.save(`Ticket_Reimpresion_${sale.id}.pdf`);
 };
   const filteredSales = sales.filter(s => 
@@ -208,15 +220,29 @@ const downloadTicket = (sale: any) => {
                   </div>
                 </div>
 
-                <div className="pt-4 border-t border-white/5 flex justify-between items-end">
-                  <div>
-                    <p className="text-xs text-gray-500">Cliente</p>
-                    <p className="text-sm text-white font-medium">{selectedSale.client?.name || 'Cliente General'}</p>
+                <div className="pt-4 border-t border-white/5">
+                  <div className="flex justify-between items-end mb-3">
+                    <div>
+                      <p className="text-xs text-gray-500">Cliente</p>
+                      <p className="text-sm text-white font-medium">{selectedSale.client?.name || 'Cliente General'}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-gray-500">Total Pagado</p>
+                      <p className="text-2xl font-black text-primary">${selectedSale.total.toFixed(2)}</p>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-xs text-gray-500">Total Pagado</p>
-                    <p className="text-2xl font-black text-primary">${selectedSale.total.toFixed(2)}</p>
-                  </div>
+                  {(selectedSale.tax_amount || 0) > 0 && (
+                    <div className="flex justify-between text-xs text-gray-400 pt-2 border-t border-white/5">
+                      <span>Subtotal</span>
+                      <span>${(selectedSale.subtotal || 0).toFixed(2)}</span>
+                    </div>
+                  )}
+                  {(selectedSale.tax_amount || 0) > 0 && (
+                    <div className="flex justify-between text-xs text-gray-400">
+                      <span>{taxSettings.taxType.toUpperCase()} ({taxSettings.taxRate * 100}%)</span>
+                      <span>${(selectedSale.tax_amount || 0).toFixed(2)}</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-3 pt-4">

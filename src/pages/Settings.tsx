@@ -331,7 +331,7 @@ export default function Settings() {
                 </div>
               )}
 
-              <div className="glass-panel p-6 rounded-3xl border border-white/5">
+              <div className="glass-panel p-6 rounded-3xl border border-white/5 mt-6">
                 <h4 className="text-lg font-bold text-white mb-4">Información de Respaldos</h4>
                 <div className="space-y-3 text-sm text-gray-400">
                   <p>• Los respaldos se guardan comprimidos (.sqlite.gz) en la carpeta del sistema</p>
@@ -340,7 +340,7 @@ export default function Settings() {
                   <p className="text-yellow-400">• Después de restaurar, reinicia la aplicación para ver los cambios</p>
                 </div>
               </div>
-            </motion.div>
+            </div>
           </motion.div>
         ) : (
           /* Tax Settings Tab */
@@ -427,21 +427,6 @@ export default function Settings() {
                   <Save className="w-5 h-5 inline mr-2" />
                   Guardar Configuración de Impuestos
                 </button>
-              </div>
-            </div>
-          </motion.div>
-        )}
-                </div>
-              )}
-            </div>
-
-            <div className="glass-panel p-6 rounded-3xl border border-white/5">
-              <h4 className="text-lg font-bold text-white mb-4">Información de Respaldos</h4>
-              <div className="space-y-3 text-sm text-gray-400">
-                <p>• Los respaldos se guardan comprimidos (.sqlite.gz) en la carpeta del sistema</p>
-                <p>• Se crea un respaldo automático diario si no existe uno para ese día</p>
-                <p>• Al restaurar, se crea un respaldo de seguridad automáticamente</p>
-                <p className="text-yellow-400">• Después de restaurar, reinicia la aplicación para ver los cambios</p>
               </div>
             </div>
           </motion.div>

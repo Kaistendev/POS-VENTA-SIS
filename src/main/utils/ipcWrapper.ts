@@ -1,25 +1,53 @@
 import { ZodSchema, ZodError } from "zod";
+import {
+  DomainError,
+  NotFoundError,
+  ValidationError,
+  ConflictError,
+  BusinessRuleError,
+} from "../../shared/errors.js";
 
-/**
- * Interface for standardized IPC responses
- */
-export interface IpcResponse<T = any> {
+export interface IpcResponse<T = unknown> {
   success: boolean;
   data?: T;
   message?: string;
   errors?: string[];
+  code?: string;
 }
 
-/**
- * Wraps an IPC handler to provide consistent error handling and optional Zod validation.
- */
-export function wrapIpc<T = any>(
+function formatError(error: Error): IpcResponse<never> {
+  if (error instanceof ZodError) {
+    return {
+      success: false,
+      message: "Error de validación: " + error.issues.map(e => e.message).join(", "),
+      errors: error.issues.map((e) => `${e.path.join(".")}: ${e.message}`),
+      code: "VALIDATION",
+    };
+  }
+
+  if (error instanceof DomainError) {
+    return {
+      success: false,
+      message: error.message,
+      code: error.code,
+      errors: error instanceof ValidationError ? error.errors : undefined,
+    };
+  }
+
+  console.error("Unhandled IPC Error:", error);
+  return {
+    success: false,
+    message: error.message || "Ocurrió un error inesperado en el sistema",
+    code: "INTERNAL",
+  };
+}
+
+export function wrapIpc<T = unknown>(
   handler: (...args: any[]) => Promise<any>,
   schema?: ZodSchema
 ) {
   return async (_event: any, ...args: any[]): Promise<IpcResponse<T>> => {
     try {
-      // 1. Validation (if schema is provided)
       if (schema && args.length > 0) {
         const result = schema.safeParse(args[0]);
         if (!result.success) {
@@ -27,37 +55,25 @@ export function wrapIpc<T = any>(
             success: false,
             message: "Error de validación: " + result.error.issues.map(e => e.message).join(", "),
             errors: result.error.issues.map((e) => `${e.path.join(".")}: ${e.message}`),
+            code: "VALIDATION",
           };
         }
         args[0] = result.data;
       }
 
-      // 2. Execute the handler
       const data = await handler(...args);
-      
+
       if (data && typeof data === 'object' && 'success' in data) {
         return data as IpcResponse<T>;
       }
 
-      return {
-        success: true,
-        data,
-      };
+      return { success: true, data };
     } catch (error: any) {
-      console.error("IPC Error:", error);
-      
-      // Handle ZodErrors that might happen inside services
-      if (error instanceof ZodError) {
-        return {
-          success: false,
-          message: "Error de validación: " + error.issues.map(e => e.message).join(", "),
-        };
-      }
-      
-      return {
-        success: false,
-        message: error.message || "Ocurrió un error inesperado en el sistema",
-      };
+      return formatError(error);
     }
   };
+}
+
+export function handleIpcError(error: unknown): IpcResponse<never> {
+  return formatError(error instanceof Error ? error : new Error(String(error)));
 }

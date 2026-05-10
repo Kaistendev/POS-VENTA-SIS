@@ -1,0 +1,10 @@
+import { Purchase } from '../models.js';
+import { CreatePurchaseDTO } from '../dtos.js';
+
+export interface IPurchaseRepository {
+  findAll(supplierId?: number, status?: string): Promise<Purchase[]>;
+  findById(id: number): Promise<Purchase | null>;
+  create(data: CreatePurchaseDTO): Promise<Purchase>;
+  receive(purchaseId: number): Promise<void>;
+  cancel(purchaseId: number): Promise<void>;
+}

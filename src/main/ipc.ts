@@ -1,22 +1,9 @@
 import { ipcMain, dialog } from "electron";
-import { ClientService } from "./services/ClientService.js";
-import { ProductService } from "./services/ProductService.js";
-import { SaleService } from "./services/SaleService.js";
-import { AuthService } from "./services/AuthService.js";
-import { UserService } from "./services/UserService.js";
-import { DashboardRepository } from "./repositories/DashboardRepository.js";
-import { CashRegisterService } from "./services/CashRegisterService.js";
-import { CategoryRepository } from "./repositories/CategoryRepository.js";
-import { SettingsService } from "./services/SettingsService.js";
-import { SupplierService } from "./services/SupplierService.js";
-import { PurchaseService } from "./services/PurchaseService.js";
-import { InventoryMovementService } from "./services/InventoryMovementService.js";
-import { BackupService } from "./services/BackupService.js";
-import { prisma } from "./prisma/client.js";
+import { container } from "./di/container.js";
 import { wrapIpc } from "./utils/ipcWrapper.js";
-import { 
-  productSchema, 
-  clientSchema, 
+import {
+  productSchema,
+  clientSchema,
   saleSchema,
   categorySchema,
 } from "../common/schemas.js";
@@ -39,15 +26,15 @@ export function setupIpcHandlers() {
 
   ipcMain.handle("health:check", async () => {
     try {
-      await prisma.$queryRaw`SELECT 1`;
-      return { 
-        success: true, 
+      await container.prisma.$queryRaw`SELECT 1`;
+      return {
+        success: true,
         database: 'connected',
         timestamp: new Date().toISOString()
       };
     } catch (error: any) {
-      return { 
-        success: false, 
+      return {
+        success: false,
         database: 'disconnected',
         error: error.message,
         timestamp: new Date().toISOString()
@@ -60,7 +47,7 @@ export function setupIpcHandlers() {
    */
   ipcMain.handle("dashboard:getStats", async (_, startDate?: Date, endDate?: Date) => {
     try {
-      return await DashboardRepository.getStats(startDate, endDate);
+      return await container.dashboardService.getStats(startDate, endDate);
     } catch (error: any) {
       return { success: false, message: error.message };
     }
@@ -68,7 +55,7 @@ export function setupIpcHandlers() {
 
   ipcMain.handle("dashboard:getWeeklySales", async (_, days?: number) => {
     try {
-      return await DashboardRepository.getWeeklySales(days);
+      return await container.dashboardService.getWeeklySales(days);
     } catch (error: any) {
       return [];
     }
@@ -76,7 +63,7 @@ export function setupIpcHandlers() {
 
   ipcMain.handle("dashboard:getLowStock", async (_, limit?: number) => {
     try {
-      return await DashboardRepository.getLowStockProducts(limit || 50);
+      return await container.dashboardService.getLowStockProducts(limit || 50);
     } catch (error: any) {
       console.error('[IPC] Error getting low stock:', error);
       return [];
@@ -85,7 +72,7 @@ export function setupIpcHandlers() {
 
   ipcMain.handle("dashboard:getSalesByPayment", async (_, startDate?: Date, endDate?: Date) => {
     try {
-      return await DashboardRepository.getSalesByPaymentMethod(startDate, endDate);
+      return await container.dashboardService.getSalesByPaymentMethod(startDate, endDate);
     } catch (error: any) {
       return [];
     }
@@ -93,7 +80,7 @@ export function setupIpcHandlers() {
 
   ipcMain.handle("dashboard:getTopProducts", async (_, limit?: number, startDate?: Date, endDate?: Date) => {
     try {
-      return await DashboardRepository.getTopProducts(limit, startDate, endDate);
+      return await container.dashboardService.getTopProducts(limit, startDate, endDate);
     } catch (error: any) {
       return [];
     }
@@ -101,7 +88,7 @@ export function setupIpcHandlers() {
 
   ipcMain.handle("dashboard:getTopClients", async (_, limit?: number, startDate?: Date, endDate?: Date) => {
     try {
-      return await DashboardRepository.getTopClients(limit, startDate, endDate);
+      return await container.dashboardService.getTopClients(limit, startDate, endDate);
     } catch (error: any) {
       return [];
     }
@@ -109,7 +96,7 @@ export function setupIpcHandlers() {
 
   ipcMain.handle("dashboard:getSalesByHour", async (_, startDate?: Date, endDate?: Date) => {
     try {
-      return await DashboardRepository.getSalesByHour(startDate, endDate);
+      return await container.dashboardService.getSalesByHour(startDate, endDate);
     } catch (error: any) {
       return [];
     }
@@ -117,7 +104,7 @@ export function setupIpcHandlers() {
 
   ipcMain.handle("dashboard:getCashSummary", async (_, startDate?: Date, endDate?: Date) => {
     try {
-      return await DashboardRepository.getCashRegisterSummary(startDate, endDate);
+      return await container.dashboardService.getCashRegisterSummary(startDate, endDate);
     } catch (error: any) {
       return { success: false, message: error.message };
     }
@@ -125,7 +112,7 @@ export function setupIpcHandlers() {
 
   ipcMain.handle("dashboard:getInventoryMetrics", async () => {
     try {
-      return await DashboardRepository.getInventoryMetrics();
+      return await container.dashboardService.getInventoryMetrics();
     } catch (error: any) {
       return { success: false, message: error.message };
     }
@@ -133,7 +120,7 @@ export function setupIpcHandlers() {
 
   ipcMain.handle("dashboard:invalidateCache", async () => {
     try {
-      DashboardRepository.invalidateCache();
+      container.dashboardService.invalidateCache();
       return { success: true };
     } catch (error: any) {
       return { success: false, message: error.message };
@@ -145,7 +132,7 @@ export function setupIpcHandlers() {
    */
   ipcMain.handle("settings:getAll", async () => {
     try {
-      return await SettingsService.getSettings();
+      return await container.settingsService.getSettings();
     } catch (error: any) {
       return {};
     }
@@ -153,7 +140,7 @@ export function setupIpcHandlers() {
 
   ipcMain.handle("settings:update", async (_, settings: Record<string, string>) => {
     try {
-      return await SettingsService.updateSettings(settings);
+      return await container.settingsService.updateSettings(settings);
     } catch (error: any) {
       return { success: false, message: error.message };
     }
@@ -164,7 +151,7 @@ export function setupIpcHandlers() {
    */
   ipcMain.handle("cash:getOpen", async () => {
     try {
-      return await CashRegisterService.getOpenRegister();
+      return await container.cashRegisterService.getOpenRegister();
     } catch (error: any) {
       return null;
     }
@@ -172,44 +159,34 @@ export function setupIpcHandlers() {
 
   ipcMain.handle("cash:getAll", async (_, startDate?: Date, endDate?: Date) => {
     try {
-      return await CashRegisterService.getAllRegisters(startDate, endDate);
+      return await container.cashRegisterService.getAllRegisters(startDate, endDate);
     } catch (error: any) {
-      return {
-        success: false,
-        message: error.message || "Error al obtener cajas",
-      };
+      return { success: false, message: error.message || "Error al obtener cajas" };
     }
   });
 
   ipcMain.handle("cash:getDetails", async (_, id) => {
     try {
-      return await CashRegisterService.getRegisterDetails(id);
+      return await container.cashRegisterService.getRegisterDetails(id);
     } catch (error: any) {
-      return {
-        success: false,
-        message: error.message || "Error al obtener detalles de caja",
-      };
+      return { success: false, message: error.message || "Error al obtener detalles de caja" };
     }
   });
 
   ipcMain.handle("cash:getDailySummary", async (_, registerId) => {
     try {
-      return await CashRegisterService.getDailySummary(registerId);
+      return await container.cashRegisterService.getDailySummary(registerId);
     } catch (error: any) {
-      return {
-        success: false,
-        message: error.message || "Error al obtener resumen del día",
-      };
+      return { success: false, message: error.message || "Error al obtener resumen del día" };
     }
   });
 
-  // Eliminados validadores de Zod aquí porque el frontend envía números directos, no objetos
-  ipcMain.handle("cash:open", wrapIpc((amount: number, userId: number) => 
-    CashRegisterService.openRegister(amount, userId)
+  ipcMain.handle("cash:open", wrapIpc((amount: number, userId: number) =>
+    container.cashRegisterService.openRegister(amount, userId)
   ));
 
-  ipcMain.handle("cash:close", wrapIpc((id: number, amount: number, userId: number) => 
-    CashRegisterService.closeRegister(id, amount, userId)
+  ipcMain.handle("cash:close", wrapIpc((id: number, amount: number, userId: number) =>
+    container.cashRegisterService.closeRegister(id, amount, userId)
   ));
 
   /**
@@ -217,12 +194,9 @@ export function setupIpcHandlers() {
    */
   ipcMain.handle("auth:login", async (_, username, password) => {
     try {
-      return await AuthService.login(username, password);
+      return await container.authService.login(username, password);
     } catch (error: any) {
-      return {
-        success: false,
-        message: error.message || "Error de autenticación",
-      };
+      return { success: false, message: error.message || "Error de autenticación" };
     }
   });
 
@@ -231,43 +205,34 @@ export function setupIpcHandlers() {
    */
   ipcMain.handle("clients:getAll", async (_, search?: string) => {
     try {
-      return await ClientService.getAllClients(search);
+      return await container.clientService.getAllClients(search);
     } catch (error: any) {
-      return {
-        success: false,
-        message: error.message || "Error al obtener clientes",
-      };
+      return { success: false, message: error.message || "Error al obtener clientes" };
     }
   });
 
   ipcMain.handle("clients:getById", async (_, id) => {
     try {
-      return await ClientService.getClientById(id);
+      return await container.clientService.getClientById(id);
     } catch (error: any) {
-      return {
-        success: false,
-        message: error.message || "Error al obtener cliente",
-      };
+      return { success: false, message: error.message || "Error al obtener cliente" };
     }
   });
 
-  ipcMain.handle("clients:create", wrapIpc((clientData, userId) => 
-    ClientService.createClient(clientData, userId),
+  ipcMain.handle("clients:create", wrapIpc((clientData, userId) =>
+    container.clientService.createClient(clientData, userId),
     clientSchema
   ));
 
-  ipcMain.handle("clients:update", wrapIpc((id, clientData, userId) => 
-    ClientService.updateClient(id, clientData, userId)
+  ipcMain.handle("clients:update", wrapIpc((id, clientData, userId) =>
+    container.clientService.updateClient(id, clientData, userId)
   ));
 
   ipcMain.handle("clients:delete", async (_, id, userId) => {
     try {
-      return await ClientService.deleteClient(id, userId);
+      return await container.clientService.deleteClient(id, userId);
     } catch (error: any) {
-      return {
-        success: false,
-        message: error.message || "Error al eliminar cliente",
-      };
+      return { success: false, message: error.message || "Error al eliminar cliente" };
     }
   });
 
@@ -276,138 +241,92 @@ export function setupIpcHandlers() {
    */
   ipcMain.handle("products:getAll", async (_, search?: string, categoryId?: number) => {
     try {
-      return await ProductService.getAllProducts(search, categoryId);
+      return await container.productService.getAllProducts(search, categoryId);
     } catch (error: any) {
-      return {
-        success: false,
-        message: error.message || "Error al obtener productos",
-      };
+      return { success: false, message: error.message || "Error al obtener productos" };
     }
   });
 
   ipcMain.handle("products:getById", async (_, id) => {
     try {
-      return await ProductService.getProductById(id);
+      return await container.productService.getProductById(id);
     } catch (error: any) {
-      return {
-        success: false,
-        message: error.message || "Error al obtener producto",
-      };
+      return { success: false, message: error.message || "Error al obtener producto" };
     }
   });
 
   ipcMain.handle("products:getLowStock", async () => {
     try {
-      return await DashboardRepository.getLowStockProducts(50);
+      return await container.dashboardService.getLowStockProducts(50);
     } catch (error: any) {
       console.error('Get low stock products error:', error);
       return [];
     }
   });
 
-  ipcMain.handle("products:create", wrapIpc((productData, userId) => 
-    ProductService.createProduct(productData, userId), 
+  ipcMain.handle("products:create", wrapIpc((productData, userId) =>
+    container.productService.createProduct(productData, userId),
     productSchema
   ));
 
-  ipcMain.handle("products:update", wrapIpc((id, productData, userId) => 
-    ProductService.updateProduct(id, productData, userId)
+  ipcMain.handle("products:update", wrapIpc((id, productData, userId) =>
+    container.productService.updateProduct(id, productData, userId)
   ));
 
   ipcMain.handle("products:delete", async (_, id, userId) => {
     try {
-      return await ProductService.deleteProduct(id, userId);
+      return await container.productService.deleteProduct(id, userId);
     } catch (error: any) {
-      return {
-        success: false,
-        message: error.message || "Error al eliminar producto",
-      };
+      return { success: false, message: error.message || "Error al eliminar producto" };
     }
   });
 
-  ipcMain.handle(
-    "products:addStock",
-    async (_, productId, quantity, userId, reason) => {
-      try {
-        return await ProductService.addStock(
-          productId,
-          quantity,
-          userId,
-          reason
-        );
-      } catch (error: any) {
-        return {
-          success: false,
-          message: error.message || "Error al añadir stock",
-        };
-      }
-    },
-  );
+  ipcMain.handle("products:addStock", async (_, productId, quantity, userId, reason) => {
+    try {
+      return await container.productService.addStock(productId, quantity, userId, reason);
+    } catch (error: any) {
+      return { success: false, message: error.message || "Error al añadir stock" };
+    }
+  });
 
-  ipcMain.handle(
-    "products:removeStock",
-    async (_, productId, quantity, userId, reason) => {
-      try {
-        return await ProductService.removeStock(
-          productId,
-          quantity,
-          userId,
-          reason
-        );
-      } catch (error: any) {
-        return {
-          success: false,
-          message: error.message || "Error al reducir stock",
-        };
-      }
-    },
-  );
+  ipcMain.handle("products:removeStock", async (_, productId, quantity, userId, reason) => {
+    try {
+      return await container.productService.removeStock(productId, quantity, userId, reason);
+    } catch (error: any) {
+      return { success: false, message: error.message || "Error al reducir stock" };
+    }
+  });
 
-  ipcMain.handle(
-    "products:getMovements",
-    async (_, productId, limit) => {
-      try {
-        return await ProductService.getInventoryMovements(productId, limit);
-      } catch (error: any) {
-        return {
-          success: false,
-          message: error.message || "Error al obtener movimientos",
-        };
-      }
-    },
-  );
+  ipcMain.handle("products:getMovements", async (_, productId, limit) => {
+    try {
+      return await container.productService.getInventoryMovements(productId, limit);
+    } catch (error: any) {
+      return { success: false, message: error.message || "Error al obtener movimientos" };
+    }
+  });
 
   /**
    * SALES
    */
-  ipcMain.handle(
-    "sales:getAll",
-    async (_, startDate?: Date, endDate?: Date, clientId?: number, cashRegisterId?: number) => {
-      try {
-        return await SaleService.getAllSales(startDate, endDate, clientId, cashRegisterId);
-      } catch (error: any) {
-        return {
-          success: false,
-          message: error.message || "Error al obtener ventas",
-        };
-      }
-    },
-  );
+  ipcMain.handle("sales:getAll", async (_, startDate?: Date, endDate?: Date, clientId?: number, cashRegisterId?: number) => {
+    try {
+      return await container.saleService.getAllSales(startDate, endDate, clientId, cashRegisterId);
+    } catch (error: any) {
+      return { success: false, message: error.message || "Error al obtener ventas" };
+    }
+  });
 
   ipcMain.handle("sales:getToday", async () => {
     try {
-      return await SaleService.getTodaySales();
+      return await container.saleService.getTodaySales();
     } catch (error: any) {
-      return {
-        success: false,
-        message: error.message || "Error al obtener ventas del día",
-      };
+      return { success: false, message: error.message || "Error al obtener ventas del día" };
     }
   });
 
   ipcMain.handle("sales:getLast", async () => {
     try {
-      return await SaleService.getLastSale();
+      return await container.saleService.getLastSale();
     } catch (error: any) {
       return null;
     }
@@ -415,38 +334,29 @@ export function setupIpcHandlers() {
 
   ipcMain.handle("sales:getStats", async (_, startDate?: Date, endDate?: Date) => {
     try {
-      return await SaleService.getSalesStats(startDate, endDate);
+      return await container.saleService.getSalesStats(startDate, endDate);
     } catch (error: any) {
-      return {
-        success: false,
-        message: error.message || "Error al obtener estadísticas",
-      };
+      return { success: false, message: error.message || "Error al obtener estadísticas" };
     }
   });
 
   ipcMain.handle("sales:getDetails", async (_, saleId) => {
     try {
-      return await SaleService.getSaleDetails(saleId);
+      return await container.saleService.getSaleDetails(saleId);
     } catch (error: any) {
-      return {
-        success: false,
-        message: error.message || "Error al obtener detalles de venta",
-      };
+      return { success: false, message: error.message || "Error al obtener detalles de venta" };
     }
   });
 
   ipcMain.handle("sales:register", wrapIpc(async (saleData, itemsData, userId) => {
-    return SaleService.registerSale(saleData, itemsData, userId);
+    return container.saleService.registerSale(saleData, itemsData, userId);
   }, saleSchema.omit({ items: true })));
 
   ipcMain.handle("sales:cancel", async (_, saleId, userId) => {
     try {
-      return await SaleService.cancelSale(saleId, userId);
+      return await container.saleService.cancelSale(saleId, userId);
     } catch (error: any) {
-      return {
-        success: false,
-        message: error.message || "Error al cancelar venta",
-      };
+      return { success: false, message: error.message || "Error al cancelar venta" };
     }
   });
 
@@ -454,109 +364,80 @@ export function setupIpcHandlers() {
    * CATEGORIES
    */
   ipcMain.handle("categories:getAll", async (_, search?: string) => {
-    try {
-      return await CategoryRepository.findAll(search);
-    } catch (error: any) {
-      return [];
-    }
+    return await container.categoryService.getAllCategories(search);
   });
 
   ipcMain.handle("categories:getById", async (_, id) => {
     try {
-      return await CategoryRepository.findById(id);
+      return await container.categoryService.getCategoryById(id);
     } catch (error: any) {
-      return {
-        success: false,
-        message: error.message || "Error al obtener categoría",
-      };
+      return { success: false, message: error.message || "Error al obtener categoría" };
     }
   });
 
-  ipcMain.handle("categories:create", wrapIpc((categoryData, userId) => 
-    CategoryRepository.create(categoryData, userId),
-    categorySchema
-  ));
+  ipcMain.handle("categories:create", wrapIpc(async (categoryData, userId) => {
+    return await container.categoryService.createCategory(categoryData, userId);
+  }, categorySchema));
 
-  ipcMain.handle("categories:update", wrapIpc((id, categoryData, userId) => 
-    CategoryRepository.update(id, categoryData, userId)
-  ));
+  ipcMain.handle("categories:update", wrapIpc(async (id, categoryData, userId) => {
+    const parsed = categorySchema.parse(categoryData);
+    return await container.categoryService.updateCategory(id, parsed, userId);
+  }));
 
-  ipcMain.handle("categories:delete", async (_, id, userId) => {
-    try {
-      return await CategoryRepository.delete(id, userId);
-    } catch (error: any) {
-      return { success: false, message: error.message };
-    }
-  });
+  ipcMain.handle("categories:delete", wrapIpc(async (id, userId) => {
+    return await container.categoryService.deleteCategory(id, userId);
+  }));
 
   /**
    * USERS
    */
   ipcMain.handle("users:getAll", async () => {
     try {
-      return await UserService.getAllUsers();
+      return await container.userService.getAllUsers();
     } catch (error: any) {
-      return {
-        success: false,
-        message: error.message || "Error al obtener usuarios",
-      };
+      return { success: false, message: error.message || "Error al obtener usuarios" };
     }
   });
 
   ipcMain.handle("users:getById", async (_, id) => {
     try {
-      return await UserService.getUserById(id);
+      return await container.userService.getUserById(id);
     } catch (error: any) {
-      return {
-        success: false,
-        message: error.message || "Error al obtener usuario",
-      };
+      return { success: false, message: error.message || "Error al obtener usuario" };
     }
   });
 
   ipcMain.handle("users:create", async (_, userData, createdBy) => {
     try {
-      const user = await UserService.createUser(userData, createdBy);
+      const user = await container.userService.createUser(userData, createdBy);
       return { success: true, user };
     } catch (error: any) {
-      return {
-        success: false,
-        message: error.message || "Error al crear usuario",
-      };
+      return { success: false, message: error.message || "Error al crear usuario" };
     }
   });
 
   ipcMain.handle("users:update", async (_, id, userData, updatedBy) => {
     try {
-      const user = await UserService.updateUser(id, userData, updatedBy);
+      const user = await container.userService.updateUser(id, userData, updatedBy);
       return { success: true, user };
     } catch (error: any) {
-      return {
-        success: false,
-        message: error.message || "Error al actualizar usuario",
-      };
+      return { success: false, message: error.message || "Error al actualizar usuario" };
     }
   });
 
   ipcMain.handle("users:delete", async (_, id, deletedBy) => {
     try {
-      return await UserService.deleteUser(id, deletedBy);
+      return await container.userService.deleteUser(id, deletedBy);
     } catch (error: any) {
-      return {
-        success: false,
-        message: error.message || "Error al eliminar usuario",
-      };
+      return { success: false, message: error.message || "Error al eliminar usuario" };
     }
   });
 
   ipcMain.handle("users:changePassword", async (_, userId, newPassword, changedBy) => {
     try {
-      return await UserService.changePassword(userId, newPassword, changedBy);
+      return await container.userService.changePassword(userId, newPassword, changedBy);
     } catch (error: any) {
-      return {
-        success: false,
-        message: error.message || "Error al cambiar contraseña",
-      };
+      return { success: false, message: error.message || "Error al cambiar contraseña" };
     }
   });
 
@@ -565,11 +446,9 @@ export function setupIpcHandlers() {
    */
   ipcMain.handle("movements:getAll", async () => {
     try {
-      return await prisma.inventoryMovement.findMany({
+      return await container.prisma.inventoryMovement.findMany({
         include: {
-          product: {
-            select: { id: true, name: true, sku: true },
-          },
+          product: { select: { id: true, name: true, sku: true } },
         },
         orderBy: { created_at: 'desc' },
         take: 500,
@@ -584,7 +463,7 @@ export function setupIpcHandlers() {
    */
   ipcMain.handle("suppliers:getAll", async (_, search?: string) => {
     try {
-      return await SupplierService.getAllSuppliers(search);
+      return await container.supplierService.getAllSuppliers(search);
     } catch (error: any) {
       return [];
     }
@@ -592,7 +471,7 @@ export function setupIpcHandlers() {
 
   ipcMain.handle("suppliers:getById", async (_, id) => {
     try {
-      return await SupplierService.getSupplierById(id);
+      return await container.supplierService.getSupplierById(id);
     } catch (error: any) {
       return null;
     }
@@ -600,36 +479,27 @@ export function setupIpcHandlers() {
 
   ipcMain.handle("suppliers:create", async (_, data, userId) => {
     try {
-      const supplier = await SupplierService.createSupplier(data, userId);
+      const supplier = await container.supplierService.createSupplier(data, userId);
       return { success: true, supplier };
     } catch (error: any) {
-      return {
-        success: false,
-        message: error.message || "Error al crear proveedor",
-      };
+      return { success: false, message: error.message || "Error al crear proveedor" };
     }
   });
 
   ipcMain.handle("suppliers:update", async (_, id, data, userId) => {
     try {
-      const supplier = await SupplierService.updateSupplier(id, data, userId);
+      const supplier = await container.supplierService.updateSupplier(id, data, userId);
       return { success: true, supplier };
     } catch (error: any) {
-      return {
-        success: false,
-        message: error.message || "Error al actualizar proveedor",
-      };
+      return { success: false, message: error.message || "Error al actualizar proveedor" };
     }
   });
 
   ipcMain.handle("suppliers:delete", async (_, id, userId) => {
     try {
-      return await SupplierService.deleteSupplier(id, userId);
+      return await container.supplierService.deleteSupplier(id, userId);
     } catch (error: any) {
-      return {
-        success: false,
-        message: error.message || "Error al eliminar proveedor",
-      };
+      return { success: false, message: error.message || "Error al eliminar proveedor" };
     }
   });
 
@@ -638,7 +508,7 @@ export function setupIpcHandlers() {
    */
   ipcMain.handle("purchases:getAll", async (_, supplierId?, status?) => {
     try {
-      return await PurchaseService.getAllPurchases(supplierId, status);
+      return await container.purchaseService.getAllPurchases(supplierId, status);
     } catch (error: any) {
       return [];
     }
@@ -646,7 +516,7 @@ export function setupIpcHandlers() {
 
   ipcMain.handle("purchases:getById", async (_, id) => {
     try {
-      return await PurchaseService.getPurchaseById(id);
+      return await container.purchaseService.getPurchaseById(id);
     } catch (error: any) {
       return null;
     }
@@ -654,42 +524,33 @@ export function setupIpcHandlers() {
 
   ipcMain.handle("purchases:create", async (_, data, userId) => {
     try {
-      const purchase = await PurchaseService.createPurchase(data, userId);
+      const purchase = await container.purchaseService.createPurchase(data, userId);
       return { success: true, purchase };
     } catch (error: any) {
-      return {
-        success: false,
-        message: error.message || "Error al crear orden de compra",
-      };
+      return { success: false, message: error.message || "Error al crear orden de compra" };
     }
   });
 
   ipcMain.handle("purchases:receive", async (_, purchaseId, userId) => {
     try {
-      return await PurchaseService.receivePurchase(purchaseId, userId);
+      return await container.purchaseService.receivePurchase(purchaseId, userId);
     } catch (error: any) {
-      return {
-        success: false,
-        message: error.message || "Error al recibir compra",
-      };
+      return { success: false, message: error.message || "Error al recibir compra" };
     }
   });
 
   ipcMain.handle("purchases:cancel", async (_, purchaseId, userId) => {
     try {
-      return await PurchaseService.cancelPurchase(purchaseId, userId);
+      return await container.purchaseService.cancelPurchase(purchaseId, userId);
     } catch (error: any) {
-      return {
-        success: false,
-        message: error.message || "Error al cancelar compra",
-      };
+      return { success: false, message: error.message || "Error al cancelar compra" };
     }
   });
 
   // Backup & Restore
   ipcMain.handle("backup:create", async (_, label?: string) => {
     try {
-      return await BackupService.createBackup(label);
+      return await container.backupService.createBackup(label);
     } catch (error: any) {
       console.error('[IPC] Error creating backup:', error);
       return { success: false, message: error.message };
@@ -698,7 +559,7 @@ export function setupIpcHandlers() {
 
   ipcMain.handle("backup:list", async () => {
     try {
-      return await BackupService.listBackups();
+      return await container.backupService.listBackups();
     } catch (error: any) {
       console.error('[IPC] Error listing backups:', error);
       return [];
@@ -707,7 +568,7 @@ export function setupIpcHandlers() {
 
   ipcMain.handle("backup:restore", async (_, backupPath: string) => {
     try {
-      return await BackupService.restoreBackup(backupPath);
+      return await container.backupService.restoreBackup(backupPath);
     } catch (error: any) {
       console.error('[IPC] Error restoring backup:', error);
       return { success: false, message: error.message };
@@ -716,7 +577,7 @@ export function setupIpcHandlers() {
 
   ipcMain.handle("backup:delete", async (_, backupPath: string) => {
     try {
-      return await BackupService.deleteBackup(backupPath);
+      return await container.backupService.deleteBackup(backupPath);
     } catch (error: any) {
       console.error('[IPC] Error deleting backup:', error);
       return { success: false, message: error.message };
@@ -726,7 +587,7 @@ export function setupIpcHandlers() {
   // Tax Settings
   ipcMain.handle("settings:getTax", async () => {
     try {
-      return await SettingsService.getTaxSettings();
+      return await container.settingsService.getTaxSettings();
     } catch (error: any) {
       console.error('[IPC] Error getting tax settings:', error);
       return { taxRate: 0, taxType: 'none', taxIncluded: false };
@@ -735,7 +596,7 @@ export function setupIpcHandlers() {
 
   ipcMain.handle("settings:updateTax", async (_, taxRate: number, taxType: string, taxIncluded: boolean) => {
     try {
-      return await SettingsService.updateTaxSettings(taxRate, taxType, taxIncluded);
+      return await container.settingsService.updateTaxSettings(taxRate, taxType, taxIncluded);
     } catch (error: any) {
       console.error('[IPC] Error updating tax settings:', error);
       return { success: false, message: error.message };

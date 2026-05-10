@@ -1,148 +1,55 @@
-import { prisma } from '../prisma/client.js';
+import { IProductRepository } from '../../domain/ports/IProductRepository.js';
+import { IAuditLogRepository } from '../../domain/ports/IAuditLogRepository.js';
+import { ICategoryRepository } from '../../domain/ports/ICategoryRepository.js';
+import { CreateProductDTO, UpdateProductDTO } from '../../domain/dtos.js';
+import { NotFoundError, ConflictError, BusinessRuleError, ValidationError } from '../../shared/errors.js';
 import { productSchema } from '../../common/schemas.js';
-import { createAuditLog } from '../utils/auditLog.js';
 
 export class ProductService {
-  /**
-   * Obtiene todos los productos con búsqueda opcional
-   */
-  static async getAllProducts(search?: string, categoryId?: number) {
-    const where: any = {};
+  constructor(
+    private productRepo: IProductRepository,
+    private categoryRepo: ICategoryRepository,
+    private auditLogRepo: IAuditLogRepository,
+  ) {}
 
-    // Búsqueda por nombre, SKU o descripción
-    if (search) {
-      where.OR = [
-        { name: { contains: search, mode: 'insensitive' as const } },
-        { sku: { contains: search, mode: 'insensitive' as const } },
-        { description: { contains: search, mode: 'insensitive' as const } },
-      ];
-    }
-
-    // Filtro por categoría
-    if (categoryId) {
-      where.category_id = categoryId;
-    }
-
-    return prisma.product.findMany({
-      where,
-      select: {
-        id: true,
-        sku: true,
-        name: true,
-        description: true,
-        price_sale: true,
-        price_purchase: true,
-        stock: true,
-        min_stock: true,
-        created_at: true,
-        updated_at: true,
-        category: {
-          select: { id: true, name: true },
-        },
-        supplier: {
-          select: { id: true, name: true },
-        },
-      },
-      orderBy: { created_at: 'desc' },
-    });
+  async getAllProducts(search?: string, categoryId?: number) {
+    return this.productRepo.findAll(search, categoryId);
   }
 
-  /**
-   * Obtiene un producto por ID
-   */
-  static async getProductById(id: number) {
-    const product = await prisma.product.findUnique({
-      where: { id },
-      include: {
-        category: true,
-        supplier: true,
-      },
-    });
-
-    if (!product) {
-      throw new Error('Producto no encontrado');
-    }
-
+  async getProductById(id: number) {
+    const product = await this.productRepo.findById(id);
+    if (!product) throw new NotFoundError('Producto');
     return product;
   }
 
-  /**
-   * Obtiene productos con stock bajo
-   */
-  static async getLowStockProducts(threshold?: number) {
-    return prisma.product.findMany({
-      where: {
-        stock: {
-          lte: prisma.product.fields.min_stock,
-        },
-      },
-      include: {
-        category: true,
-      },
-      orderBy: {
-        stock: 'asc',
-      },
-    });
+  async getLowStockProducts(threshold?: number) {
+    return this.productRepo.findLowStock();
   }
 
-  /**
-   * Crea un nuevo producto
-   */
-  static async createProduct(productData: any, userId: number = 1) {
-    // Validar con Zod
-    const validated = productSchema.parse(productData);
+  async createProduct(data: CreateProductDTO, userId: number = 1) {
+    const validated = productSchema.parse(data);
 
-    // Verificar SKU duplicado
-    const existing = await prisma.product.findUnique({
-      where: { sku: validated.sku },
-    });
+    const existing = await this.productRepo.findBySku(validated.sku);
+    if (existing) throw new ConflictError(`El SKU ${validated.sku} ya se encuentra registrado.`);
 
-    if (existing) {
-      throw new Error(`El SKU ${validated.sku} ya se encuentra registrado.`);
-    }
-
-    // Verificar que la categoría existe (si se proporciona)
     if (validated.category_id) {
-      const category = await prisma.category.findUnique({
-        where: { id: validated.category_id },
-      });
-
-      if (!category) {
-        throw new Error('La categoría especificada no existe.');
-      }
+      const category = await this.categoryRepo.findById(validated.category_id);
+      if (!category) throw new NotFoundError('Categoría');
     }
 
     const initialStock = validated.stock || 0;
+    const product = await this.productRepo.create(validated);
 
-    // Crear el producto
-    const product = await prisma.product.create({
-      data: {
-        sku: validated.sku,
-        name: validated.name,
-        price_sale: validated.price_sale,
-        price_purchase: validated.price_purchase,
-        description: validated.description,
-        category_id: validated.category_id,
-        supplier_id: validated.supplier_id,
-        min_stock: validated.min_stock,
-        stock: initialStock,
-      },
-    });
-
-    // Registrar movimiento de inventario si hay stock inicial
     if (initialStock > 0) {
-      await prisma.inventoryMovement.create({
-        data: {
-          product_id: product.id,
-          type: 'ENTRADA',
-          quantity: initialStock,
-          reason: 'INICIAL',
-        },
+      await this.productRepo.createMovement({
+        product_id: product.id,
+        type: 'ENTRADA',
+        quantity: initialStock,
+        reason: 'INICIAL',
       });
     }
 
-    // Registrar en auditoría
-    await createAuditLog({
+    await this.auditLogRepo.create({
       userId,
       action: 'CREATE_PRODUCT',
       entity: 'products',
@@ -152,65 +59,25 @@ export class ProductService {
     return { success: true, id: product.id };
   }
 
-  /**
-   * Actualiza un producto existente
-   */
-  static async updateProduct(id: number, productData: any, userId: number = 1) {
-    // Verificar que el producto existe
-    const existingProduct = await prisma.product.findUnique({
-      where: { id },
-    });
+  async updateProduct(id: number, data: UpdateProductDTO, userId: number = 1) {
+    const existingProduct = await this.productRepo.findById(id);
+    if (!existingProduct) throw new NotFoundError('Producto');
 
-    if (!existingProduct) {
-      throw new Error('Producto no encontrado');
-    }
+    const validated = productSchema.parse(data);
 
-    // Validar datos de entrada
-    const validated = productSchema.parse(productData);
-
-    // Verificar SKU duplicado (excluyendo el producto actual)
     if (validated.sku !== existingProduct.sku) {
-      const skuExists = await prisma.product.findUnique({
-        where: { sku: validated.sku },
-      });
-
-      if (skuExists) {
-        throw new Error(`El SKU ${validated.sku} ya se encuentra registrado.`);
-      }
+      const skuExists = await this.productRepo.findBySku(validated.sku);
+      if (skuExists) throw new ConflictError(`El SKU ${validated.sku} ya se encuentra registrado.`);
     }
 
-    // Verificar que la categoría existe (si se proporciona)
     if (validated.category_id) {
-      const category = await prisma.category.findUnique({
-        where: { id: validated.category_id },
-      });
-
-      if (!category) {
-        throw new Error('La categoría especificada no existe.');
-      }
+      const category = await this.categoryRepo.findById(validated.category_id);
+      if (!category) throw new NotFoundError('Categoría');
     }
 
-    // Actualizar el producto
-    const product = await prisma.product.update({
-      where: { id },
-      data: {
-        sku: validated.sku,
-        name: validated.name,
-        price_sale: validated.price_sale,
-        price_purchase: validated.price_purchase,
-        description: validated.description,
-        category_id: validated.category_id,
-        supplier_id: validated.supplier_id,
-        min_stock: validated.min_stock,
-      },
-      include: {
-        category: true,
-        supplier: true,
-      },
-    });
+    const product = await this.productRepo.update(id, validated);
 
-    // Registrar en auditoría
-    await createAuditLog({
+    await this.auditLogRepo.create({
       userId,
       action: 'UPDATE_PRODUCT',
       entity: 'products',
@@ -220,37 +87,18 @@ export class ProductService {
     return { success: true, product };
   }
 
-  /**
-   * Elimina un producto
-   */
-  static async deleteProduct(id: number, userId: number = 1) {
-    // Verificar que el producto existe
-    const existingProduct = await prisma.product.findUnique({
-      where: { id },
-    });
+  async deleteProduct(id: number, userId: number = 1) {
+    const existingProduct = await this.productRepo.findById(id);
+    if (!existingProduct) throw new NotFoundError('Producto');
 
-    if (!existingProduct) {
-      throw new Error('Producto no encontrado');
-    }
-
-    // Verificar si el producto tiene ventas asociadas
-    const salesCount = await prisma.saleItem.count({
-      where: { product_id: id },
-    });
-
+    const salesCount = await this.productRepo.getSalesCount(id);
     if (salesCount > 0) {
-      throw new Error(
-        `No se puede eliminar el producto porque tiene ${salesCount} venta(s) asociada(s).`,
-      );
+      throw new BusinessRuleError(`No se puede eliminar el producto porque tiene ${salesCount} venta(s) asociada(s).`);
     }
 
-    // Eliminar el producto (los movimientos de inventario se eliminan en cascada)
-    await prisma.product.delete({
-      where: { id },
-    });
+    await this.productRepo.delete(id);
 
-    // Registrar en auditoría
-    await createAuditLog({
+    await this.auditLogRepo.create({
       userId,
       action: 'DELETE_PRODUCT',
       entity: 'products',
@@ -260,45 +108,21 @@ export class ProductService {
     return { success: true };
   }
 
-  /**
-   * Añade stock inicial o adicional (ENTRADA)
-   */
-  static async addStock(productId: number, quantity: number, userId: number = 1, reason: string = 'AJUSTE') {
-    // Verificar existencia del producto
-    const product = await prisma.product.findUnique({
-      where: { id: productId },
+  async addStock(productId: number, quantity: number, userId: number = 1, reason: string = 'AJUSTE') {
+    const product = await this.productRepo.findById(productId);
+    if (!product) throw new NotFoundError('Producto');
+    if (quantity <= 0) throw new ValidationError('La cantidad debe ser mayor a cero.');
+
+    await this.productRepo.updateStock(productId, quantity);
+
+    await this.productRepo.createMovement({
+      product_id: productId,
+      type: 'ENTRADA',
+      quantity,
+      reason,
     });
 
-    if (!product) {
-      throw new Error('El producto no existe.');
-    }
-
-    if (quantity <= 0) {
-      throw new Error('La cantidad debe ser mayor a cero.');
-    }
-
-    // Actualizar stock
-    await prisma.product.update({
-      where: { id: productId },
-      data: {
-        stock: {
-          increment: quantity,
-        },
-      },
-    });
-
-    // Registrar movimiento de inventario
-    await prisma.inventoryMovement.create({
-      data: {
-        product_id: productId,
-        type: 'ENTRADA',
-        quantity,
-        reason,
-      },
-    });
-
-    // Registrar en auditoría
-    await createAuditLog({
+    await this.auditLogRepo.create({
       userId,
       action: 'STOCK_ENTRADA',
       entity: 'products',
@@ -308,52 +132,24 @@ export class ProductService {
     return { success: true };
   }
 
-  /**
-   * Reduce stock (SALIDA) - Para devoluciones o ajustes
-   */
-  static async removeStock(productId: number, quantity: number, userId: number = 1, reason: string = 'AJUSTE') {
-    // Verificar existencia del producto
-    const product = await prisma.product.findUnique({
-      where: { id: productId },
-    });
-
-    if (!product) {
-      throw new Error('El producto no existe.');
-    }
-
-    if (quantity <= 0) {
-      throw new Error('La cantidad debe ser mayor a cero.');
-    }
-
-    // Verificar que hay suficiente stock
+  async removeStock(productId: number, quantity: number, userId: number = 1, reason: string = 'AJUSTE') {
+    const product = await this.productRepo.findById(productId);
+    if (!product) throw new NotFoundError('Producto');
+    if (quantity <= 0) throw new ValidationError('La cantidad debe ser mayor a cero.');
     if (product.stock < quantity) {
-      throw new Error(
-        `Stock insuficiente. Stock actual: ${product.stock}, Cantidad solicitada: ${quantity}`,
-      );
+      throw new BusinessRuleError(`Stock insuficiente. Stock actual: ${product.stock}, Cantidad solicitada: ${quantity}`);
     }
 
-    // Actualizar stock
-    await prisma.product.update({
-      where: { id: productId },
-      data: {
-        stock: {
-          decrement: quantity,
-        },
-      },
+    await this.productRepo.updateStock(productId, -quantity);
+
+    await this.productRepo.createMovement({
+      product_id: productId,
+      type: 'SALIDA',
+      quantity,
+      reason,
     });
 
-    // Registrar movimiento de inventario
-    await prisma.inventoryMovement.create({
-      data: {
-        product_id: productId,
-        type: 'SALIDA',
-        quantity,
-        reason,
-      },
-    });
-
-    // Registrar en auditoría
-    await createAuditLog({
+    await this.auditLogRepo.create({
       userId,
       action: 'STOCK_SALIDA',
       entity: 'products',
@@ -363,23 +159,10 @@ export class ProductService {
     return { success: true };
   }
 
-  /**
-   * Obtiene el historial de movimientos de un producto
-   */
-  static async getInventoryMovements(productId: number, limit: number = 50) {
-    // Verificar que el producto existe
-    const product = await prisma.product.findUnique({
-      where: { id: productId },
-    });
+  async getInventoryMovements(productId: number, limit: number = 50) {
+    const product = await this.productRepo.findById(productId);
+    if (!product) throw new NotFoundError('Producto');
 
-    if (!product) {
-      throw new Error('El producto no existe.');
-    }
-
-    return prisma.inventoryMovement.findMany({
-      where: { product_id: productId },
-      orderBy: { created_at: 'desc' },
-      take: limit,
-    });
+    return this.productRepo.getMovements(productId, limit);
   }
 }

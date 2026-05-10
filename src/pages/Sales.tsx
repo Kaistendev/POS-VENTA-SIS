@@ -34,6 +34,7 @@ export default function Sales() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [lastSaleId, setLastSaleId] = useState<number | string | null>(null);
   const [businessInfo, setBusinessInfo] = useState<any>(null);
+  const [taxSettings, setTaxSettings] = useState<{ taxRate: number; taxType: string; taxIncluded: boolean }>({ taxRate: 0, taxType: 'none', taxIncluded: false });
 
   const fetchData = async () => {
     if (window.api) {
@@ -41,10 +42,12 @@ export default function Sales() {
       const c = await window.api.getAllClients();
       const reg = await window.api.getOpenRegister();
       const settings = await window.api.getSettings();
+      const tax = await window.api.getTaxSettings();
       setProducts(p || []);
       setClients(c || []);
       setActiveRegister(reg || null);
       setBusinessInfo(settings);
+      setTaxSettings(tax || { taxRate: 0, taxType: 'none', taxIncluded: false });
     }
   };
 
@@ -53,6 +56,20 @@ export default function Sales() {
   }, []);
 
   const total = getTotal();
+
+  const getTaxInfo = (rawTotal: number) => {
+    if (taxSettings.taxType === 'none' || taxSettings.taxRate <= 0) {
+      return { subtotal: rawTotal, taxAmount: 0, total: rawTotal };
+    }
+    const taxAmt = rawTotal * taxSettings.taxRate;
+    return {
+      subtotal: rawTotal,
+      taxAmount: parseFloat(taxAmt.toFixed(2)),
+      total: parseFloat((rawTotal + taxAmt).toFixed(2)),
+    };
+  };
+
+  const taxInfo = getTaxInfo(total);
 
   const generateTicketPDF = (saleId: number | string, cartItems: any[], clientName: string) => {
     const doc = new jsPDF({ unit: 'mm', format: [80, 150] });
@@ -70,10 +87,17 @@ export default function Sales() {
       y += 5;
     });
     doc.text('------------------------------------------', 5, y + 2);
+    doc.setFontSize(9);
+    doc.text(`Subtotal:`, 5, y + 8);
+    doc.text(`$${taxInfo.subtotal.toFixed(2)}`, 75, y + 8, { align: 'right' });
+    if (taxInfo.taxAmount > 0) {
+      doc.text(`${taxSettings.taxType.toUpperCase()} (${taxSettings.taxRate * 100}%):`, 5, y + 13);
+      doc.text(`$${taxInfo.taxAmount.toFixed(2)}`, 75, y + 13, { align: 'right' });
+    }
     doc.setFontSize(10);
-    doc.text(`TOTAL: $${total.toFixed(2)}`, 75, y + 10, { align: 'right' });
+    doc.text(`TOTAL: $${taxInfo.total.toFixed(2)}`, 75, taxInfo.taxAmount > 0 ? y + 20 : y + 15, { align: 'right' });
     doc.setFontSize(8);
-    doc.text('¡Gracias por su compra!', 40, y + 20, { align: 'center' });
+    doc.text('¡Gracias por su compra!', 40, taxInfo.taxAmount > 0 ? y + 28 : y + 23, { align: 'center' });
     doc.save(`Ticket_${saleId}.pdf`);
   };
 
@@ -87,7 +111,6 @@ export default function Sales() {
         client_name: customerData.name || null,
         client_dni: customerData.dni || null,
         payment_method: method === 'card' ? 'CARD' : 'CASH',
-        total: getTotal()
       };
       const itemsData = cart.map(item => ({
         product_id: item.id,
@@ -319,8 +342,11 @@ export default function Sales() {
            <div className="flex-1 flex flex-col glass-panel rounded-2xl border border-[#2e303a] overflow-hidden shadow-2xl p-6 bg-[#1f2028]">
               <h3 className="text-white font-bold mb-6">Confirmar Pago</h3>
               <div className="flex-1 space-y-4">
-                 <div className="flex justify-between text-gray-400"><span>Subtotal</span><span>${total.toFixed(2)}</span></div>
-                 <div className="text-4xl font-black text-white text-right">${total.toFixed(2)}</div>
+         <div className="flex justify-between text-gray-400"><span>Subtotal</span><span>${taxInfo.subtotal.toFixed(2)}</span></div>
+         {taxInfo.taxAmount > 0 && (
+           <div className="flex justify-between text-gray-400"><span>{taxSettings.taxType.toUpperCase()} ({taxSettings.taxRate * 100}%)</span><span>${taxInfo.taxAmount.toFixed(2)}</span></div>
+         )}
+         <div className="text-4xl font-black text-white text-right">${taxInfo.total.toFixed(2)}</div>
               </div>
               <div className="grid grid-cols-2 gap-3 mt-6">
                 <button onClick={() => setIsCheckout(false)} className="py-3 bg-white/5 text-white rounded-xl">Volver</button>
@@ -331,7 +357,13 @@ export default function Sales() {
            <div className="flex-1 flex flex-col glass-panel rounded-2xl border border-[#2e303a] overflow-hidden shadow-2xl">
              {/* ... carrito existente ... */}
              <div className="bg-[#1f2028] p-6 border-t border-[#2e303a]">
-             <div className="flex justify-between text-2xl font-bold text-white mb-6"><span>Total</span><span>${total.toFixed(2)}</span></div>
+              <div className="space-y-1 mb-4">
+                <div className="flex justify-between text-sm text-gray-400"><span>Subtotal</span><span>${taxInfo.subtotal.toFixed(2)}</span></div>
+                {taxInfo.taxAmount > 0 && (
+                  <div className="flex justify-between text-sm text-gray-400"><span>{taxSettings.taxType.toUpperCase()} ({taxSettings.taxRate * 100}%)</span><span>${taxInfo.taxAmount.toFixed(2)}</span></div>
+                )}
+              </div>
+              <div className="flex justify-between text-2xl font-bold text-white mb-6"><span>Total</span><span>${taxInfo.total.toFixed(2)}</span></div>
              <button disabled={cart.length === 0} onClick={() => setIsCheckout(true)} className="w-full py-4 bg-primary text-white font-bold rounded-xl">Ir a Pagar</button>
              </div>
            </div>
@@ -396,7 +428,13 @@ export default function Sales() {
               <div className="bg-[#1f2028] rounded-3xl p-8 border border-white/5 flex flex-col justify-between">
                 <div>
                    <p className="text-gray-400 uppercase text-xs font-bold tracking-widest mb-2">Total a Pagar</p>
-                   <p className="text-6xl font-black text-white mb-8">${total.toFixed(2)}</p>
+                   <div className="space-y-2 mb-4">
+                     <div className="flex justify-between text-sm text-gray-400"><span>Subtotal</span><span>${taxInfo.subtotal.toFixed(2)}</span></div>
+                     {taxInfo.taxAmount > 0 && (
+                       <div className="flex justify-between text-sm text-gray-400"><span>{taxSettings.taxType.toUpperCase()} ({taxSettings.taxRate * 100}%)</span><span>${taxInfo.taxAmount.toFixed(2)}</span></div>
+                     )}
+                   </div>
+                   <p className="text-5xl font-black text-white">${taxInfo.total.toFixed(2)}</p>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <button onClick={() => handleProcessSale('cash')} className="py-6 bg-green-600 rounded-2xl font-bold text-white text-xl">Pagar Efectivo</button>

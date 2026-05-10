@@ -1,73 +1,53 @@
 import bcrypt from 'bcryptjs';
-import { UserRepository } from '../repositories/UserRepository.js';
-import { prisma } from '../prisma/client.js';
-import { createAuditLog } from '../utils/auditLog.js';
+import { IUserRepository } from '../../domain/ports/IUserRepository.js';
+import { IAuditLogRepository } from '../../domain/ports/IAuditLogRepository.js';
+import { CreateUserDTO, UpdateUserDTO } from '../../domain/dtos.js';
+import { NotFoundError, ConflictError, BusinessRuleError, ValidationError } from '../../shared/errors.js';
 
 export class UserService {
-  /**
-   * Get all users (without password hashes)
-   */
-  static async getAllUsers() {
+  constructor(
+    private userRepo: IUserRepository,
+    private auditLogRepo: IAuditLogRepository,
+  ) {}
+
+  async getAllUsers() {
     try {
-      return await UserRepository.findAll();
+      return await this.userRepo.findAll();
     } catch (error: any) {
       console.error('Get all users error:', error);
       throw new Error('Error al obtener usuarios');
     }
   }
 
-  /**
-   * Get user by ID
-   */
-  static async getUserById(id: number) {
+  async getUserById(id: number) {
     try {
-      const user = await UserRepository.findById(id);
-      
-      if (!user) {
-        throw new Error('Usuario no encontrado');
-      }
-      
+      const user = await this.userRepo.findById(id);
+      if (!user) throw new NotFoundError('Usuario');
       return user;
     } catch (error: any) {
       console.error('Get user by ID error:', error);
-      
-      if (error.code === 'P2025') {
-        throw new Error('Usuario no encontrado');
-      }
-      
-      throw new Error('Error al obtener usuario');
+      if (error.code === 'P2025') throw new NotFoundError('Usuario');
+      throw error;
     }
   }
 
-  /**
-   * Create a new user
-   */
-  static async createUser(data: { username: string; password: string; role: string }, createdBy: number) {
+  async createUser(data: CreateUserDTO & { password: string }, createdBy: number) {
     try {
-      // Check if username already exists
-      const exists = await UserRepository.exists(data.username);
-      if (exists) {
-        throw new Error(`El usuario '${data.username}' ya existe`);
-      }
+      const exists = await this.userRepo.exists(data.username);
+      if (exists) throw new ConflictError(`El usuario '${data.username}' ya existe`);
 
-      // Validate password
-      if (data.password.length < 6) {
-        throw new Error('La contraseña debe tener al menos 6 caracteres');
-      }
+      if (data.password.length < 6) throw new ValidationError('La contraseña debe tener al menos 6 caracteres');
 
-      // Hash the password
       const salt = await bcrypt.genSalt(10);
       const hashedPassword = await bcrypt.hash(data.password, salt);
 
-      // Create the user
-      const user = await UserRepository.create({
+      const user = await this.userRepo.create({
         username: data.username,
         password_hash: hashedPassword,
         role: data.role,
       });
 
-      // Log audit
-      await createAuditLog({
+      await this.auditLogRepo.create({
         userId: createdBy,
         action: 'CREATE_USER',
         entity: 'users',
@@ -77,37 +57,21 @@ export class UserService {
       return user;
     } catch (error: any) {
       console.error('Create user error:', error);
-      
-      if (error.code === 'P2002') {
-        throw new Error('El nombre de usuario ya está en uso');
-      }
-      
+      if (error.code === 'P2002') throw new ConflictError('El nombre de usuario ya está en uso');
       throw error;
     }
   }
 
-  /**
-   * Update an existing user
-   */
-  static async updateUser(
-    id: number,
-    data: { username?: string; role?: string },
-    updatedBy: number,
-  ) {
+  async updateUser(id: number, data: UpdateUserDTO, updatedBy: number) {
     try {
-      // Check if username is being changed and if it's already taken
       if (data.username) {
-        const exists = await UserRepository.exists(data.username, id);
-        if (exists) {
-          throw new Error(`El usuario '${data.username}' ya existe`);
-        }
+        const exists = await this.userRepo.exists(data.username, id);
+        if (exists) throw new ConflictError(`El usuario '${data.username}' ya existe`);
       }
 
-      // Update the user
-      const user = await UserRepository.update(id, data);
+      const user = await this.userRepo.update(id, data);
 
-      // Log audit
-      await createAuditLog({
+      await this.auditLogRepo.create({
         userId: updatedBy,
         action: 'UPDATE_USER',
         entity: 'users',
@@ -117,36 +81,21 @@ export class UserService {
       return user;
     } catch (error: any) {
       console.error('Update user error:', error);
-      
-      if (error.code === 'P2025') {
-        throw new Error('Usuario no encontrado');
-      }
-      
+      if (error.code === 'P2025') throw new NotFoundError('Usuario');
       throw error;
     }
   }
 
-  /**
-   * Delete a user
-   */
-  static async deleteUser(id: number, deletedBy: number) {
+  async deleteUser(id: number, deletedBy: number) {
     try {
-      // Check if user exists
-      const user = await UserRepository.findById(id);
-      if (!user) {
-        throw new Error('Usuario no encontrado');
-      }
+      const user = await this.userRepo.findById(id);
+      if (!user) throw new NotFoundError('Usuario');
 
-      // Prevent deleting yourself
-      if (id === deletedBy) {
-        throw new Error('No puedes eliminar tu propio usuario');
-      }
+      if (id === deletedBy) throw new BusinessRuleError('No puedes eliminar tu propio usuario');
 
-      // Delete the user
-      await UserRepository.delete(id);
+      await this.userRepo.delete(id);
 
-      // Log audit
-      await createAuditLog({
+      await this.auditLogRepo.create({
         userId: deletedBy,
         action: 'DELETE_USER',
         entity: 'users',
@@ -156,38 +105,21 @@ export class UserService {
       return { success: true };
     } catch (error: any) {
       console.error('Delete user error:', error);
-      
-      if (error.code === 'P2025') {
-        throw new Error('Usuario no encontrado');
-      }
-      
+      if (error.code === 'P2025') throw new NotFoundError('Usuario');
       throw error;
     }
   }
 
-  /**
-   * Change user password
-   */
-  static async changePassword(
-    userId: number,
-    newPassword: string,
-    changedBy: number,
-  ) {
+  async changePassword(userId: number, newPassword: string, changedBy: number) {
     try {
-      // Validate password
-      if (newPassword.length < 6) {
-        throw new Error('La contraseña debe tener al menos 6 caracteres');
-      }
+      if (newPassword.length < 6) throw new ValidationError('La contraseña debe tener al menos 6 caracteres');
 
-      // Hash the password
       const salt = await bcrypt.genSalt(10);
       const hashedPassword = await bcrypt.hash(newPassword, salt);
 
-      // Update the user
-      await UserRepository.update(userId, { password_hash: hashedPassword });
+      await this.userRepo.update(userId, { password_hash: hashedPassword });
 
-      // Log audit
-      await createAuditLog({
+      await this.auditLogRepo.create({
         userId: changedBy,
         action: 'CHANGE_PASSWORD',
         entity: 'users',
@@ -197,11 +129,7 @@ export class UserService {
       return { success: true };
     } catch (error: any) {
       console.error('Change password error:', error);
-      
-      if (error.code === 'P2025') {
-        throw new Error('Usuario no encontrado');
-      }
-      
+      if (error.code === 'P2025') throw new NotFoundError('Usuario');
       throw error;
     }
   }
