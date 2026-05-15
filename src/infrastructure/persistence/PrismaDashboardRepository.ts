@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import type { PrismaClient } from '@prisma/client';
 import { IDashboardRepository } from '../../domain/ports/IDashboardRepository.js';
 import { buildDateFilter } from '../../shared/helpers.js';
 import {

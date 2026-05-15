@@ -36,3 +36,7 @@ PHASE1-COMPLETE.md
 backups/backup-2026-05-06.sqlite.gz
 backups/backup-2026-05-10-auto-2026-05-10.sqlite.gz
 REPORTES.md
+
+/release
+/release 1.0.0
+/backups

@@ -13,6 +13,10 @@ interface Window {
     // Health Check
     checkHealth: () => Promise<{ status: string; timestamp: string }>;
 
+    // Setup (First-run wizard)
+    checkSetupStatus: () => Promise<{ needsSetup: boolean }>;
+    completeSetup: (data: { user: { username: string; password: string }; settings: Record<string, string> }) => Promise<{ success: boolean; message?: string }>;
+
     // Auth
     login: (username: string, password: string) => Promise<
       | { success: true; user: import('./domain/models').User }

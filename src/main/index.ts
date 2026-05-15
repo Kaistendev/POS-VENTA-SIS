@@ -1,11 +1,27 @@
-// ⚠️ Must be the very first import — loads .env before any module side-effects run
-import 'dotenv/config';
+import { setupProductionEnv } from "./env.js";
+import pkg from '@prisma/client';
+const { PrismaClient } = pkg;
+import { buildContainer } from "./di/container.js";
+import { setContainer } from "./di/registry.js";
+
+// ⚠️ Must run before PrismaClient is created — sets DATABASE_URL for production
+setupProductionEnv();
+
+const prisma = new PrismaClient({
+  datasources: {
+    db: {
+      url: process.env.DATABASE_URL
+    }
+  }
+});
+const container = buildContainer(prisma);
+setContainer(container);
 
 import { app, BrowserWindow, ipcMain, dialog } from "electron";
 import path from "path";
 import { fileURLToPath } from "url";
 import { setupIpcHandlers } from "./ipc.js";
-import { container } from "./di/container.js";
+import { runMigrations } from "./utils/migrationRunner.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -105,6 +121,7 @@ app.on("window-all-closed", () => {
 
 app.whenReady().then(async () => {
   // 1. Test Prisma connection and setup SQLite optimizations
+  let prismaOk = false;
   try {
     await container.prisma.$connect();
     await container.prisma.$queryRaw`PRAGMA journal_mode=WAL`;
@@ -112,17 +129,50 @@ app.whenReady().then(async () => {
     await container.prisma.$queryRaw`PRAGMA cache_size=10000`;
     await container.prisma.$queryRaw`PRAGMA temp_store=MEMORY`;
     console.log("✅ Prisma connected to SQLite successfully.");
-  } catch (err) {
-    console.error("❌ Failed to connect to SQLite:", err);
+    prismaOk = true;
+  } catch (err: any) {
+    const detail = [
+      `Error: ${err.message || String(err)}`,
+      err.code ? `Code: ${err.code}` : '',
+      `DATABASE_URL: ${process.env.DATABASE_URL || '(not set)'}`,
+      `PRISMA_QUERY_ENGINE_LIBRARY: ${process.env.PRISMA_QUERY_ENGINE_LIBRARY || '(not set)'}`,
+      `resourcesPath: ${process.resourcesPath || '(not set)'}`,
+      `appPath: ${app.getAppPath()}`,
+    ].filter(Boolean).join('\n');
+    console.error("❌ Failed to connect to SQLite:\n" + detail);
+    try {
+      await dialog.showMessageBox({
+        type: 'error',
+        title: 'Error de Base de Datos',
+        message: 'No se pudo conectar a la base de datos SQLite.',
+        detail: `El motor de Prisma no pudo cargarse.\n\n${detail}\n\nVerifica que el empaquetado incluya los archivos nativos correctamente.`,
+      });
+    } catch { /* ignore dialog errors */ }
   }
 
-  // 2. Setup IPC Handlers
+  // 2. Apply pending database migrations (first run only)
+  if (prismaOk) {
+    const migrationResult = await runMigrations(container.prisma);
+    if (migrationResult.error) {
+      console.error("❌ Migration error:", migrationResult.error);
+      try {
+        await dialog.showMessageBox({
+          type: 'error',
+          title: 'Error de Migración',
+          message: 'No se pudieron aplicar las migraciones de la base de datos.',
+          detail: migrationResult.error,
+        });
+      } catch { /* ignore */ }
+    }
+  }
+
+  // 3. Setup IPC Handlers
   setupIpcHandlers();
 
-  // 3. Start scheduled tasks
+  // 4. Start scheduled tasks
   container.schedulerService.start();
 
-  // 4. Create the main window
+  // 5. Create the main window
   createWindow();
 
   app.on("activate", () => {

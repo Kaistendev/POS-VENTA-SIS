@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import type { PrismaClient } from '@prisma/client';
 import { IPurchaseRepository } from '../../domain/ports/IPurchaseRepository.js';
 import { Purchase } from '../../domain/models.js';
 import { CreatePurchaseDTO } from '../../domain/dtos.js';

@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import type { PrismaClient } from '@prisma/client';
 import { IClientRepository } from '../../domain/ports/IClientRepository.js';
 import { Client } from '../../domain/models.js';
 import { CreateClientDTO, UpdateClientDTO } from '../../domain/dtos.js';

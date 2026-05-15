@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import type { PrismaClient } from '@prisma/client';
 import { ISaleRepository } from '../../domain/ports/ISaleRepository.js';
 import { Sale, SaleWithItems } from '../../domain/models.js';
 import { RegisterSaleDTO, SaleFilterDTO, SalesStatsDTO } from '../../domain/dtos.js';

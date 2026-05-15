@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
@@ -26,6 +26,7 @@ import { useGlobalShortcuts } from './hooks/useKeyboardShortcut.ts';
 
 // Lazy-loaded pages
 const Login = lazy(() => import('./pages/Login.tsx'));
+const Setup = lazy(() => import('./pages/Setup.tsx'));
 const Dashboard = lazy(() => import('./pages/Dashboard.tsx'));
 const Sales = lazy(() => import('./pages/Sales.tsx'));
 const SalesHistory = lazy(() => import('./pages/SalesHistory.tsx'));
@@ -52,9 +53,30 @@ function PageLoader() {
 export default function App() {
   const { isAuthenticated, login } = useAuthStore();
   const { toasts, removeToast } = useToast();
+  const [setupNeeded, setSetupNeeded] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (window.api?.checkSetupStatus) {
+      window.api.checkSetupStatus().then(res => {
+        setSetupNeeded(res.needsSetup);
+      }).catch(() => {
+        setSetupNeeded(false);
+      });
+    } else {
+      setSetupNeeded(false);
+    }
+  }, []);
 
   // Initialize global keyboard shortcuts
   useGlobalShortcuts();
+
+  if (setupNeeded === null) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950 flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <ErrorBoundary>
@@ -65,10 +87,17 @@ export default function App() {
           <HashRouter>
             <Suspense fallback={<PageLoader />}>
               <Routes>
-                {/* Public Route */}
+                {/* Public Routes */}
+                <Route
+                  path="/setup"
+                  element={
+                    setupNeeded ? <Setup onComplete={() => setSetupNeeded(false)} /> : <Navigate to="/login" replace />
+                  }
+                />
                 <Route
                   path="/login"
                   element={
+                    setupNeeded ? <Navigate to="/setup" replace /> :
                     isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login onLogin={login} />
                   }
                 />
@@ -77,6 +106,7 @@ export default function App() {
                 <Route
                   path="/"
                   element={
+                    setupNeeded ? <Navigate to="/setup" replace /> :
                     isAuthenticated ? <MainLayout /> : <Navigate to="/login" replace />
                   }
                 >

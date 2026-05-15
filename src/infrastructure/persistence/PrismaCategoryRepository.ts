@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import type { PrismaClient } from '@prisma/client';
 import { ICategoryRepository } from '../../domain/ports/ICategoryRepository.js';
 import { Category, CategoryWithProducts } from '../../domain/models.js';
 import { CreateCategoryDTO, UpdateCategoryDTO } from '../../domain/dtos.js';

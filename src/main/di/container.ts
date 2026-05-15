@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import type { PrismaClient } from '@prisma/client';
 
 // Adaptadores de infraestructura
 import { PrismaProductRepository } from '../../infrastructure/persistence/PrismaProductRepository.js';
@@ -33,77 +33,75 @@ import { CacheService } from '../services/CacheService.js';
 import { ReportService } from '../services/ReportService.js';
 import { SchedulerService } from '../services/SchedulerService.js';
 
-const prisma = new PrismaClient();
+export function buildContainer(prisma: PrismaClient) {
+  // --- Repositorios (adaptadores) ---
+  const productRepo = new PrismaProductRepository(prisma);
+  const clientRepo = new PrismaClientRepository(prisma);
+  const saleRepo = new PrismaSaleRepository(prisma);
+  const cashRegisterRepo = new PrismaCashRegisterRepository(prisma);
+  const supplierRepo = new PrismaSupplierRepository(prisma);
+  const purchaseRepo = new PrismaPurchaseRepository(prisma);
+  const settingsRepo = new PrismaSettingsRepository(prisma);
+  const userRepo = new PrismaUserRepository(prisma);
+  const categoryRepo = new PrismaCategoryRepository(prisma);
+  const auditLogRepo = new PrismaAuditLogRepository(prisma);
+  const dashboardRepo = new PrismaDashboardRepository(prisma);
 
-// --- Repositorios (adaptadores) ---
-const productRepo = new PrismaProductRepository(prisma);
-const clientRepo = new PrismaClientRepository(prisma);
-const saleRepo = new PrismaSaleRepository(prisma);
-const cashRegisterRepo = new PrismaCashRegisterRepository(prisma);
-const supplierRepo = new PrismaSupplierRepository(prisma);
-const purchaseRepo = new PrismaPurchaseRepository(prisma);
-const settingsRepo = new PrismaSettingsRepository(prisma);
-const userRepo = new PrismaUserRepository(prisma);
-const categoryRepo = new PrismaCategoryRepository(prisma);
-const auditLogRepo = new PrismaAuditLogRepository(prisma);
-const dashboardRepo = new PrismaDashboardRepository(prisma);
+  // --- Servicios de infraestructura ---
+  const cacheService = new CacheService();
+  const backupAdapter = new ElectronBackupService();
+  const pdfReportGenerator = new PDFReportGenerator();
+  const excelReportGenerator = new ExcelReportGenerator();
 
-// --- Servicios de infraestructura ---
-const cacheService = new CacheService();
-const backupAdapter = new ElectronBackupService();
-const pdfReportGenerator = new PDFReportGenerator();
-const excelReportGenerator = new ExcelReportGenerator();
+  // --- Servicios de aplicación ---
+  const dashboardService = new DashboardService(dashboardRepo, cacheService);
+  const productService = new ProductService(productRepo, categoryRepo, auditLogRepo);
+  const clientService = new ClientService(clientRepo, auditLogRepo);
+  const cashRegisterService = new CashRegisterService(cashRegisterRepo, auditLogRepo);
+  const settingsService = new SettingsService(settingsRepo);
+  const userService = new UserService(userRepo, auditLogRepo);
+  const authService = new AuthService(userRepo);
+  const supplierService = new SupplierService(supplierRepo, auditLogRepo);
+  const purchaseService = new PurchaseService(purchaseRepo, supplierRepo, productRepo, auditLogRepo);
+  const saleService = new SaleService(
+    saleRepo,
+    productRepo,
+    clientRepo,
+    cashRegisterRepo,
+    settingsRepo,
+    auditLogRepo,
+    dashboardService,
+  );
+  const backupService = new BackupService(backupAdapter);
+  const categoryService = new CategoryService(categoryRepo, auditLogRepo);
+  const reportService = new ReportService(
+    pdfReportGenerator,
+    excelReportGenerator,
+    dashboardService,
+    saleService,
+    productService,
+    cashRegisterService,
+    settingsService,
+  );
+  const schedulerService = new SchedulerService(reportService, backupService);
 
-// --- Servicios de aplicación ---
-const dashboardService = new DashboardService(dashboardRepo, cacheService);
-const productService = new ProductService(productRepo, categoryRepo, auditLogRepo);
-const clientService = new ClientService(clientRepo, auditLogRepo);
-const cashRegisterService = new CashRegisterService(cashRegisterRepo, auditLogRepo);
-const settingsService = new SettingsService(settingsRepo);
-const userService = new UserService(userRepo, auditLogRepo);
-const authService = new AuthService(userRepo);
-const supplierService = new SupplierService(supplierRepo, auditLogRepo);
-const purchaseService = new PurchaseService(purchaseRepo, supplierRepo, productRepo, auditLogRepo);
-const saleService = new SaleService(
-  saleRepo,
-  productRepo,
-  clientRepo,
-  cashRegisterRepo,
-  settingsRepo,
-  auditLogRepo,
-  dashboardService,
-);
-const backupService = new BackupService(backupAdapter);
-const categoryService = new CategoryService(categoryRepo, auditLogRepo);
-const reportService = new ReportService(
-  pdfReportGenerator,
-  excelReportGenerator,
-  dashboardService,
-  saleService,
-  productService,
-  cashRegisterService,
-  settingsService,
-);
-const schedulerService = new SchedulerService(reportService, backupService);
-
-export const container = {
-  prisma,
-  // Repositorios (uso interno via servicios)
-  // Servicios
-  productService,
-  clientService,
-  saleService,
-  cashRegisterService,
-  settingsService,
-  userService,
-  authService,
-  supplierService,
-  purchaseService,
-  categoryService,
-  dashboardService,
-  backupService,
-  reportService,
-  schedulerService,
-  // Utilidades
-  cacheService,
-};
+  return {
+    prisma,
+    userRepo,
+    productService,
+    clientService,
+    saleService,
+    cashRegisterService,
+    settingsService,
+    userService,
+    authService,
+    supplierService,
+    purchaseService,
+    categoryService,
+    dashboardService,
+    backupService,
+    reportService,
+    schedulerService,
+    cacheService,
+  };
+}

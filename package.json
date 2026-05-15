@@ -3,10 +3,16 @@
   "private": true,
   "version": "1.0.0",
   "main": "dist-electron/index.js",
+  "author": "kaisten",
+  "description": "Punto de venta (POS) - Sistema de gestión de inventario y ventas",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "db:schema": "prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script > prisma/schema.sql",
+    "build:win": "npm run db:schema && prisma generate && vite build && electron-builder --win --x64 --config electron-builder.config.cjs",
+    "build:linux": "npm run db:schema && prisma generate && vite build && electron-builder --linux --x64 --config electron-builder.config.cjs",
+    "build:all": "npm run db:schema && prisma generate && vite build && electron-builder --win --linux --x64 --config electron-builder.config.cjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest",
@@ -20,6 +26,7 @@
     "db:format": "prisma format",
     "db:validate": "prisma validate"
   },
+
   "prisma": {
     "seed": "tsx prisma/seed.ts"
   },
@@ -48,7 +55,8 @@
     "recharts": "^3.8.1",
     "tailwind-merge": "^3.5.0",
     "zod": "^4.3.6",
-    "zustand": "^5.0.12"
+    "zustand": "^5.0.12",
+    "bcryptjs": "^3.0.3"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
@@ -60,7 +68,6 @@
     "@typescript-eslint/parser": "^8.59.2",
     "@vitejs/plugin-react": "^6.0.1",
     "autoprefixer": "^10.4.27",
-    "bcryptjs": "^3.0.3",
     "electron": "^41.2.0",
     "eslint": "^9.39.4",
     "eslint-plugin-react-hooks": "^7.0.1",
@@ -73,6 +80,7 @@
     "vite": "^8.0.4",
     "vite-plugin-electron": "^0.29.1",
     "vite-plugin-electron-renderer": "^0.14.6",
-    "vitest": "^4.1.5"
+    "vitest": "^4.1.5",
+    "electron-builder": "^25.1.8"
   }
 }

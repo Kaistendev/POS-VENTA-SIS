@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import type { PrismaClient } from '@prisma/client';
 import { ISupplierRepository } from '../../domain/ports/ISupplierRepository.js';
 import { Supplier, SupplierWithRelations } from '../../domain/models.js';
 import { CreateSupplierDTO, UpdateSupplierDTO } from '../../domain/dtos.js';

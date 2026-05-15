@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import type { PrismaClient } from '@prisma/client';
 import { ISettingsRepository } from '../../domain/ports/ISettingsRepository.js';
 import { TaxSettingsDTO } from '../../domain/dtos.js';
 

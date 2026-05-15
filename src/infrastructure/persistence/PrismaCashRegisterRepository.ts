@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import type { PrismaClient } from '@prisma/client';
 import { ICashRegisterRepository } from '../../domain/ports/ICashRegisterRepository.js';
 import { CashRegister, CashRegisterWithSales } from '../../domain/models.js';
 import { buildDateFilter } from '../../shared/helpers.js';

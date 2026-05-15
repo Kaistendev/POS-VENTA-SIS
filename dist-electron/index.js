@@ -1,291 +1,307 @@
-import { a as ValidationError, i as NotFoundError, n as ConflictError, r as DomainError, t as BusinessRuleError } from "./errors-CsnIJnFo.js";
+import { a as e, i as t, n, r, t as i } from "./errors-CBdiC9hv.js";
 import "dotenv/config";
-import { BrowserWindow, app, dialog, ipcMain } from "electron";
-import path from "path";
-import { fileURLToPath } from "url";
-import fs from "node:fs/promises";
-import { PrismaClient } from "@prisma/client";
-import fs$1 from "fs";
-import { pipeline } from "stream";
-import { promisify } from "util";
-import { createGunzip, createGzip } from "zlib";
-import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
-import ExcelJS from "exceljs";
-import { ZodError, z } from "zod";
-import bcrypt from "bcryptjs";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-//#region src/infrastructure/persistence/PrismaProductRepository.ts
-var PrismaProductRepository = class {
-	constructor(prisma) {
-		this.prisma = prisma;
+import { BrowserWindow as a, app as o, dialog as s, ipcMain as c } from "electron";
+import l from "path";
+import u from "fs";
+import { fileURLToPath as d } from "url";
+import { createRequire as f } from "module";
+import p from "@prisma/client";
+import { pipeline as m } from "stream";
+import { promisify as h } from "util";
+import { createGunzip as g, createGzip as _ } from "zlib";
+import { jsPDF as v } from "jspdf";
+import y from "jspdf-autotable";
+import b from "exceljs";
+import { ZodError as x, z as S } from "zod";
+import C from "bcryptjs";
+import { existsSync as w, readFileSync as T, writeFileSync as E } from "node:fs";
+import { join as D } from "node:path";
+import O from "node:fs/promises";
+//#region src/main/env.ts
+var k = !1;
+function A(e) {
+	let t = [];
+	t.push(l.join(process.resourcesPath, "app.asar.unpacked", "node_modules", ".prisma", "client", e)), t.push(l.join(process.resourcesPath, "node_modules", ".prisma", "client", e)), t.push(l.join(process.resourcesPath, "..", "app.asar.unpacked", "node_modules", ".prisma", "client", e)), t.push(l.join(o.getAppPath(), "node_modules", ".prisma", "client", e)), t.push(l.join(o.getAppPath().replace("app.asar", "app.asar.unpacked"), "node_modules", ".prisma", "client", e));
+	try {
+		let n = l.dirname(d(import.meta.url));
+		t.push(l.join(n.replace("app.asar", "app.asar.unpacked"), "..", "node_modules", ".prisma", "client", e)), t.push(l.join(n, "..", "node_modules", ".prisma", "client", e)), t.push(l.join(n.replace("app.asar", "app.asar.unpacked"), "..", "node_modules", "@prisma", "client", e));
+	} catch {}
+	try {
+		let n = f(import.meta.url).resolve("@prisma/client"), r = l.dirname(n);
+		t.push(l.join(r, "..", "..", ".prisma", "client", e)), t.push(l.join(r.replace("app.asar", "app.asar.unpacked"), "..", "..", ".prisma", "client", e));
+	} catch {}
+	let n = process.platform === "win32" ? "prisma-engine.dll.node" : "prisma-engine.so.node";
+	t.push(l.join(process.resourcesPath, n));
+	let r = /* @__PURE__ */ new Set();
+	for (let e of t) if (!r.has(e)) {
+		r.add(e);
+		try {
+			if (u.existsSync(e)) return e;
+		} catch {}
 	}
-	async findAll(search, categoryId) {
-		const where = {};
-		if (search) where.OR = [
+	return null;
+}
+function j() {
+	if (k) return;
+	if (k = !0, !o.isPackaged) {
+		console.log("[Prisma] Running in development mode");
+		return;
+	}
+	let e = o.getPath("userData"), t = l.join(e, "dev.sqlite3");
+	u.existsSync(e) || u.mkdirSync(e, { recursive: !0 }), u.existsSync(t) || (console.log(`[Prisma] Creating fresh database at ${t}`), u.writeFileSync(t, "")), process.env.DATABASE_URL = `file:${t}`, console.log(`[Prisma] Database URL: ${process.env.DATABASE_URL}`);
+	let n = process.platform === "win32" ? "query_engine-windows.dll.node" : "libquery_engine-debian-openssl-3.0.x.so.node", r = A(n);
+	r ? (process.env.PRISMA_QUERY_ENGINE_LIBRARY = r, console.log(`[Prisma] Using engine: ${r}`)) : (console.error(`[Prisma] Engine NOT FOUND! Tried multiple locations. Engine name: ${n}`), console.error(`[Prisma] resourcesPath: ${process.resourcesPath}`), console.error(`[Prisma] getAppPath(): ${o.getAppPath()}`));
+}
+//#endregion
+//#region src/infrastructure/persistence/PrismaProductRepository.ts
+var ee = class {
+	constructor(e) {
+		this.prisma = e;
+	}
+	async findAll(e, t) {
+		let n = {};
+		return e && (n.OR = [
 			{ name: {
-				contains: search,
+				contains: e,
 				mode: "insensitive"
 			} },
 			{ sku: {
-				contains: search,
+				contains: e,
 				mode: "insensitive"
 			} },
 			{ description: {
-				contains: search,
+				contains: e,
 				mode: "insensitive"
 			} }
-		];
-		if (categoryId) where.category_id = categoryId;
-		return this.prisma.product.findMany({
-			where,
+		]), t && (n.category_id = t), this.prisma.product.findMany({
+			where: n,
 			select: {
-				id: true,
-				sku: true,
-				name: true,
-				description: true,
-				price_sale: true,
-				price_purchase: true,
-				stock: true,
-				min_stock: true,
-				created_at: true,
-				updated_at: true,
-				category_id: true,
-				supplier_id: true,
+				id: !0,
+				sku: !0,
+				name: !0,
+				description: !0,
+				price_sale: !0,
+				price_purchase: !0,
+				stock: !0,
+				min_stock: !0,
+				created_at: !0,
+				updated_at: !0,
+				category_id: !0,
+				supplier_id: !0,
 				category: { select: {
-					id: true,
-					name: true
+					id: !0,
+					name: !0
 				} },
 				supplier: { select: {
-					id: true,
-					name: true
+					id: !0,
+					name: !0
 				} }
 			},
 			orderBy: { created_at: "desc" }
 		});
 	}
-	async findById(id) {
+	async findById(e) {
 		return await this.prisma.product.findUnique({
-			where: { id },
+			where: { id: e },
 			include: {
-				category: true,
-				supplier: true
+				category: !0,
+				supplier: !0
 			}
 		});
 	}
-	async findByIds(ids) {
-		return this.prisma.product.findMany({ where: { id: { in: ids } } });
+	async findByIds(e) {
+		return this.prisma.product.findMany({ where: { id: { in: e } } });
 	}
-	async findBySku(sku) {
-		return this.prisma.product.findUnique({ where: { sku } });
+	async findBySku(e) {
+		return this.prisma.product.findUnique({ where: { sku: e } });
 	}
 	async findLowStock() {
 		return this.prisma.product.findMany({
 			where: { stock: { lte: this.prisma.product.fields.min_stock } },
-			include: { category: true },
+			include: { category: !0 },
 			orderBy: { stock: "asc" }
 		});
 	}
-	async create(data) {
-		const initialStock = data.stock || 0;
+	async create(e) {
+		let t = e.stock || 0;
 		return this.prisma.product.create({ data: {
-			sku: data.sku,
-			name: data.name,
-			price_sale: data.price_sale,
-			price_purchase: data.price_purchase,
-			description: data.description,
-			category_id: data.category_id,
-			supplier_id: data.supplier_id,
-			min_stock: data.min_stock,
-			stock: initialStock
+			sku: e.sku,
+			name: e.name,
+			price_sale: e.price_sale,
+			price_purchase: e.price_purchase,
+			description: e.description,
+			category_id: e.category_id,
+			supplier_id: e.supplier_id,
+			min_stock: e.min_stock,
+			stock: t
 		} });
 	}
-	async update(id, data) {
+	async update(e, t) {
 		return this.prisma.product.update({
-			where: { id },
-			data,
+			where: { id: e },
+			data: t,
 			include: {
-				category: true,
-				supplier: true
+				category: !0,
+				supplier: !0
 			}
 		});
 	}
-	async delete(id) {
-		await this.prisma.product.delete({ where: { id } });
+	async delete(e) {
+		await this.prisma.product.delete({ where: { id: e } });
 	}
-	async getSalesCount(id) {
-		return this.prisma.saleItem.count({ where: { product_id: id } });
+	async getSalesCount(e) {
+		return this.prisma.saleItem.count({ where: { product_id: e } });
 	}
-	async updateStock(id, delta) {
+	async updateStock(e, t) {
 		await this.prisma.product.update({
-			where: { id },
-			data: { stock: { increment: delta } }
+			where: { id: e },
+			data: { stock: { increment: t } }
 		});
 	}
-	async createMovement(data) {
-		await this.prisma.inventoryMovement.create({ data });
+	async createMovement(e) {
+		await this.prisma.inventoryMovement.create({ data: e });
 	}
-	async getMovements(productId, limit = 50) {
+	async getMovements(e, t = 50) {
 		return this.prisma.inventoryMovement.findMany({
-			where: { product_id: productId },
+			where: { product_id: e },
 			orderBy: { created_at: "desc" },
-			take: limit
+			take: t
 		});
 	}
-};
-//#endregion
-//#region src/infrastructure/persistence/PrismaClientRepository.ts
-var PrismaClientRepository = class {
-	constructor(prisma) {
-		this.prisma = prisma;
+}, M = class {
+	constructor(e) {
+		this.prisma = e;
 	}
-	async findAll(search) {
-		const where = search ? { OR: [
+	async findAll(e) {
+		let t = e ? { OR: [
 			{ dni: {
-				contains: search,
+				contains: e,
 				mode: "insensitive"
 			} },
 			{ name: {
-				contains: search,
+				contains: e,
 				mode: "insensitive"
 			} },
 			{ code: {
-				contains: search,
+				contains: e,
 				mode: "insensitive"
 			} },
 			{ tax_id: {
-				contains: search,
+				contains: e,
 				mode: "insensitive"
 			} }
 		] } : {};
 		return this.prisma.client.findMany({
-			where,
+			where: t,
 			orderBy: { created_at: "desc" }
 		});
 	}
-	async findById(id) {
-		return this.prisma.client.findUnique({ where: { id } });
+	async findById(e) {
+		return this.prisma.client.findUnique({ where: { id: e } });
 	}
-	async findByDni(dni) {
-		return this.prisma.client.findFirst({ where: { dni } });
+	async findByDni(e) {
+		return this.prisma.client.findFirst({ where: { dni: e } });
 	}
-	async findByCode(code) {
-		return this.prisma.client.findFirst({ where: { code } });
+	async findByCode(e) {
+		return this.prisma.client.findFirst({ where: { code: e } });
 	}
-	async findByTaxId(taxId) {
-		return this.prisma.client.findFirst({ where: { tax_id: taxId } });
+	async findByTaxId(e) {
+		return this.prisma.client.findFirst({ where: { tax_id: e } });
 	}
-	async create(data) {
-		return this.prisma.client.create({ data });
+	async create(e) {
+		return this.prisma.client.create({ data: e });
 	}
-	async update(id, data) {
+	async update(e, t) {
 		return this.prisma.client.update({
-			where: { id },
-			data
+			where: { id: e },
+			data: t
 		});
 	}
-	async delete(id) {
-		await this.prisma.client.delete({ where: { id } });
+	async delete(e) {
+		await this.prisma.client.delete({ where: { id: e } });
 	}
-	async getSalesCount(id) {
-		return this.prisma.sale.count({ where: { client_id: id } });
+	async getSalesCount(e) {
+		return this.prisma.sale.count({ where: { client_id: e } });
 	}
 };
 //#endregion
 //#region src/shared/helpers.ts
-/**
-* Helpers DRY para evitar patrones repetidos en servicios y repositorios.
-*/
-/**
-* Construye un filtro de fecha para consultas Prisma.
-* Ej: buildDateFilter(startDate, endDate) => { created_at: { gte: ..., lte: ... } }
-*/
-function buildDateFilter(field, startDate, endDate) {
-	if (!startDate && !endDate) return {};
-	const filter = {};
-	if (startDate) filter[field] = {
-		...filter[field] || {},
-		gte: startDate
-	};
-	if (endDate) filter[field] = {
-		...filter[field] || {},
-		lte: endDate
-	};
-	return filter;
+function N(e, t, n) {
+	if (!t && !n) return {};
+	let r = {};
+	return t && (r[e] = {
+		...r[e] || {},
+		gte: t
+	}), n && (r[e] = {
+		...r[e] || {},
+		lte: n
+	}), r;
 }
-/**
-* Busca una entidad por su función finder y lanza NotFoundError si no existe.
-*/
-async function findOrThrow(finder, entityName, id) {
-	const result = await finder();
-	if (!result) {
-		const { NotFoundError } = await import("./errors-CsnIJnFo.js").then((n) => n.o);
-		throw new NotFoundError(entityName, id);
+async function P(e, t, n) {
+	let r = await e();
+	if (!r) {
+		let { NotFoundError: e } = await import("./errors-CBdiC9hv.js").then((e) => e.o);
+		throw new e(t, n);
 	}
-	return result;
+	return r;
 }
 //#endregion
 //#region src/infrastructure/persistence/PrismaSaleRepository.ts
-var PrismaSaleRepository = class {
-	constructor(prisma) {
-		this.prisma = prisma;
+var F = class {
+	constructor(e) {
+		this.prisma = e;
 	}
-	async findAll(filter) {
-		const where = {};
-		Object.assign(where, buildDateFilter("created_at", filter?.startDate, filter?.endDate));
-		if (filter?.clientId) where.client_id = filter.clientId;
-		if (filter?.cashRegisterId) where.cash_register_id = filter.cashRegisterId;
-		return this.prisma.sale.findMany({
-			where,
+	async findAll(e) {
+		let t = {};
+		return Object.assign(t, N("created_at", e?.startDate, e?.endDate)), e?.clientId && (t.client_id = e.clientId), e?.cashRegisterId && (t.cash_register_id = e.cashRegisterId), this.prisma.sale.findMany({
+			where: t,
 			select: {
-				id: true,
-				total: true,
-				subtotal: true,
-				tax_amount: true,
-				payment_method: true,
-				created_at: true,
-				updated_at: true,
-				cash_register_id: true,
-				client_id: true,
+				id: !0,
+				total: !0,
+				subtotal: !0,
+				tax_amount: !0,
+				payment_method: !0,
+				created_at: !0,
+				updated_at: !0,
+				cash_register_id: !0,
+				client_id: !0,
 				client: { select: {
-					id: true,
-					name: true,
-					dni: true
+					id: !0,
+					name: !0,
+					dni: !0
 				} },
 				cash_register: { select: {
-					id: true,
-					opened_at: true,
-					opening_amount: true
+					id: !0,
+					opened_at: !0,
+					opening_amount: !0
 				} },
-				_count: { select: { items: true } }
+				_count: { select: { items: !0 } }
 			},
 			orderBy: { created_at: "desc" }
 		});
 	}
-	async findById(id) {
+	async findById(e) {
 		return await this.prisma.sale.findUnique({
-			where: { id },
+			where: { id: e },
 			include: {
-				items: { include: { product: true } },
-				client: true,
-				cash_register: true
+				items: { include: { product: !0 } },
+				client: !0,
+				cash_register: !0
 			}
 		});
 	}
 	async findToday() {
-		const startOfDay = /* @__PURE__ */ new Date();
-		startOfDay.setHours(0, 0, 0, 0);
-		const endOfDay = /* @__PURE__ */ new Date();
-		endOfDay.setHours(23, 59, 59, 999);
-		return this.prisma.sale.findMany({
+		let e = /* @__PURE__ */ new Date();
+		e.setHours(0, 0, 0, 0);
+		let t = /* @__PURE__ */ new Date();
+		return t.setHours(23, 59, 59, 999), this.prisma.sale.findMany({
 			where: { created_at: {
-				gte: startOfDay,
-				lte: endOfDay
+				gte: e,
+				lte: t
 			} },
 			include: {
-				client: true,
-				cash_register: true
+				client: !0,
+				cash_register: !0
 			},
 			orderBy: { created_at: "desc" }
 		});
@@ -293,93 +309,81 @@ var PrismaSaleRepository = class {
 	async findLast() {
 		return await this.prisma.sale.findFirst({
 			orderBy: { created_at: "desc" },
-			include: { items: true }
+			include: { items: !0 }
 		});
 	}
-	async getStats(startDate, endDate) {
-		const where = {};
-		Object.assign(where, buildDateFilter("created_at", startDate, endDate));
-		const stats = await this.prisma.sale.aggregate({
-			where,
-			_count: { id: true },
-			_sum: { total: true },
-			_avg: { total: true }
+	async getStats(e, t) {
+		let n = {};
+		Object.assign(n, N("created_at", e, t));
+		let r = await this.prisma.sale.aggregate({
+			where: n,
+			_count: { id: !0 },
+			_sum: { total: !0 },
+			_avg: { total: !0 }
 		});
 		return {
-			totalSales: stats._count.id,
-			totalRevenue: stats._sum.total || 0,
-			averageSale: stats._avg.total || 0
+			totalSales: r._count.id,
+			totalRevenue: r._sum.total || 0,
+			averageSale: r._avg.total || 0
 		};
 	}
-	async registerSale(input) {
-		return this.prisma.$transaction(async (tx) => {
-			const sale = await tx.sale.create({ data: {
-				cash_register_id: input.cash_register_id,
-				client_id: input.client_id,
-				subtotal: input.subtotal,
-				tax_amount: input.tax_amount,
-				total: input.total,
-				payment_method: input.payment_method,
-				exchange_rate: input.exchange_rate || 0
+	async registerSale(e) {
+		return this.prisma.$transaction(async (t) => {
+			let n = await t.sale.create({ data: {
+				cash_register_id: e.cash_register_id,
+				client_id: e.client_id,
+				subtotal: e.subtotal,
+				tax_amount: e.tax_amount,
+				total: e.total,
+				payment_method: e.payment_method,
+				exchange_rate: e.exchange_rate || 0
 			} });
-			for (const item of input.items) {
-				await tx.saleItem.create({ data: {
-					sale_id: sale.id,
-					product_id: item.product_id,
-					quantity: item.quantity,
-					unit_price: item.unit_price,
-					purchase_price: item.purchase_price
-				} });
-				await tx.product.update({
-					where: { id: item.product_id },
-					data: { stock: { decrement: item.quantity } }
-				});
-				await tx.inventoryMovement.create({ data: {
-					product_id: item.product_id,
-					type: "SALIDA",
-					quantity: item.quantity,
-					reason: "VENTA"
-				} });
-			}
-			await tx.cashRegister.update({
-				where: { id: input.cash_register_id },
-				data: { total_sales: { increment: input.total } }
-			});
-			return sale.id;
+			for (let r of e.items) await t.saleItem.create({ data: {
+				sale_id: n.id,
+				product_id: r.product_id,
+				quantity: r.quantity,
+				unit_price: r.unit_price,
+				purchase_price: r.purchase_price
+			} }), await t.product.update({
+				where: { id: r.product_id },
+				data: { stock: { decrement: r.quantity } }
+			}), await t.inventoryMovement.create({ data: {
+				product_id: r.product_id,
+				type: "SALIDA",
+				quantity: r.quantity,
+				reason: "VENTA"
+			} });
+			return await t.cashRegister.update({
+				where: { id: e.cash_register_id },
+				data: { total_sales: { increment: e.total } }
+			}), n.id;
 		});
 	}
-	async cancelSale(saleId) {
-		const sale = await this.prisma.sale.findUnique({
-			where: { id: saleId },
-			include: { items: true }
+	async cancelSale(e) {
+		let t = await this.prisma.sale.findUnique({
+			where: { id: e },
+			include: { items: !0 }
 		});
-		if (!sale) throw new Error("Venta no encontrada");
-		await this.prisma.$transaction(async (tx) => {
-			for (const item of sale.items) {
-				await tx.product.update({
-					where: { id: item.product_id },
-					data: { stock: { increment: item.quantity } }
-				});
-				await tx.inventoryMovement.create({ data: {
-					product_id: item.product_id,
-					type: "ENTRADA",
-					quantity: item.quantity,
-					reason: "DEVOLUCION"
-				} });
-			}
-			await tx.cashRegister.update({
-				where: { id: sale.cash_register_id },
-				data: { total_sales: { decrement: sale.total } }
-			});
-			await tx.sale.delete({ where: { id: saleId } });
+		if (!t) throw Error("Venta no encontrada");
+		await this.prisma.$transaction(async (n) => {
+			for (let e of t.items) await n.product.update({
+				where: { id: e.product_id },
+				data: { stock: { increment: e.quantity } }
+			}), await n.inventoryMovement.create({ data: {
+				product_id: e.product_id,
+				type: "ENTRADA",
+				quantity: e.quantity,
+				reason: "DEVOLUCION"
+			} });
+			await n.cashRegister.update({
+				where: { id: t.cash_register_id },
+				data: { total_sales: { decrement: t.total } }
+			}), await n.sale.delete({ where: { id: e } });
 		});
 	}
-};
-//#endregion
-//#region src/infrastructure/persistence/PrismaCashRegisterRepository.ts
-var PrismaCashRegisterRepository = class {
-	constructor(prisma) {
-		this.prisma = prisma;
+}, te = class {
+	constructor(e) {
+		this.prisma = e;
 	}
 	async findOpen() {
 		return this.prisma.cashRegister.findFirst({
@@ -387,131 +391,124 @@ var PrismaCashRegisterRepository = class {
 			orderBy: { opened_at: "desc" }
 		});
 	}
-	async findById(id) {
+	async findById(e) {
 		return await this.prisma.cashRegister.findUnique({
-			where: { id },
+			where: { id: e },
 			include: { sales: { include: {
-				client: true,
-				items: { include: { product: true } }
+				client: !0,
+				items: { include: { product: !0 } }
 			} } }
 		});
 	}
-	async findAll(startDate, endDate) {
-		const where = {};
-		Object.assign(where, buildDateFilter("opened_at", startDate, endDate));
-		return this.prisma.cashRegister.findMany({
-			where,
-			include: { _count: { select: { sales: true } } },
+	async findAll(e, t) {
+		let n = {};
+		return Object.assign(n, N("opened_at", e, t)), this.prisma.cashRegister.findMany({
+			where: n,
+			include: { _count: { select: { sales: !0 } } },
 			orderBy: { opened_at: "desc" }
 		});
 	}
-	async create(openingAmount) {
+	async create(e) {
 		return this.prisma.cashRegister.create({ data: {
-			opening_amount: Number(openingAmount),
+			opening_amount: Number(e),
 			total_sales: 0
 		} });
 	}
-	async close(id, closingAmount, difference, status) {
+	async close(e, t, n, r) {
 		await this.prisma.cashRegister.update({
-			where: { id },
+			where: { id: e },
 			data: {
 				closed_at: /* @__PURE__ */ new Date(),
-				closing_amount: closingAmount,
-				difference,
-				status
+				closing_amount: t,
+				difference: n,
+				status: r
 			}
 		});
 	}
-	async updateTotalSales(id, delta) {
+	async updateTotalSales(e, t) {
 		await this.prisma.cashRegister.update({
-			where: { id },
-			data: { total_sales: { increment: delta } }
+			where: { id: e },
+			data: { total_sales: { increment: t } }
 		});
 	}
-	async getSalesCount(id, since) {
+	async getSalesCount(e, t) {
 		return this.prisma.sale.count({ where: {
-			cash_register_id: id,
-			created_at: { gte: since }
+			cash_register_id: e,
+			created_at: { gte: t }
 		} });
 	}
-	async getDailySummary(registerId) {
-		const startOfDay = /* @__PURE__ */ new Date();
-		startOfDay.setHours(0, 0, 0, 0);
-		const endOfDay = /* @__PURE__ */ new Date();
-		endOfDay.setHours(23, 59, 59, 999);
-		const where = {
-			cash_register_id: registerId,
+	async getDailySummary(e) {
+		let t = /* @__PURE__ */ new Date();
+		t.setHours(0, 0, 0, 0);
+		let n = /* @__PURE__ */ new Date();
+		n.setHours(23, 59, 59, 999);
+		let r = {
+			cash_register_id: e,
 			created_at: {
-				gte: startOfDay,
-				lte: endOfDay
+				gte: t,
+				lte: n
 			}
-		};
-		const register = await this.prisma.cashRegister.findFirst({ where: {
-			id: registerId,
-			opened_at: { gte: startOfDay }
+		}, i = await this.prisma.cashRegister.findFirst({ where: {
+			id: e,
+			opened_at: { gte: t }
 		} });
-		if (!register) throw new Error("Caja no encontrada o no está abierta hoy.");
-		const salesStats = await this.prisma.sale.aggregate({
-			where,
-			_count: { id: true },
-			_sum: { total: true },
-			_avg: { total: true }
-		});
-		const salesByPayment = await this.prisma.sale.groupBy({
+		if (!i) throw Error("Caja no encontrada o no está abierta hoy.");
+		let a = await this.prisma.sale.aggregate({
+			where: r,
+			_count: { id: !0 },
+			_sum: { total: !0 },
+			_avg: { total: !0 }
+		}), o = await this.prisma.sale.groupBy({
 			by: ["payment_method"],
-			where,
-			_count: { id: true },
-			_sum: { total: true }
+			where: r,
+			_count: { id: !0 },
+			_sum: { total: !0 }
 		});
 		return {
-			register,
-			totalSales: salesStats._count.id,
-			totalRevenue: salesStats._sum.total || 0,
-			averageSale: salesStats._avg.total || 0,
-			salesByPayment
+			register: i,
+			totalSales: a._count.id,
+			totalRevenue: a._sum.total || 0,
+			averageSale: a._avg.total || 0,
+			salesByPayment: o
 		};
 	}
-};
-//#endregion
-//#region src/infrastructure/persistence/PrismaSupplierRepository.ts
-var PrismaSupplierRepository = class {
-	constructor(prisma) {
-		this.prisma = prisma;
+}, ne = class {
+	constructor(e) {
+		this.prisma = e;
 	}
-	async findAll(search) {
-		const where = {};
-		if (search) where.OR = [
+	async findAll(e) {
+		let t = {};
+		return e && (t.OR = [
 			{ name: {
-				contains: search,
+				contains: e,
 				mode: "insensitive"
 			} },
 			{ ruc: {
-				contains: search,
+				contains: e,
 				mode: "insensitive"
 			} },
 			{ email: {
-				contains: search,
+				contains: e,
 				mode: "insensitive"
 			} }
-		];
-		return this.prisma.supplier.findMany({
-			where,
+		]), this.prisma.supplier.findMany({
+			where: t,
 			include: { _count: { select: {
-				products: true,
-				purchases: true
+				products: !0,
+				purchases: !0
 			} } },
 			orderBy: { name: "asc" }
 		});
 	}
-	async findById(id) {
+	async findById(e) {
 		return await this.prisma.supplier.findUnique({
-			where: { id },
+			where: { id: e },
 			include: {
 				products: { select: {
-					id: true,
-					name: true,
-					sku: true,
-					stock: true
+					id: !0,
+					name: !0,
+					sku: !0,
+					stock: !0
 				} },
 				purchases: {
 					orderBy: { created_at: "desc" },
@@ -520,560 +517,510 @@ var PrismaSupplierRepository = class {
 			}
 		});
 	}
-	async findByRuc(ruc) {
-		return this.prisma.supplier.findFirst({ where: { ruc } });
+	async findByRuc(e) {
+		return this.prisma.supplier.findFirst({ where: { ruc: e } });
 	}
-	async create(data) {
-		return this.prisma.supplier.create({ data });
+	async create(e) {
+		return this.prisma.supplier.create({ data: e });
 	}
-	async update(id, data) {
+	async update(e, t) {
 		return this.prisma.supplier.update({
-			where: { id },
-			data
+			where: { id: e },
+			data: t
 		});
 	}
-	async delete(id) {
-		await this.prisma.supplier.delete({ where: { id } });
+	async delete(e) {
+		await this.prisma.supplier.delete({ where: { id: e } });
 	}
-	async hasProducts(id) {
-		return await this.prisma.product.count({ where: { supplier_id: id } }) > 0;
+	async hasProducts(e) {
+		return await this.prisma.product.count({ where: { supplier_id: e } }) > 0;
 	}
-	async hasPurchases(id) {
-		return await this.prisma.purchase.count({ where: { supplier_id: id } }) > 0;
+	async hasPurchases(e) {
+		return await this.prisma.purchase.count({ where: { supplier_id: e } }) > 0;
 	}
-};
-//#endregion
-//#region src/infrastructure/persistence/PrismaPurchaseRepository.ts
-var PrismaPurchaseRepository = class {
-	constructor(prisma) {
-		this.prisma = prisma;
+}, re = class {
+	constructor(e) {
+		this.prisma = e;
 	}
-	async findAll(supplierId, status) {
-		const where = {};
-		if (supplierId) where.supplier_id = supplierId;
-		if (status) where.status = status;
-		return this.prisma.purchase.findMany({
-			where,
+	async findAll(e, t) {
+		let n = {};
+		return e && (n.supplier_id = e), t && (n.status = t), this.prisma.purchase.findMany({
+			where: n,
 			include: {
 				supplier: { select: {
-					id: true,
-					name: true,
-					ruc: true
+					id: !0,
+					name: !0,
+					ruc: !0
 				} },
 				items: { include: { product: { select: {
-					id: true,
-					name: true,
-					sku: true
+					id: !0,
+					name: !0,
+					sku: !0
 				} } } }
 			},
 			orderBy: { created_at: "desc" }
 		});
 	}
-	async findById(id) {
+	async findById(e) {
 		return await this.prisma.purchase.findUnique({
-			where: { id },
+			where: { id: e },
 			include: {
-				supplier: true,
-				items: { include: { product: true } }
+				supplier: !0,
+				items: { include: { product: !0 } }
 			}
 		});
 	}
-	async create(data) {
-		const totalAmount = data.items.reduce((sum, item) => sum + item.quantity * item.unit_cost, 0);
+	async create(e) {
+		let t = e.items.reduce((e, t) => e + t.quantity * t.unit_cost, 0);
 		return this.prisma.purchase.create({
 			data: {
-				supplier_id: data.supplier_id,
-				total_amount: totalAmount,
+				supplier_id: e.supplier_id,
+				total_amount: t,
 				status: "PENDING",
-				payment_status: data.payment_status || "UNPAID",
-				items: { create: data.items.map((item) => ({
-					product_id: item.product_id,
-					quantity: item.quantity,
-					unit_cost: item.unit_cost
+				payment_status: e.payment_status || "UNPAID",
+				items: { create: e.items.map((e) => ({
+					product_id: e.product_id,
+					quantity: e.quantity,
+					unit_cost: e.unit_cost
 				})) }
 			},
 			include: {
-				supplier: true,
-				items: { include: { product: true } }
+				supplier: !0,
+				items: { include: { product: !0 } }
 			}
 		});
 	}
-	async receive(purchaseId) {
-		const purchase = await this.prisma.purchase.findUnique({
-			where: { id: purchaseId },
-			include: { items: { include: { product: true } } }
+	async receive(e) {
+		let t = await this.prisma.purchase.findUnique({
+			where: { id: e },
+			include: { items: { include: { product: !0 } } }
 		});
-		if (!purchase) throw new Error("Compra no encontrada");
-		if (purchase.status === "RECEIVED") throw new Error("Esta compra ya fue recibida");
-		if (purchase.status === "CANCELLED") throw new Error("No se puede recibir una compra cancelada");
-		await this.prisma.$transaction(async (tx) => {
-			for (const item of purchase.items) {
-				await tx.product.update({
-					where: { id: item.product_id },
-					data: {
-						stock: { increment: item.quantity },
-						price_purchase: item.unit_cost
-					}
-				});
-				await tx.inventoryMovement.create({ data: {
-					product_id: item.product_id,
-					type: "ENTRADA",
-					quantity: item.quantity,
-					reason: "COMPRA"
-				} });
-			}
-			await tx.purchase.update({
-				where: { id: purchaseId },
+		if (!t) throw Error("Compra no encontrada");
+		if (t.status === "RECEIVED") throw Error("Esta compra ya fue recibida");
+		if (t.status === "CANCELLED") throw Error("No se puede recibir una compra cancelada");
+		await this.prisma.$transaction(async (n) => {
+			for (let e of t.items) await n.product.update({
+				where: { id: e.product_id },
+				data: {
+					stock: { increment: e.quantity },
+					price_purchase: e.unit_cost
+				}
+			}), await n.inventoryMovement.create({ data: {
+				product_id: e.product_id,
+				type: "ENTRADA",
+				quantity: e.quantity,
+				reason: "COMPRA"
+			} });
+			await n.purchase.update({
+				where: { id: e },
 				data: { status: "RECEIVED" }
 			});
 		});
 	}
-	async cancel(purchaseId) {
-		const purchase = await this.prisma.purchase.findUnique({ where: { id: purchaseId } });
-		if (!purchase) throw new Error("Compra no encontrada");
-		if (purchase.status === "RECEIVED") throw new Error("No se puede cancelar una compra ya recibida");
-		if (purchase.status === "CANCELLED") throw new Error("Esta compra ya está cancelada");
+	async cancel(e) {
+		let t = await this.prisma.purchase.findUnique({ where: { id: e } });
+		if (!t) throw Error("Compra no encontrada");
+		if (t.status === "RECEIVED") throw Error("No se puede cancelar una compra ya recibida");
+		if (t.status === "CANCELLED") throw Error("Esta compra ya está cancelada");
 		await this.prisma.purchase.update({
-			where: { id: purchaseId },
+			where: { id: e },
 			data: { status: "CANCELLED" }
 		});
 	}
-	async updatePaymentStatus(purchaseId, paymentStatus) {
+	async updatePaymentStatus(e, t) {
 		await this.prisma.purchase.update({
-			where: { id: purchaseId },
-			data: { payment_status: paymentStatus }
+			where: { id: e },
+			data: { payment_status: t }
 		});
 	}
-};
-//#endregion
-//#region src/infrastructure/persistence/PrismaSettingsRepository.ts
-var PrismaSettingsRepository = class {
-	constructor(prisma) {
-		this.prisma = prisma;
+}, ie = class {
+	constructor(e) {
+		this.prisma = e;
 	}
 	async getAll() {
-		return (await this.prisma.setting.findMany()).reduce((acc, curr) => {
-			acc[curr.key] = curr.value;
-			return acc;
-		}, {});
+		return (await this.prisma.setting.findMany()).reduce((e, t) => (e[t.key] = t.value, e), {});
 	}
-	async get(key, defaultValue = "") {
-		const setting = await this.prisma.setting.findUnique({ where: { key } });
-		return setting ? setting.value : defaultValue;
+	async get(e, t = "") {
+		let n = await this.prisma.setting.findUnique({ where: { key: e } });
+		return n ? n.value : t;
 	}
-	async upsert(key, value) {
+	async upsert(e, t) {
 		await this.prisma.setting.upsert({
-			where: { key },
-			update: { value },
+			where: { key: e },
+			update: { value: t },
 			create: {
-				key,
-				value
+				key: e,
+				value: t
 			}
 		});
 	}
-	async upsertMany(settings) {
-		const promises = Object.entries(settings).map(([key, value]) => this.prisma.setting.upsert({
-			where: { key },
-			update: { value },
+	async upsertMany(e) {
+		let t = Object.entries(e).map(([e, t]) => this.prisma.setting.upsert({
+			where: { key: e },
+			update: { value: t },
 			create: {
-				key,
-				value
+				key: e,
+				value: t
 			}
 		}));
-		await Promise.all(promises);
+		await Promise.all(t);
 	}
 	async getTaxSettings() {
-		const taxRate = await this.get("tax_rate", "0");
-		const taxType = await this.get("tax_type", "none");
-		const taxIncluded = await this.get("tax_included", "false");
+		let e = await this.get("tax_rate", "0"), t = await this.get("tax_type", "none"), n = await this.get("tax_included", "false");
 		return {
-			taxRate: parseFloat(taxRate) || 0,
-			taxType,
-			taxIncluded: taxIncluded === "true"
+			taxRate: parseFloat(e) || 0,
+			taxType: t,
+			taxIncluded: n === "true"
 		};
 	}
-	async updateTaxSettings(taxRate, taxType, taxIncluded) {
+	async updateTaxSettings(e, t, n) {
 		await this.upsertMany({
-			tax_rate: taxRate.toString(),
-			tax_type: taxType,
-			tax_included: taxIncluded.toString()
+			tax_rate: e.toString(),
+			tax_type: t,
+			tax_included: n.toString()
 		});
 	}
-};
-//#endregion
-//#region src/infrastructure/persistence/PrismaUserRepository.ts
-var PrismaUserRepository = class {
-	constructor(prisma) {
-		this.prisma = prisma;
+}, ae = class {
+	constructor(e) {
+		this.prisma = e;
 	}
 	async findAll() {
 		return this.prisma.user.findMany({
 			select: {
-				id: true,
-				username: true,
-				role: true,
-				created_at: true,
-				updated_at: true
+				id: !0,
+				username: !0,
+				role: !0,
+				created_at: !0,
+				updated_at: !0
 			},
 			orderBy: { created_at: "desc" }
 		});
 	}
-	async findById(id) {
+	async findById(e) {
 		return this.prisma.user.findUnique({
-			where: { id },
+			where: { id: e },
 			select: {
-				id: true,
-				username: true,
-				role: true,
-				created_at: true,
-				updated_at: true
+				id: !0,
+				username: !0,
+				role: !0,
+				created_at: !0,
+				updated_at: !0
 			}
 		});
 	}
-	async findByIdWithPassword(id) {
-		return this.prisma.user.findUnique({ where: { id } });
+	async findByIdWithPassword(e) {
+		return this.prisma.user.findUnique({ where: { id: e } });
 	}
-	async findByUsername(username) {
-		return this.prisma.user.findUnique({ where: { username } });
+	async findByUsername(e) {
+		return this.prisma.user.findUnique({ where: { username: e } });
 	}
-	async create(data) {
+	async create(e) {
 		return this.prisma.user.create({
-			data,
+			data: e,
 			select: {
-				id: true,
-				username: true,
-				role: true,
-				created_at: true,
-				updated_at: true
+				id: !0,
+				username: !0,
+				role: !0,
+				created_at: !0,
+				updated_at: !0
 			}
 		});
 	}
-	async update(id, data) {
+	async update(e, t) {
 		return this.prisma.user.update({
-			where: { id },
-			data,
+			where: { id: e },
+			data: t,
 			select: {
-				id: true,
-				username: true,
-				role: true,
-				created_at: true,
-				updated_at: true
+				id: !0,
+				username: !0,
+				role: !0,
+				created_at: !0,
+				updated_at: !0
 			}
 		});
 	}
-	async delete(id) {
-		await this.prisma.user.delete({ where: { id } });
+	async delete(e) {
+		await this.prisma.user.delete({ where: { id: e } });
 	}
-	async exists(username, excludeId) {
-		const where = { username };
-		if (excludeId) where.id = { not: excludeId };
-		return !!await this.prisma.user.findFirst({
-			where,
-			select: { id: true }
+	async exists(e, t) {
+		let n = { username: e };
+		return t && (n.id = { not: t }), !!await this.prisma.user.findFirst({
+			where: n,
+			select: { id: !0 }
 		});
 	}
 	async count() {
 		return this.prisma.user.count();
 	}
-};
-//#endregion
-//#region src/infrastructure/persistence/PrismaCategoryRepository.ts
-var PrismaCategoryRepository = class {
-	constructor(prisma) {
-		this.prisma = prisma;
+}, oe = class {
+	constructor(e) {
+		this.prisma = e;
 	}
-	async findAll(search) {
-		const where = search ? { name: {
-			contains: search,
+	async findAll(e) {
+		let t = e ? { name: {
+			contains: e,
 			mode: "insensitive"
 		} } : {};
 		return this.prisma.category.findMany({
-			where,
+			where: t,
 			select: {
-				id: true,
-				name: true,
-				created_at: true,
-				updated_at: true
+				id: !0,
+				name: !0,
+				created_at: !0,
+				updated_at: !0
 			},
 			orderBy: { name: "asc" }
 		});
 	}
-	async findById(id) {
+	async findById(e) {
 		return await this.prisma.category.findUnique({
-			where: { id },
+			where: { id: e },
 			include: { products: { select: {
-				id: true,
-				name: true,
-				sku: true,
-				stock: true
+				id: !0,
+				name: !0,
+				sku: !0,
+				stock: !0
 			} } }
 		});
 	}
-	async findByName(name) {
-		return this.prisma.category.findFirst({ where: { name } });
+	async findByName(e) {
+		return this.prisma.category.findFirst({ where: { name: e } });
 	}
-	async create(data) {
-		return this.prisma.category.create({ data });
+	async create(e) {
+		return this.prisma.category.create({ data: e });
 	}
-	async update(id, data) {
+	async update(e, t) {
 		return this.prisma.category.update({
-			where: { id },
-			data
+			where: { id: e },
+			data: t
 		});
 	}
-	async delete(id) {
-		await this.prisma.category.delete({ where: { id } });
+	async delete(e) {
+		await this.prisma.category.delete({ where: { id: e } });
 	}
-	async getProductCount(id) {
-		return this.prisma.product.count({ where: { category_id: id } });
+	async getProductCount(e) {
+		return this.prisma.product.count({ where: { category_id: e } });
 	}
-};
-//#endregion
-//#region src/infrastructure/persistence/PrismaAuditLogRepository.ts
-var PrismaAuditLogRepository = class {
-	constructor(prisma) {
-		this.prisma = prisma;
+}, se = class {
+	constructor(e) {
+		this.prisma = e;
 	}
-	async create(entry) {
+	async create(e) {
 		try {
-			let finalUserId = entry.userId;
-			if (finalUserId) {
+			let t = e.userId;
+			if (t) {
 				if (!await this.prisma.user.findUnique({
-					where: { id: finalUserId },
-					select: { id: true }
+					where: { id: t },
+					select: { id: !0 }
 				})) {
-					const adminId = await this.getDefaultAdminUserId();
-					if (!adminId) {
-						console.warn(`User ${entry.userId} not found and no admin available, skipping audit log`);
+					let n = await this.getDefaultAdminUserId();
+					if (!n) {
+						console.warn(`User ${e.userId} not found and no admin available, skipping audit log`);
 						return;
 					}
-					finalUserId = adminId;
+					t = n;
 				}
 			} else {
-				const adminId = await this.getDefaultAdminUserId();
-				if (!adminId) {
+				let e = await this.getDefaultAdminUserId();
+				if (!e) {
 					console.warn("No userId provided and no admin user found, skipping audit log");
 					return;
 				}
-				finalUserId = adminId;
+				t = e;
 			}
 			await this.prisma.auditLog.create({ data: {
-				user_id: finalUserId,
-				action: entry.action,
-				entity: entry.entity,
-				entity_id: entry.entity_id
+				user_id: t,
+				action: e.action,
+				entity: e.entity,
+				entity_id: e.entity_id
 			} });
-		} catch (error) {
-			console.warn("Failed to create audit log:", error);
+		} catch (e) {
+			console.warn("Failed to create audit log:", e);
 		}
 	}
 	async getDefaultAdminUserId() {
 		try {
 			return (await this.prisma.user.findFirst({
 				where: { role: "ADMIN" },
-				select: { id: true },
+				select: { id: !0 },
 				orderBy: { id: "asc" }
 			}))?.id ?? null;
 		} catch {
 			return null;
 		}
 	}
-};
-//#endregion
-//#region src/infrastructure/persistence/PrismaDashboardRepository.ts
-var PrismaDashboardRepository = class {
-	constructor(prisma) {
-		this.prisma = prisma;
+}, ce = class {
+	constructor(e) {
+		this.prisma = e;
 	}
-	async getStats(startDate, endDate) {
-		const where = {};
-		Object.assign(where, buildDateFilter("created_at", startDate, endDate));
-		const filterWhere = Object.keys(where).length === 0 ? { created_at: { gte: new Date((/* @__PURE__ */ new Date()).setHours(0, 0, 0, 0)) } } : where;
-		const revenueResult = await this.prisma.sale.aggregate({
-			where: filterWhere,
-			_sum: { total: true }
-		});
-		const salesCount = await this.prisma.sale.count({ where: filterWhere });
-		const totalProfit = (await this.prisma.sale.findMany({
-			where: filterWhere,
+	async getStats(e, t) {
+		let n = {};
+		Object.assign(n, N("created_at", e, t));
+		let r = Object.keys(n).length === 0 ? { created_at: { gte: new Date((/* @__PURE__ */ new Date()).setHours(0, 0, 0, 0)) } } : n, i = await this.prisma.sale.aggregate({
+			where: r,
+			_sum: { total: !0 }
+		}), a = await this.prisma.sale.count({ where: r }), o = (await this.prisma.sale.findMany({
+			where: r,
 			select: {
-				id: true,
-				total: true,
+				id: !0,
+				total: !0,
 				items: { select: {
-					quantity: true,
-					unit_price: true,
-					purchase_price: true
+					quantity: !0,
+					unit_price: !0,
+					purchase_price: !0
 				} }
 			}
-		})).reduce((acc, sale) => {
-			return acc + sale.items.reduce((itemAcc, item) => {
-				return itemAcc + item.quantity * (item.unit_price - item.purchase_price);
-			}, 0);
-		}, 0);
-		const activeProducts = await this.prisma.product.count({ where: { stock: { gt: 0 } } });
-		const totalClients = await this.prisma.client.count();
-		const lowStockCount = await this.prisma.product.count({ where: { stock: { lt: this.prisma.product.fields.min_stock } } });
+		})).reduce((e, t) => e + t.items.reduce((e, t) => e + t.quantity * (t.unit_price - t.purchase_price), 0), 0), s = await this.prisma.product.count({ where: { stock: { gt: 0 } } }), c = await this.prisma.client.count(), l = await this.prisma.product.count({ where: { stock: { lt: this.prisma.product.fields.min_stock } } });
 		return {
-			todayRevenue: revenueResult._sum.total || 0,
-			todayProfit: totalProfit,
-			todaySalesCount: salesCount,
-			totalRevenue: revenueResult._sum.total || 0,
-			totalProfit,
-			totalSales: salesCount,
-			activeProducts,
-			totalClients,
-			lowStockProducts: lowStockCount,
-			averageSale: salesCount > 0 ? (revenueResult._sum.total || 0) / salesCount : 0
+			todayRevenue: i._sum.total || 0,
+			todayProfit: o,
+			todaySalesCount: a,
+			totalRevenue: i._sum.total || 0,
+			totalProfit: o,
+			totalSales: a,
+			activeProducts: s,
+			totalClients: c,
+			lowStockProducts: l,
+			averageSale: a > 0 ? (i._sum.total || 0) / a : 0
 		};
 	}
-	async getWeeklySales(days = 7) {
-		const startDate = /* @__PURE__ */ new Date();
-		startDate.setDate(startDate.getDate() - days);
-		const groupedByDate = (await this.prisma.sale.findMany({
-			where: { created_at: { gte: startDate } },
+	async getWeeklySales(e = 7) {
+		let t = /* @__PURE__ */ new Date();
+		t.setDate(t.getDate() - e);
+		let n = (await this.prisma.sale.findMany({
+			where: { created_at: { gte: t } },
 			select: {
-				total: true,
-				created_at: true
+				total: !0,
+				created_at: !0
 			},
 			orderBy: { created_at: "asc" }
-		})).reduce((acc, sale) => {
-			const date = sale.created_at.toISOString().split("T")[0];
-			if (!acc[date]) acc[date] = {
-				date,
+		})).reduce((e, t) => {
+			let n = t.created_at.toISOString().split("T")[0];
+			return e[n] || (e[n] = {
+				date: n,
 				total: 0,
 				count: 0
-			};
-			acc[date].total += sale.total;
-			acc[date].count += 1;
-			return acc;
+			}), e[n].total += t.total, e[n].count += 1, e;
 		}, {});
-		return Object.values(groupedByDate);
+		return Object.values(n);
 	}
-	async getLowStockProducts(limit = 10) {
+	async getLowStockProducts(e = 10) {
 		return (await this.prisma.$queryRaw`
       SELECT p.id, p.sku, p.name, p.stock, p.min_stock, c.name as category_name
       FROM products p
       LEFT JOIN categories c ON p.category_id = c.id
       WHERE p.stock <= COALESCE(p.min_stock, 5) OR p.stock = 0
       ORDER BY p.stock ASC
-      LIMIT ${limit}
-    ` || []).map((r) => ({
-			id: r.id,
-			sku: r.sku,
-			name: r.name,
-			stock: r.stock,
-			min_stock: r.min_stock,
-			category: r.category_name ? { name: r.category_name } : null
+      LIMIT ${e}
+    ` || []).map((e) => ({
+			id: e.id,
+			sku: e.sku,
+			name: e.name,
+			stock: e.stock,
+			min_stock: e.min_stock,
+			category: e.category_name ? { name: e.category_name } : null
 		}));
 	}
-	async getSalesByPaymentMethod(startDate, endDate) {
-		const where = {};
-		Object.assign(where, buildDateFilter("created_at", startDate, endDate));
-		return this.prisma.sale.groupBy({
+	async getSalesByPaymentMethod(e, t) {
+		let n = {};
+		return Object.assign(n, N("created_at", e, t)), this.prisma.sale.groupBy({
 			by: ["payment_method"],
-			where,
-			_count: { id: true },
-			_sum: { total: true },
-			_avg: { total: true }
+			where: n,
+			_count: { id: !0 },
+			_sum: { total: !0 },
+			_avg: { total: !0 }
 		});
 	}
-	async getTopProducts(limit = 10, startDate, endDate) {
-		const where = {};
-		Object.assign(where, buildDateFilter("created_at", startDate, endDate));
-		const topProducts = await this.prisma.saleItem.groupBy({
+	async getTopProducts(e = 10, t, n) {
+		let r = {};
+		Object.assign(r, N("created_at", t, n));
+		let i = await this.prisma.saleItem.groupBy({
 			by: ["product_id"],
-			where,
-			_sum: { quantity: true },
-			_avg: { unit_price: true },
-			_count: { id: true },
+			where: r,
+			_sum: { quantity: !0 },
+			_avg: { unit_price: !0 },
+			_count: { id: !0 },
 			orderBy: { _sum: { quantity: "desc" } },
-			take: limit
+			take: e
+		}), a = i.map((e) => e.product_id), o = await this.prisma.product.findMany({
+			where: { id: { in: a } },
+			include: { category: !0 }
 		});
-		const productIds = topProducts.map((item) => item.product_id);
-		const products = await this.prisma.product.findMany({
-			where: { id: { in: productIds } },
-			include: { category: true }
-		});
-		return topProducts.map((item) => {
-			const product = products.find((p) => p.id === item.product_id);
+		return i.map((e) => {
+			let t = o.find((t) => t.id === e.product_id);
 			return {
-				product_id: item.product_id,
-				product_name: product?.name || "Unknown",
-				product_sku: product?.sku || "Unknown",
-				category: product?.category?.name || "Sin categoría",
-				total_quantity: item._sum.quantity || 0,
-				avg_price: item._avg.unit_price || 0,
-				times_sold: item._count.id
+				product_id: e.product_id,
+				product_name: t?.name || "Unknown",
+				product_sku: t?.sku || "Unknown",
+				category: t?.category?.name || "Sin categoría",
+				total_quantity: e._sum.quantity || 0,
+				avg_price: e._avg.unit_price || 0,
+				times_sold: e._count.id
 			};
 		});
 	}
-	async getTopClients(limit = 10, startDate, endDate) {
-		const where = {};
-		Object.assign(where, buildDateFilter("created_at", startDate, endDate));
-		const topClients = await this.prisma.sale.groupBy({
+	async getTopClients(e = 10, t, n) {
+		let r = {};
+		Object.assign(r, N("created_at", t, n));
+		let i = await this.prisma.sale.groupBy({
 			by: ["client_id"],
-			where,
-			_count: { id: true },
-			_sum: { total: true },
-			_avg: { total: true },
+			where: r,
+			_count: { id: !0 },
+			_sum: { total: !0 },
+			_avg: { total: !0 },
 			orderBy: { _sum: { total: "desc" } },
-			take: limit
-		});
-		const clientIds = topClients.map((item) => item.client_id).filter((id) => id !== null);
-		const clients = await this.prisma.client.findMany({ where: { id: { in: clientIds } } });
-		return topClients.map((item) => {
-			const client = clients.find((c) => c.id === item.client_id);
+			take: e
+		}), a = i.map((e) => e.client_id).filter((e) => e !== null), o = await this.prisma.client.findMany({ where: { id: { in: a } } });
+		return i.map((e) => {
+			let t = o.find((t) => t.id === e.client_id);
 			return {
-				client_id: item.client_id,
-				client_name: client?.name || "Cliente Desconocido",
-				client_dni: client?.dni || "N/A",
-				total_purchases: item._count.id,
-				total_spent: item._sum.total || 0,
-				avg_purchase: item._avg.total || 0
+				client_id: e.client_id,
+				client_name: t?.name || "Cliente Desconocido",
+				client_dni: t?.dni || "N/A",
+				total_purchases: e._count.id,
+				total_spent: e._sum.total || 0,
+				avg_purchase: e._avg.total || 0
 			};
 		});
 	}
-	async getSalesByHour(startDate, endDate) {
-		const where = {};
-		Object.assign(where, buildDateFilter("created_at", startDate, endDate));
-		const sales = await this.prisma.sale.findMany({
-			where,
+	async getSalesByHour(e, t) {
+		let n = {};
+		Object.assign(n, N("created_at", e, t));
+		let r = await this.prisma.sale.findMany({
+			where: n,
 			select: {
-				total: true,
-				created_at: true
+				total: !0,
+				created_at: !0
 			}
-		});
-		const hours = Array.from({ length: 24 }, (_, i) => ({
-			hour: i,
+		}), i = Array.from({ length: 24 }, (e, t) => ({
+			hour: t,
 			total: 0,
 			count: 0
 		}));
-		sales.forEach((sale) => {
-			const hour = sale.created_at.getHours();
-			hours[hour].total += sale.total;
-			hours[hour].count += 1;
-		});
-		return hours;
+		return r.forEach((e) => {
+			let t = e.created_at.getHours();
+			i[t].total += e.total, i[t].count += 1;
+		}), i;
 	}
-	async getCashRegisterSummary(startDate, endDate) {
-		const where = {};
-		Object.assign(where, buildDateFilter("opened_at", startDate, endDate));
-		const registers = await this.prisma.cashRegister.findMany({
-			where,
+	async getCashRegisterSummary(e, t) {
+		let n = {};
+		Object.assign(n, N("opened_at", e, t));
+		let r = await this.prisma.cashRegister.findMany({
+			where: n,
 			select: {
-				id: true,
-				opened_at: true,
-				opening_amount: true,
-				total_sales: true
+				id: !0,
+				opened_at: !0,
+				opening_amount: !0,
+				total_sales: !0
 			},
 			orderBy: { opened_at: "desc" }
 		});
 		return {
-			registers,
-			summary: registers.reduce((acc, reg) => ({
-				totalRegisters: acc.totalRegisters + 1,
-				totalOpening: acc.totalOpening + Number(reg.opening_amount),
-				totalSales: acc.totalSales + Number(reg.total_sales)
+			registers: r,
+			summary: r.reduce((e, t) => ({
+				totalRegisters: e.totalRegisters + 1,
+				totalOpening: e.totalOpening + Number(t.opening_amount),
+				totalSales: e.totalSales + Number(t.total_sales)
 			}), {
 				totalRegisters: 0,
 				totalOpening: 0,
@@ -1082,226 +1029,173 @@ var PrismaDashboardRepository = class {
 		};
 	}
 	async getInventoryMetrics() {
-		const totalProducts = await this.prisma.product.count();
-		const productsWithStock = await this.prisma.product.count({ where: { stock: { gt: 0 } } });
-		const productsWithoutStock = await this.prisma.product.count({ where: { stock: { equals: 0 } } });
-		const lowStockProducts = await this.prisma.product.count({ where: { stock: { lt: this.prisma.product.fields.min_stock } } });
-		const inventoryValue = await this.prisma.product.aggregate({
-			_sum: { price_purchase: true },
+		let e = await this.prisma.product.count(), t = await this.prisma.product.count({ where: { stock: { gt: 0 } } }), n = await this.prisma.product.count({ where: { stock: { equals: 0 } } }), r = await this.prisma.product.count({ where: { stock: { lt: this.prisma.product.fields.min_stock } } }), i = await this.prisma.product.aggregate({
+			_sum: { price_purchase: !0 },
 			where: { stock: { gt: 0 } }
-		});
-		const inventorySaleValue = await this.prisma.product.aggregate({
-			_sum: { price_sale: true },
+		}), a = await this.prisma.product.aggregate({
+			_sum: { price_sale: !0 },
 			where: { stock: { gt: 0 } }
-		});
-		const recentMovements = await this.prisma.inventoryMovement.findMany({
+		}), o = await this.prisma.inventoryMovement.findMany({
 			take: 10,
 			orderBy: { created_at: "desc" },
 			include: { product: { select: {
-				name: true,
-				sku: true
+				name: !0,
+				sku: !0
 			} } }
 		});
 		return {
-			totalProducts,
-			productsWithStock,
-			productsWithoutStock,
-			lowStockProducts,
-			totalPurchaseValue: inventoryValue._sum.price_purchase || 0,
-			totalSaleValue: inventorySaleValue._sum.price_sale || 0,
-			potentialProfit: (inventorySaleValue._sum.price_sale || 0) - (inventoryValue._sum.price_purchase || 0),
-			recentMovements
+			totalProducts: e,
+			productsWithStock: t,
+			productsWithoutStock: n,
+			lowStockProducts: r,
+			totalPurchaseValue: i._sum.price_purchase || 0,
+			totalSaleValue: a._sum.price_sale || 0,
+			potentialProfit: (a._sum.price_sale || 0) - (i._sum.price_purchase || 0),
+			recentMovements: o
 		};
 	}
-};
-//#endregion
-//#region src/infrastructure/backup/ElectronBackupService.ts
-var pipelineAsync = promisify(pipeline);
-var ElectronBackupService = class {
+}, I = h(m), le = class {
 	getDbPath() {
-		if (!app.isPackaged) return path.resolve(process.cwd(), "prisma", "dev.sqlite3");
-		const userDataPath = app.getPath("userData");
-		return path.join(userDataPath, "dev.sqlite3");
+		if (!o.isPackaged) return l.resolve(process.cwd(), "prisma", "dev.sqlite3");
+		let e = o.getPath("userData");
+		return l.join(e, "dev.sqlite3");
 	}
 	getBackupDir() {
-		const isDev = !app.isPackaged;
-		let basePath;
-		if (isDev) basePath = process.cwd();
-		else basePath = app.getPath("userData");
-		const backupDir = path.join(basePath, "backups");
-		if (!fs$1.existsSync(backupDir)) fs$1.mkdirSync(backupDir, { recursive: true });
-		return backupDir;
+		let e = !o.isPackaged, t;
+		t = e ? process.cwd() : o.getPath("userData");
+		let n = l.join(t, "backups");
+		return u.existsSync(n) || u.mkdirSync(n, { recursive: !0 }), n;
 	}
-	async createBackup(label) {
+	async createBackup(e) {
 		try {
-			const dbPath = this.getDbPath();
-			if (!fs$1.existsSync(dbPath)) return {
-				success: false,
+			let t = this.getDbPath();
+			if (!u.existsSync(t)) return {
+				success: !1,
 				message: "Database file not found"
 			};
-			const backupDir = this.getBackupDir();
-			const backupFileName = `backup-${(/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-").split("T")[0]}${label ? `-${label}` : ""}.sqlite.gz`;
-			const backupPath = path.join(backupDir, backupFileName);
-			await pipelineAsync(fs$1.createReadStream(dbPath), createGzip(), fs$1.createWriteStream(backupPath));
-			return {
-				success: true,
-				path: backupPath
+			let n = this.getBackupDir(), r = `backup-${(/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-").split("T")[0]}${e ? `-${e}` : ""}.sqlite.gz`, i = l.join(n, r);
+			return await I(u.createReadStream(t), _(), u.createWriteStream(i)), {
+				success: !0,
+				path: i
 			};
-		} catch (error) {
-			console.error("[ElectronBackupService] Error creating backup:", error);
-			return {
-				success: false,
-				message: error.message
+		} catch (e) {
+			return console.error("[ElectronBackupService] Error creating backup:", e), {
+				success: !1,
+				message: e.message
 			};
 		}
 	}
 	async listBackups() {
 		try {
-			const backupDir = this.getBackupDir();
-			if (!fs$1.existsSync(backupDir)) return [];
-			return fs$1.readdirSync(backupDir).filter((f) => f.endsWith(".sqlite.gz")).map((filename) => {
-				const filePath = path.join(backupDir, filename);
-				const stats = fs$1.statSync(filePath);
+			let e = this.getBackupDir();
+			return u.existsSync(e) ? u.readdirSync(e).filter((e) => e.endsWith(".sqlite.gz")).map((t) => {
+				let n = l.join(e, t), r = u.statSync(n);
 				return {
-					filename,
-					path: filePath,
-					size: stats.size,
-					created: stats.mtime
+					filename: t,
+					path: n,
+					size: r.size,
+					created: r.mtime
 				};
-			}).sort((a, b) => b.created.getTime() - a.created.getTime());
-		} catch (error) {
-			console.error("[ElectronBackupService] Error listing backups:", error);
-			return [];
+			}).sort((e, t) => t.created.getTime() - e.created.getTime()) : [];
+		} catch (e) {
+			return console.error("[ElectronBackupService] Error listing backups:", e), [];
 		}
 	}
-	async restoreBackup(backupPath) {
+	async restoreBackup(e) {
 		try {
-			if (!fs$1.existsSync(backupPath)) return {
-				success: false,
+			if (!u.existsSync(e)) return {
+				success: !1,
 				message: "Backup file not found"
 			};
-			const dbPath = this.getDbPath();
-			await this.createBackup("before-restore");
-			await pipelineAsync(fs$1.createReadStream(backupPath), createGunzip(), fs$1.createWriteStream(dbPath));
-			return {
-				success: true,
+			let t = this.getDbPath();
+			return await this.createBackup("before-restore"), await I(u.createReadStream(e), g(), u.createWriteStream(t)), {
+				success: !0,
 				message: "Backup restored successfully. Restart the app to see changes."
 			};
-		} catch (error) {
-			console.error("[ElectronBackupService] Error restoring backup:", error);
-			return {
-				success: false,
-				message: error.message
+		} catch (e) {
+			return console.error("[ElectronBackupService] Error restoring backup:", e), {
+				success: !1,
+				message: e.message
 			};
 		}
 	}
-	async deleteBackup(backupPath) {
+	async deleteBackup(e) {
 		try {
-			if (!fs$1.existsSync(backupPath)) return {
-				success: false,
+			return u.existsSync(e) ? (u.unlinkSync(e), { success: !0 }) : {
+				success: !1,
 				message: "Backup file not found"
 			};
-			fs$1.unlinkSync(backupPath);
-			return { success: true };
-		} catch (error) {
-			console.error("[ElectronBackupService] Error deleting backup:", error);
-			return {
-				success: false,
-				message: error.message
+		} catch (e) {
+			return console.error("[ElectronBackupService] Error deleting backup:", e), {
+				success: !1,
+				message: e.message
 			};
 		}
 	}
 	async createScheduledBackup() {
-		const backups = await this.listBackups();
-		const now = /* @__PURE__ */ new Date();
-		const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-		if (!backups.find((b) => {
-			const backupDate = new Date(b.created);
-			return new Date(backupDate.getFullYear(), backupDate.getMonth(), backupDate.getDate()).getTime() === today.getTime();
-		})) {
-			await this.createBackup("auto");
-			console.log("[ElectronBackupService] Automatic backup created");
-		}
+		let e = await this.listBackups(), t = /* @__PURE__ */ new Date(), n = new Date(t.getFullYear(), t.getMonth(), t.getDate());
+		e.find((e) => {
+			let t = new Date(e.created);
+			return new Date(t.getFullYear(), t.getMonth(), t.getDate()).getTime() === n.getTime();
+		}) || (await this.createBackup("auto"), console.log("[ElectronBackupService] Automatic backup created"));
 	}
-	async cleanupOldBackups(keep = 10) {
+	async cleanupOldBackups(e = 10) {
 		try {
-			const backups = await this.listBackups();
-			if (backups.length > keep) {
-				const toDelete = backups.slice(keep);
-				for (const backup of toDelete) fs$1.unlinkSync(backup.path);
-				console.log(`[ElectronBackupService] Cleaned up ${toDelete.length} old backups`);
+			let t = await this.listBackups();
+			if (t.length > e) {
+				let n = t.slice(e);
+				for (let e of n) u.unlinkSync(e.path);
+				console.log(`[ElectronBackupService] Cleaned up ${n.length} old backups`);
 			}
-		} catch (error) {
-			console.error("[ElectronBackupService] Error cleaning up backups:", error);
+		} catch (e) {
+			console.error("[ElectronBackupService] Error cleaning up backups:", e);
 		}
 	}
-};
-//#endregion
-//#region src/infrastructure/reports/PDFReportGenerator.ts
-var PDFReportGenerator = class {
-	async generateSalesReport(rows, totals, title = "Reporte de Ventas", showTable = true) {
-		const doc = new jsPDF({
+}, ue = class {
+	async generateSalesReport(e, t, n = "Reporte de Ventas", r = !0) {
+		let i = new v({
 			unit: "mm",
 			format: "a4"
 		});
-		doc.setFontSize(16);
-		doc.text(title, 14, 20);
-		doc.setFontSize(10);
-		doc.text(`Generado: ${(/* @__PURE__ */ new Date()).toLocaleDateString("es-PE")}`, 14, 28);
-		let finalY = 34;
-		if (showTable && rows.length > 0) {
-			autoTable(doc, {
-				head: [[
-					"Fecha",
-					"# Factura",
-					"Cliente",
-					"Items",
-					"Subtotal",
-					"Impuesto",
-					"Total",
-					"Pago"
-				]],
-				body: rows.map((r) => [
-					r.date,
-					String(r.invoiceNumber),
-					r.client,
-					String(r.itemsCount),
-					`$ ${r.subtotal.toFixed(2)}`,
-					`$ ${r.tax.toFixed(2)}`,
-					`$ ${r.total.toFixed(2)}`,
-					r.paymentMethod
-				]),
-				startY: 34,
-				styles: { fontSize: 7 },
-				headStyles: { fillColor: [
-					41,
-					128,
-					185
-				] },
-				tableWidth: "auto"
-			});
-			finalY = doc.lastAutoTable.finalY + 10;
-		}
-		doc.setFontSize(10);
-		doc.text(`Total Ventas: ${totals.totalSales}`, 14, finalY);
-		doc.text(`Ingreso Total: $ ${totals.totalRevenue.toFixed(2)}`, 14, finalY + 6);
-		doc.text(`Promedio: $ ${totals.averageSale.toFixed(2)}`, 14, finalY + 12);
-		if (totals.cashSales !== void 0 || totals.cardSales !== void 0) {
-			doc.text(`Efectivo: ${totals.cashSales ?? 0} ventas  |  $ ${(totals.cashRevenue ?? 0).toFixed(2)}`, 14, finalY + 18);
-			doc.text(`Tarjeta: ${totals.cardSales ?? 0} ventas  |  $ ${(totals.cardRevenue ?? 0).toFixed(2)}`, 14, finalY + 24);
-		}
-		return new Uint8Array(doc.output("arraybuffer"));
+		i.setFontSize(16), i.text(n, 14, 20), i.setFontSize(10), i.text(`Generado: ${(/* @__PURE__ */ new Date()).toLocaleDateString("es-PE")}`, 14, 28);
+		let a = 34;
+		return r && e.length > 0 && (y(i, {
+			head: [[
+				"Fecha",
+				"# Factura",
+				"Cliente",
+				"Items",
+				"Subtotal",
+				"Impuesto",
+				"Total",
+				"Pago"
+			]],
+			body: e.map((e) => [
+				e.date,
+				String(e.invoiceNumber),
+				e.client,
+				String(e.itemsCount),
+				`$ ${e.subtotal.toFixed(2)}`,
+				`$ ${e.tax.toFixed(2)}`,
+				`$ ${e.total.toFixed(2)}`,
+				e.paymentMethod
+			]),
+			startY: 34,
+			styles: { fontSize: 7 },
+			headStyles: { fillColor: [
+				41,
+				128,
+				185
+			] },
+			tableWidth: "auto"
+		}), a = i.lastAutoTable.finalY + 10), i.setFontSize(10), i.text(`Total Ventas: ${t.totalSales}`, 14, a), i.text(`Ingreso Total: $ ${t.totalRevenue.toFixed(2)}`, 14, a + 6), i.text(`Promedio: $ ${t.averageSale.toFixed(2)}`, 14, a + 12), (t.cashSales !== void 0 || t.cardSales !== void 0) && (i.text(`Efectivo: ${t.cashSales ?? 0} ventas  |  $ ${(t.cashRevenue ?? 0).toFixed(2)}`, 14, a + 18), i.text(`Tarjeta: ${t.cardSales ?? 0} ventas  |  $ ${(t.cardRevenue ?? 0).toFixed(2)}`, 14, a + 24)), new Uint8Array(i.output("arraybuffer"));
 	}
-	async generateInventoryReport(rows, metrics, title = "Reporte de Inventario") {
-		const doc = new jsPDF({
+	async generateInventoryReport(e, t, n = "Reporte de Inventario") {
+		let r = new v({
 			unit: "mm",
 			format: "a4"
 		});
-		doc.setFontSize(16);
-		doc.text(title, 14, 20);
-		doc.setFontSize(10);
-		doc.text(`Generado: ${(/* @__PURE__ */ new Date()).toLocaleDateString("es-PE")}`, 14, 28);
-		autoTable(doc, {
+		r.setFontSize(16), r.text(n, 14, 20), r.setFontSize(10), r.text(`Generado: ${(/* @__PURE__ */ new Date()).toLocaleDateString("es-PE")}`, 14, 28), y(r, {
 			head: [[
 				"SKU",
 				"Producto",
@@ -1312,15 +1206,15 @@ var PDFReportGenerator = class {
 				"P. Venta",
 				"Estado"
 			]],
-			body: rows.map((r) => [
-				r.sku,
-				r.name,
-				r.category,
-				String(r.stock),
-				r.minStock !== null ? String(r.minStock) : "-",
-				`$ ${r.purchasePrice.toFixed(2)}`,
-				`$ ${r.salePrice.toFixed(2)}`,
-				r.status === "ok" ? "OK" : r.status === "low" ? "Stock Bajo" : "Sin Stock"
+			body: e.map((e) => [
+				e.sku,
+				e.name,
+				e.category,
+				String(e.stock),
+				e.minStock === null ? "-" : String(e.minStock),
+				`$ ${e.purchasePrice.toFixed(2)}`,
+				`$ ${e.salePrice.toFixed(2)}`,
+				e.status === "ok" ? "OK" : e.status === "low" ? "Stock Bajo" : "Sin Stock"
 			]),
 			startY: 34,
 			styles: { fontSize: 7 },
@@ -1330,20 +1224,18 @@ var PDFReportGenerator = class {
 				96
 			] },
 			tableWidth: "auto",
-			didParseCell: (data) => {
-				if (data.section === "body" && data.column.index === 7) {
-					const status = data.cell.raw;
-					if (status === "Sin Stock") data.cell.styles.textColor = [
+			didParseCell: (e) => {
+				if (e.section === "body" && e.column.index === 7) {
+					let t = e.cell.raw;
+					t === "Sin Stock" ? e.cell.styles.textColor = [
 						255,
 						0,
 						0
-					];
-					else if (status === "Stock Bajo") data.cell.styles.textColor = [
+					] : t === "Stock Bajo" ? e.cell.styles.textColor = [
 						255,
 						165,
 						0
-					];
-					else data.cell.styles.textColor = [
+					] : e.cell.styles.textColor = [
 						0,
 						128,
 						0
@@ -1351,143 +1243,41 @@ var PDFReportGenerator = class {
 				}
 			}
 		});
-		const finalY = doc.lastAutoTable.finalY + 10 || 50;
-		doc.setFontSize(10);
-		doc.text(`Total Productos: ${metrics.totalProducts}`, 14, finalY);
-		doc.text(`Con Stock: ${metrics.productsWithStock}  |  Sin Stock: ${metrics.productsWithoutStock}  |  Stock Bajo: ${metrics.lowStockProducts}`, 14, finalY + 6);
-		doc.text(`Valor Compra: $ ${metrics.totalPurchaseValue.toFixed(2)}  |  Valor Venta: $ ${metrics.totalSaleValue.toFixed(2)}`, 14, finalY + 12);
-		doc.text(`Ganancia Potencial: $ ${metrics.potentialProfit.toFixed(2)}`, 14, finalY + 18);
-		return new Uint8Array(doc.output("arraybuffer"));
+		let i = r.lastAutoTable.finalY + 10 || 50;
+		return r.setFontSize(10), r.text(`Total Productos: ${t.totalProducts}`, 14, i), r.text(`Con Stock: ${t.productsWithStock}  |  Sin Stock: ${t.productsWithoutStock}  |  Stock Bajo: ${t.lowStockProducts}`, 14, i + 6), r.text(`Valor Compra: $ ${t.totalPurchaseValue.toFixed(2)}  |  Valor Venta: $ ${t.totalSaleValue.toFixed(2)}`, 14, i + 12), r.text(`Ganancia Potencial: $ ${t.potentialProfit.toFixed(2)}`, 14, i + 18), new Uint8Array(r.output("arraybuffer"));
 	}
-	async generateSaleReceipt(data) {
-		const doc = new jsPDF({
+	async generateSaleReceipt(e) {
+		let t = new v({
 			unit: "mm",
-			format: [80, 120 + data.items.length * 6]
-		});
-		let y = 10;
-		if (data.logoBase64) try {
-			doc.addImage(data.logoBase64, "PNG", 30, y, 20, 20);
-			y += 22;
+			format: [80, 120 + e.items.length * 6]
+		}), n = 10;
+		if (e.logoBase64) try {
+			t.addImage(e.logoBase64, "PNG", 30, n, 20, 20), n += 22;
 		} catch {}
-		doc.setFontSize(10);
-		doc.text(data.businessName, 40, y, { align: "center" });
-		y += 5;
-		doc.setFontSize(7);
-		if (data.businessAddress) {
-			doc.text(data.businessAddress, 40, y, { align: "center" });
-			y += 4;
-		}
-		if (data.businessPhone) {
-			doc.text(`Tel: ${data.businessPhone}`, 40, y, { align: "center" });
-			y += 4;
-		}
-		if (data.businessTaxId) {
-			doc.text(`RUC: ${data.businessTaxId}`, 40, y, { align: "center" });
-			y += 4;
-		}
-		y += 3;
-		doc.setFontSize(8);
-		doc.text("=".repeat(32), 5, y);
-		y += 4;
-		doc.text(`Ticket: #${data.saleId}`, 5, y);
-		y += 4;
-		doc.text(`Fecha: ${data.createdAt.toLocaleString("es-PE")}`, 5, y);
-		y += 4;
-		doc.text(`Cliente: ${data.clientName}`, 5, y);
-		y += 4;
-		if (data.clientDni) {
-			doc.text(`DNI: ${data.clientDni}`, 5, y);
-			y += 4;
-		}
-		if (data.clientTaxId) {
-			doc.text(`RUC: ${data.clientTaxId}`, 5, y);
-			y += 4;
-		}
-		doc.text(`Pago: ${data.paymentMethod === "CASH" ? "EFECTIVO" : "TARJETA"}`, 5, y);
-		y += 4;
-		doc.text("-".repeat(32), 5, y);
-		y += 5;
-		data.items.forEach((item) => {
-			doc.text(`${item.quantity} x ${item.productName}`, 5, y);
-			doc.text(`$ ${item.totalPrice.toFixed(2)}`, 75, y, { align: "right" });
-			y += 5;
-		});
-		doc.text("-".repeat(32), 5, y + 2);
-		y += 6;
-		doc.setFontSize(8);
-		doc.text(`Subtotal:`, 5, y);
-		doc.text(`$ ${data.subtotal.toFixed(2)}`, 75, y, { align: "right" });
-		y += 5;
-		if (data.taxAmount > 0) {
-			doc.text(`${data.taxType.toUpperCase()} (${(data.taxRate * 100).toFixed(1)}%):`, 5, y);
-			doc.text(`$ ${data.taxAmount.toFixed(2)}`, 75, y, { align: "right" });
-			y += 5;
-		}
-		doc.setFontSize(10);
-		doc.text(`TOTAL:`, 5, y + 2);
-		doc.text(`$ ${data.total.toFixed(2)}`, 75, y + 2, { align: "right" });
-		y += 8;
-		doc.setFontSize(7);
-		doc.text(data.ticketFooter || "Gracias por su compra", 40, y, { align: "center" });
-		return new Uint8Array(doc.output("arraybuffer"));
+		return t.setFontSize(10), t.text(e.businessName, 40, n, { align: "center" }), n += 5, t.setFontSize(7), e.businessAddress && (t.text(e.businessAddress, 40, n, { align: "center" }), n += 4), e.businessPhone && (t.text(`Tel: ${e.businessPhone}`, 40, n, { align: "center" }), n += 4), e.businessTaxId && (t.text(`RUC: ${e.businessTaxId}`, 40, n, { align: "center" }), n += 4), n += 3, t.setFontSize(8), t.text("=".repeat(32), 5, n), n += 4, t.text(`Ticket: #${e.saleId}`, 5, n), n += 4, t.text(`Fecha: ${e.createdAt.toLocaleString("es-PE")}`, 5, n), n += 4, t.text(`Cliente: ${e.clientName}`, 5, n), n += 4, e.clientDni && (t.text(`DNI: ${e.clientDni}`, 5, n), n += 4), e.clientTaxId && (t.text(`RUC: ${e.clientTaxId}`, 5, n), n += 4), t.text(`Pago: ${e.paymentMethod === "CASH" ? "EFECTIVO" : "TARJETA"}`, 5, n), n += 4, t.text("-".repeat(32), 5, n), n += 5, e.items.forEach((e) => {
+			t.text(`${e.quantity} x ${e.productName}`, 5, n), t.text(`$ ${e.totalPrice.toFixed(2)}`, 75, n, { align: "right" }), n += 5;
+		}), t.text("-".repeat(32), 5, n + 2), n += 6, t.setFontSize(8), t.text("Subtotal:", 5, n), t.text(`$ ${e.subtotal.toFixed(2)}`, 75, n, { align: "right" }), n += 5, e.taxAmount > 0 && (t.text(`${e.taxType.toUpperCase()} (${(e.taxRate * 100).toFixed(1)}%):`, 5, n), t.text(`$ ${e.taxAmount.toFixed(2)}`, 75, n, { align: "right" }), n += 5), t.setFontSize(10), t.text("TOTAL:", 5, n + 2), t.text(`$ ${e.total.toFixed(2)}`, 75, n + 2, { align: "right" }), n += 8, t.setFontSize(7), t.text(e.ticketFooter || "Gracias por su compra", 40, n, { align: "center" }), new Uint8Array(t.output("arraybuffer"));
 	}
-	async generateCashCloseReport(data) {
-		const doc = new jsPDF({
+	async generateCashCloseReport(e) {
+		let t = new v({
 			unit: "mm",
 			format: "a4"
-		});
-		let y = 20;
-		doc.setFontSize(16);
-		doc.text("Reporte de Cierre de Caja", 14, y);
-		y += 8;
-		doc.setFontSize(10);
-		doc.text(data.businessName, 14, y);
-		y += 6;
-		doc.setFontSize(8);
-		doc.text(`Generado: ${(/* @__PURE__ */ new Date()).toLocaleDateString("es-PE")}`, 14, y);
-		y += 6;
-		doc.text(`Caja #${data.registerId}`, 14, y);
-		y += 5;
-		doc.text(`Apertura: ${data.openDate.toLocaleString("es-PE")}`, 14, y);
-		y += 5;
-		doc.text(`Cierre: ${data.closeDate.toLocaleString("es-PE")}`, 14, y);
-		y += 8;
-		const leftX = 14;
-		const rightX = 100;
-		const rowH = 7;
-		doc.setFontSize(9);
-		[
-			["Ventas Realizadas", String(data.salesCount)],
-			["Ventas Efectivo", `$ ${data.cashSales.toFixed(2)}`],
-			["Ventas Tarjeta", `$ ${data.cardSales.toFixed(2)}`]
-		].forEach(([label, value]) => {
-			doc.text(label, leftX, y);
-			doc.text(value, rightX, y);
-			y += rowH;
-		});
-		y += 4;
-		doc.setDrawColor(100, 100, 100);
-		doc.line(leftX, y, 190, y);
-		y += 6;
-		doc.setFontSize(10);
-		doc.text("RESUMEN", leftX, y);
-		y += 6;
-		[
-			["Fondo Inicial", `$ ${data.openingAmount.toFixed(2)}`],
-			["Total Ventas", `$ ${data.totalSales.toFixed(2)}`],
-			["Esperado (Fondo + Ventas)", `$ ${data.expectedCash.toFixed(2)}`],
-			["Real (Declarado)", `$ ${data.realCash.toFixed(2)}`]
-		].forEach(([label, value]) => {
-			doc.text(label, leftX, y);
-			doc.text(value, rightX, y);
-			y += rowH;
-		});
-		y += 3;
-		doc.setDrawColor(100, 100, 100);
-		doc.line(leftX, y, 190, y);
-		y += 6;
-		const diffLabel = data.difference >= 0 ? "SOBRANTE" : "FALTANTE";
-		const diffColor = data.difference === 0 ? [
+		}), n = 20;
+		t.setFontSize(16), t.text("Reporte de Cierre de Caja", 14, n), n += 8, t.setFontSize(10), t.text(e.businessName, 14, n), n += 6, t.setFontSize(8), t.text(`Generado: ${(/* @__PURE__ */ new Date()).toLocaleDateString("es-PE")}`, 14, n), n += 6, t.text(`Caja #${e.registerId}`, 14, n), n += 5, t.text(`Apertura: ${e.openDate.toLocaleString("es-PE")}`, 14, n), n += 5, t.text(`Cierre: ${e.closeDate.toLocaleString("es-PE")}`, 14, n), n += 8, t.setFontSize(9), [
+			["Ventas Realizadas", String(e.salesCount)],
+			["Ventas Efectivo", `$ ${e.cashSales.toFixed(2)}`],
+			["Ventas Tarjeta", `$ ${e.cardSales.toFixed(2)}`]
+		].forEach(([e, r]) => {
+			t.text(e, 14, n), t.text(r, 100, n), n += 7;
+		}), n += 4, t.setDrawColor(100, 100, 100), t.line(14, n, 190, n), n += 6, t.setFontSize(10), t.text("RESUMEN", 14, n), n += 6, [
+			["Fondo Inicial", `$ ${e.openingAmount.toFixed(2)}`],
+			["Total Ventas", `$ ${e.totalSales.toFixed(2)}`],
+			["Esperado (Fondo + Ventas)", `$ ${e.expectedCash.toFixed(2)}`],
+			["Real (Declarado)", `$ ${e.realCash.toFixed(2)}`]
+		].forEach(([e, r]) => {
+			t.text(e, 14, n), t.text(r, 100, n), n += 7;
+		}), n += 3, t.setDrawColor(100, 100, 100), t.line(14, n, 190, n), n += 6;
+		let r = e.difference >= 0 ? "SOBRANTE" : "FALTANTE", i = e.difference === 0 ? [
 			0,
 			128,
 			0
@@ -1496,40 +1286,22 @@ var PDFReportGenerator = class {
 			0,
 			0
 		];
-		doc.setTextColor(...diffColor);
-		doc.setFontSize(12);
-		doc.text(`${diffLabel}: $ ${Math.abs(data.difference).toFixed(2)}`, leftX, y);
-		doc.setTextColor(0, 0, 0);
-		y += 8;
-		doc.setFontSize(8);
-		doc.setTextColor(100, 100, 100);
-		doc.text(`Estado: ${data.status === "PERFECT" ? "Cuadra Perfectamente" : data.status === "SURPLUS" ? "Sobrante detectado" : "Faltante detectado"}`, leftX, y);
-		y += 6;
-		doc.text(`Firma del responsable: _______________________________`, leftX, y);
-		return new Uint8Array(doc.output("arraybuffer"));
+		return t.setTextColor(...i), t.setFontSize(12), t.text(`${r}: $ ${Math.abs(e.difference).toFixed(2)}`, 14, n), t.setTextColor(0, 0, 0), n += 8, t.setFontSize(8), t.setTextColor(100, 100, 100), t.text(`Estado: ${e.status === "PERFECT" ? "Cuadra Perfectamente" : e.status === "SURPLUS" ? "Sobrante detectado" : "Faltante detectado"}`, 14, n), n += 6, t.text("Firma del responsable: _______________________________", 14, n), new Uint8Array(t.output("arraybuffer"));
 	}
-};
-//#endregion
-//#region src/infrastructure/reports/ExcelReportGenerator.ts
-var ExcelReportGenerator = class {
-	async generateSalesReport(rows, totals, title = "Reporte de Ventas", _showTable = true) {
-		const workbook = new ExcelJS.Workbook();
-		workbook.creator = "POS Venta SIS";
-		workbook.created = /* @__PURE__ */ new Date();
-		const sheet = workbook.addWorksheet("Ventas");
-		sheet.mergeCells("A1:H1");
-		const titleCell = sheet.getCell("A1");
-		titleCell.value = title;
-		titleCell.font = {
+}, L = class {
+	async generateSalesReport(e, t, n = "Reporte de Ventas", r = !0) {
+		let i = new b.Workbook();
+		i.creator = "POS Venta SIS", i.created = /* @__PURE__ */ new Date();
+		let a = i.addWorksheet("Ventas");
+		a.mergeCells("A1:H1");
+		let o = a.getCell("A1");
+		o.value = n, o.font = {
 			size: 16,
-			bold: true
-		};
-		sheet.getCell("A2").value = `Generado: ${(/* @__PURE__ */ new Date()).toLocaleDateString("es-PE")}`;
-		sheet.getCell("A2").font = {
+			bold: !0
+		}, a.getCell("A2").value = `Generado: ${(/* @__PURE__ */ new Date()).toLocaleDateString("es-PE")}`, a.getCell("A2").font = {
 			size: 10,
-			italic: true
-		};
-		sheet.columns = [
+			italic: !0
+		}, a.columns = [
 			{
 				header: "Fecha",
 				key: "date",
@@ -1571,83 +1343,68 @@ var ExcelReportGenerator = class {
 				width: 16
 			}
 		];
-		const headerRow = sheet.getRow(4);
-		headerRow.font = {
-			bold: true,
+		let s = a.getRow(4);
+		s.font = {
+			bold: !0,
 			color: { argb: "FFFFFFFF" }
-		};
-		headerRow.fill = {
+		}, s.fill = {
 			type: "pattern",
 			pattern: "solid",
 			fgColor: { argb: "FF2980B9" }
-		};
-		headerRow.alignment = { horizontal: "center" };
-		rows.forEach((r) => {
-			sheet.addRow({
-				date: r.date,
-				invoiceNumber: r.invoiceNumber,
-				client: r.client,
-				itemsCount: r.itemsCount,
-				subtotal: r.subtotal,
-				tax: r.tax,
-				total: r.total,
-				paymentMethod: r.paymentMethod
+		}, s.alignment = { horizontal: "center" }, e.forEach((e) => {
+			a.addRow({
+				date: e.date,
+				invoiceNumber: e.invoiceNumber,
+				client: e.client,
+				itemsCount: e.itemsCount,
+				subtotal: e.subtotal,
+				tax: e.tax,
+				total: e.total,
+				paymentMethod: e.paymentMethod
 			});
 		});
-		const dataStartRow = 5;
-		const dataEndRow = dataStartRow + rows.length - 1;
-		sheet.addRow({});
-		const summaryRow = sheet.addRow({
+		let c = 5 + e.length - 1;
+		a.addRow({});
+		let l = a.addRow({
 			date: "TOTALES",
-			itemsCount: totals.totalSales,
-			subtotal: { formula: `SUM(E${dataStartRow}:E${dataEndRow})` },
-			tax: { formula: `SUM(F${dataStartRow}:F${dataEndRow})` },
-			total: { formula: `SUM(G${dataStartRow}:G${dataEndRow})` }
+			itemsCount: t.totalSales,
+			subtotal: { formula: `SUM(E5:E${c})` },
+			tax: { formula: `SUM(F5:F${c})` },
+			total: { formula: `SUM(G5:G${c})` }
 		});
-		summaryRow.font = { bold: true };
-		summaryRow.getCell(1).font = {
-			bold: true,
+		l.font = { bold: !0 }, l.getCell(1).font = {
+			bold: !0,
 			size: 11
 		};
-		const avgRow = sheet.addRow({
+		let u = a.addRow({
 			date: "Promedio",
-			total: totals.averageSale
+			total: t.averageSale
 		});
-		avgRow.font = { italic: true };
-		if (totals.cashSales !== void 0 || totals.cardSales !== void 0) {
-			sheet.addRow({});
-			sheet.addRow({
-				date: "Efectivo",
-				itemsCount: totals.cashSales ?? 0,
-				total: totals.cashRevenue ?? 0
-			});
-			sheet.addRow({
-				date: "Tarjeta",
-				itemsCount: totals.cardSales ?? 0,
-				total: totals.cardRevenue ?? 0
-			});
-		}
-		const buffer = await workbook.xlsx.writeBuffer();
-		return new Uint8Array(buffer);
+		u.font = { italic: !0 }, (t.cashSales !== void 0 || t.cardSales !== void 0) && (a.addRow({}), a.addRow({
+			date: "Efectivo",
+			itemsCount: t.cashSales ?? 0,
+			total: t.cashRevenue ?? 0
+		}), a.addRow({
+			date: "Tarjeta",
+			itemsCount: t.cardSales ?? 0,
+			total: t.cardRevenue ?? 0
+		}));
+		let d = await i.xlsx.writeBuffer();
+		return new Uint8Array(d);
 	}
-	async generateInventoryReport(rows, metrics, title = "Reporte de Inventario") {
-		const workbook = new ExcelJS.Workbook();
-		workbook.creator = "POS Venta SIS";
-		workbook.created = /* @__PURE__ */ new Date();
-		const sheet = workbook.addWorksheet("Inventario");
-		sheet.mergeCells("A1:H1");
-		const titleCell = sheet.getCell("A1");
-		titleCell.value = title;
-		titleCell.font = {
+	async generateInventoryReport(e, t, n = "Reporte de Inventario") {
+		let r = new b.Workbook();
+		r.creator = "POS Venta SIS", r.created = /* @__PURE__ */ new Date();
+		let i = r.addWorksheet("Inventario");
+		i.mergeCells("A1:H1");
+		let a = i.getCell("A1");
+		a.value = n, a.font = {
 			size: 16,
-			bold: true
-		};
-		sheet.getCell("A2").value = `Generado: ${(/* @__PURE__ */ new Date()).toLocaleDateString("es-PE")}`;
-		sheet.getCell("A2").font = {
+			bold: !0
+		}, i.getCell("A2").value = `Generado: ${(/* @__PURE__ */ new Date()).toLocaleDateString("es-PE")}`, i.getCell("A2").font = {
 			size: 10,
-			italic: true
-		};
-		sheet.columns = [
+			italic: !0
+		}, i.columns = [
 			{
 				header: "SKU",
 				key: "sku",
@@ -1689,81 +1446,65 @@ var ExcelReportGenerator = class {
 				width: 14
 			}
 		];
-		const headerRow = sheet.getRow(4);
-		headerRow.font = {
-			bold: true,
+		let o = i.getRow(4);
+		o.font = {
+			bold: !0,
 			color: { argb: "FFFFFFFF" }
-		};
-		headerRow.fill = {
+		}, o.fill = {
 			type: "pattern",
 			pattern: "solid",
 			fgColor: { argb: "FF27AE60" }
-		};
-		headerRow.alignment = { horizontal: "center" };
-		rows.forEach((r) => {
-			const statusCell = sheet.addRow({
-				sku: r.sku,
-				name: r.name,
-				category: r.category,
-				stock: r.stock,
-				minStock: r.minStock ?? "-",
-				purchasePrice: r.purchasePrice,
-				salePrice: r.salePrice,
-				status: r.status === "ok" ? "OK" : r.status === "low" ? "Stock Bajo" : "Sin Stock"
+		}, o.alignment = { horizontal: "center" }, e.forEach((e) => {
+			let t = i.addRow({
+				sku: e.sku,
+				name: e.name,
+				category: e.category,
+				stock: e.stock,
+				minStock: e.minStock ?? "-",
+				purchasePrice: e.purchasePrice,
+				salePrice: e.salePrice,
+				status: e.status === "ok" ? "OK" : e.status === "low" ? "Stock Bajo" : "Sin Stock"
 			}).getCell(8);
-			if (r.status === "out") statusCell.font = {
+			e.status === "out" ? t.font = {
 				color: { argb: "FFFF0000" },
-				bold: true
-			};
-			else if (r.status === "low") statusCell.font = {
+				bold: !0
+			} : e.status === "low" ? t.font = {
 				color: { argb: "FFFFA500" },
-				bold: true
-			};
-			else statusCell.font = { color: { argb: "FF008000" } };
-		});
-		sheet.addRow({});
-		const summaryRow = sheet.addRow({
+				bold: !0
+			} : t.font = { color: { argb: "FF008000" } };
+		}), i.addRow({});
+		let s = i.addRow({
 			sku: "RESUMEN",
-			stock: metrics.totalProducts,
-			purchasePrice: metrics.totalPurchaseValue,
-			salePrice: metrics.totalSaleValue
+			stock: t.totalProducts,
+			purchasePrice: t.totalPurchaseValue,
+			salePrice: t.totalSaleValue
 		});
-		summaryRow.font = { bold: true };
-		sheet.addRow({
+		s.font = { bold: !0 }, i.addRow({
 			sku: "Con Stock",
-			stock: metrics.productsWithStock
-		});
-		sheet.addRow({
+			stock: t.productsWithStock
+		}), i.addRow({
 			sku: "Sin Stock",
-			stock: metrics.productsWithoutStock
-		});
-		sheet.addRow({
+			stock: t.productsWithoutStock
+		}), i.addRow({
 			sku: "Stock Bajo",
-			stock: metrics.lowStockProducts
+			stock: t.lowStockProducts
 		});
-		const buffer = await workbook.xlsx.writeBuffer();
-		return new Uint8Array(buffer);
+		let c = await r.xlsx.writeBuffer();
+		return new Uint8Array(c);
 	}
-	async generateSaleReceipt(data) {
-		const workbook = new ExcelJS.Workbook();
-		workbook.creator = "POS Venta SIS";
-		workbook.created = /* @__PURE__ */ new Date();
-		const sheet = workbook.addWorksheet("Comprobante");
-		sheet.mergeCells("A1:D1");
-		const titleCell = sheet.getCell("A1");
-		titleCell.value = `${data.businessName} - Ticket #${data.saleId}`;
-		titleCell.font = {
+	async generateSaleReceipt(e) {
+		let t = new b.Workbook();
+		t.creator = "POS Venta SIS", t.created = /* @__PURE__ */ new Date();
+		let n = t.addWorksheet("Comprobante");
+		n.mergeCells("A1:D1");
+		let r = n.getCell("A1");
+		r.value = `${e.businessName} - Ticket #${e.saleId}`, r.font = {
 			size: 14,
-			bold: true
-		};
-		sheet.getCell("A2").value = `Fecha: ${data.createdAt.toLocaleString("es-PE")}`;
-		sheet.getCell("A2").font = {
+			bold: !0
+		}, n.getCell("A2").value = `Fecha: ${e.createdAt.toLocaleString("es-PE")}`, n.getCell("A2").font = {
 			size: 10,
-			italic: true
-		};
-		sheet.getCell("A3").value = `Cliente: ${data.clientName}`;
-		sheet.getCell("A4").value = `Pago: ${data.paymentMethod === "CASH" ? "EFECTIVO" : "TARJETA"}`;
-		sheet.columns = [
+			italic: !0
+		}, n.getCell("A3").value = `Cliente: ${e.clientName}`, n.getCell("A4").value = `Pago: ${e.paymentMethod === "CASH" ? "EFECTIVO" : "TARJETA"}`, n.columns = [
 			{
 				header: "Cant.",
 				key: "quantity",
@@ -1785,64 +1526,45 @@ var ExcelReportGenerator = class {
 				width: 14
 			}
 		];
-		const headerRow = sheet.getRow(6);
-		headerRow.font = {
-			bold: true,
+		let i = n.getRow(6);
+		i.font = {
+			bold: !0,
 			color: { argb: "FFFFFFFF" }
-		};
-		headerRow.fill = {
+		}, i.fill = {
 			type: "pattern",
 			pattern: "solid",
 			fgColor: { argb: "FF2980B9" }
-		};
-		data.items.forEach((item) => {
-			sheet.addRow({
-				quantity: item.quantity,
-				productName: item.productName,
-				unitPrice: item.unitPrice,
-				totalPrice: item.totalPrice
+		}, e.items.forEach((e) => {
+			n.addRow({
+				quantity: e.quantity,
+				productName: e.productName,
+				unitPrice: e.unitPrice,
+				totalPrice: e.totalPrice
 			});
 		});
-		const summaryRow = 6 + data.items.length + 1;
-		sheet.addRow({});
-		sheet.getCell(`A${summaryRow + 1}`).value = "Subtotal:";
-		sheet.getCell(`D${summaryRow + 1}`).value = data.subtotal;
-		sheet.getCell(`D${summaryRow + 1}`).numFmt = "#,##0.00";
-		if (data.taxAmount > 0) {
-			sheet.getCell(`A${summaryRow + 2}`).value = `${data.taxType.toUpperCase()} (${(data.taxRate * 100).toFixed(1)}%):`;
-			sheet.getCell(`D${summaryRow + 2}`).value = data.taxAmount;
-			sheet.getCell(`D${summaryRow + 2}`).numFmt = "#,##0.00";
-		}
-		const totalRow = data.taxAmount > 0 ? summaryRow + 3 : summaryRow + 2;
-		sheet.getCell(`A${totalRow}`).value = "TOTAL:";
-		sheet.getCell(`A${totalRow}`).font = {
-			bold: true,
+		let a = 6 + e.items.length + 1;
+		n.addRow({}), n.getCell(`A${a + 1}`).value = "Subtotal:", n.getCell(`D${a + 1}`).value = e.subtotal, n.getCell(`D${a + 1}`).numFmt = "#,##0.00", e.taxAmount > 0 && (n.getCell(`A${a + 2}`).value = `${e.taxType.toUpperCase()} (${(e.taxRate * 100).toFixed(1)}%):`, n.getCell(`D${a + 2}`).value = e.taxAmount, n.getCell(`D${a + 2}`).numFmt = "#,##0.00");
+		let o = e.taxAmount > 0 ? a + 3 : a + 2;
+		n.getCell(`A${o}`).value = "TOTAL:", n.getCell(`A${o}`).font = {
+			bold: !0,
 			size: 12
-		};
-		sheet.getCell(`D${totalRow}`).value = data.total;
-		sheet.getCell(`D${totalRow}`).font = {
-			bold: true,
+		}, n.getCell(`D${o}`).value = e.total, n.getCell(`D${o}`).font = {
+			bold: !0,
 			size: 12
-		};
-		sheet.getCell(`D${totalRow}`).numFmt = "#,##0.00";
-		const buffer = await workbook.xlsx.writeBuffer();
-		return new Uint8Array(buffer);
+		}, n.getCell(`D${o}`).numFmt = "#,##0.00";
+		let s = await t.xlsx.writeBuffer();
+		return new Uint8Array(s);
 	}
-	async generateCashCloseReport(data) {
-		const workbook = new ExcelJS.Workbook();
-		workbook.creator = "POS Venta SIS";
-		workbook.created = /* @__PURE__ */ new Date();
-		const sheet = workbook.addWorksheet("Cierre de Caja");
-		sheet.mergeCells("A1:B1");
-		const titleCell = sheet.getCell("A1");
-		titleCell.value = `${data.businessName} - Cierre de Caja #${data.registerId}`;
-		titleCell.font = {
+	async generateCashCloseReport(e) {
+		let t = new b.Workbook();
+		t.creator = "POS Venta SIS", t.created = /* @__PURE__ */ new Date();
+		let n = t.addWorksheet("Cierre de Caja");
+		n.mergeCells("A1:B1");
+		let r = n.getCell("A1");
+		r.value = `${e.businessName} - Cierre de Caja #${e.registerId}`, r.font = {
 			size: 14,
-			bold: true
-		};
-		sheet.getCell("A3").value = `Apertura: ${data.openDate.toLocaleString("es-PE")}`;
-		sheet.getCell("A4").value = `Cierre: ${data.closeDate.toLocaleString("es-PE")}`;
-		sheet.columns = [{
+			bold: !0
+		}, n.getCell("A3").value = `Apertura: ${e.openDate.toLocaleString("es-PE")}`, n.getCell("A4").value = `Cierre: ${e.closeDate.toLocaleString("es-PE")}`, n.columns = [{
 			header: "Concepto",
 			key: "concept",
 			width: 30
@@ -1850,28 +1572,26 @@ var ExcelReportGenerator = class {
 			header: "Valor",
 			key: "value",
 			width: 20
-		}];
-		sheet.addRow({});
-		const summaryHeaderRow = sheet.addRow({
+		}], n.addRow({});
+		let i = n.addRow({
 			concept: "RESUMEN",
 			value: ""
 		});
-		summaryHeaderRow.font = {
-			bold: true,
+		i.font = {
+			bold: !0,
 			size: 11
-		};
-		[
+		}, [
 			{
 				concept: "Ventas Realizadas",
-				value: data.salesCount
+				value: e.salesCount
 			},
 			{
 				concept: "Ventas Efectivo",
-				value: data.cashSales
+				value: e.cashSales
 			},
 			{
 				concept: "Ventas Tarjeta",
-				value: data.cardSales
+				value: e.cardSales
 			},
 			{
 				concept: "",
@@ -1879,970 +1599,786 @@ var ExcelReportGenerator = class {
 			},
 			{
 				concept: "Fondo Inicial",
-				value: data.openingAmount
+				value: e.openingAmount
 			},
 			{
 				concept: "Total Ventas",
-				value: data.totalSales
+				value: e.totalSales
 			},
 			{
 				concept: "Esperado",
-				value: data.expectedCash
+				value: e.expectedCash
 			},
 			{
 				concept: "Real (Declarado)",
-				value: data.realCash
+				value: e.realCash
 			}
-		].forEach((r) => {
-			const row = sheet.addRow({
-				concept: r.concept,
-				value: typeof r.value === "number" ? r.value : r.value
+		].forEach((e) => {
+			let t = n.addRow({
+				concept: e.concept,
+				value: (e.value, e.value)
 			});
-			if (typeof r.value === "number" && r.concept) row.getCell(2).numFmt = r.concept.includes("Realizadas") ? "#,##0" : "#,##0.00";
+			typeof e.value == "number" && e.concept && (t.getCell(2).numFmt = e.concept.includes("Realizadas") ? "#,##0" : "#,##0.00");
 		});
-		const diffRow = sheet.addRow({
-			concept: data.difference >= 0 ? "SOBRANTE" : "FALTANTE",
-			value: Math.abs(data.difference)
+		let a = n.addRow({
+			concept: e.difference >= 0 ? "SOBRANTE" : "FALTANTE",
+			value: Math.abs(e.difference)
 		});
-		diffRow.font = {
-			bold: true,
+		a.font = {
+			bold: !0,
 			size: 12,
-			color: { argb: data.difference === 0 ? "FF008000" : "FFC80000" }
-		};
-		diffRow.getCell(2).numFmt = "#,##0.00";
-		const buffer = await workbook.xlsx.writeBuffer();
-		return new Uint8Array(buffer);
+			color: { argb: e.difference === 0 ? "FF008000" : "FFC80000" }
+		}, a.getCell(2).numFmt = "#,##0.00";
+		let o = await t.xlsx.writeBuffer();
+		return new Uint8Array(o);
 	}
-};
-//#endregion
-//#region src/common/schemas.ts
-var productSchema = z.object({
-	sku: z.string().min(1, "El SKU es obligatorio."),
-	name: z.string().min(1, "El nombre es obligatorio."),
-	description: z.string().optional(),
-	category_id: z.coerce.number().int().positive().optional().nullable(),
-	supplier_id: z.coerce.number().int().positive().optional().nullable(),
-	price_purchase: z.coerce.number().min(0, "El precio de compra no puede ser negativo."),
-	price_sale: z.coerce.number().min(0, "El precio de venta no puede ser negativo."),
-	stock: z.coerce.number().int().optional(),
-	min_stock: z.coerce.number().int().min(0).optional().default(10)
+}, R = S.object({
+	sku: S.string().min(1, "El SKU es obligatorio."),
+	name: S.string().min(1, "El nombre es obligatorio."),
+	description: S.string().optional(),
+	category_id: S.coerce.number().int().positive().optional().nullable(),
+	supplier_id: S.coerce.number().int().positive().optional().nullable(),
+	price_purchase: S.coerce.number().min(0, "El precio de compra no puede ser negativo."),
+	price_sale: S.coerce.number().min(0, "El precio de venta no puede ser negativo."),
+	stock: S.coerce.number().int().optional(),
+	min_stock: S.coerce.number().int().min(0).optional().default(10)
+}), z = S.object({
+	product_id: S.coerce.number().int().positive("El ID del producto es obligatorio."),
+	quantity: S.coerce.number().int().positive("La cantidad debe ser mayor a 0."),
+	unit_price: S.coerce.number().min(0, "El precio unitario no puede ser negativo.")
+}), B = S.object({
+	cash_register_id: S.coerce.number().int().positive("El ID de la caja es obligatorio."),
+	client_id: S.coerce.number().int().optional(),
+	client_dni: S.string().optional(),
+	client_name: S.string().optional(),
+	payment_method: S.enum(["CASH", "CARD"]).default("CASH"),
+	items: S.array(z).min(1, "La venta debe tener al menos un producto.")
 });
-var saleItemSchema = z.object({
-	product_id: z.coerce.number().int().positive("El ID del producto es obligatorio."),
-	quantity: z.coerce.number().int().positive("La cantidad debe ser mayor a 0."),
-	unit_price: z.coerce.number().min(0, "El precio unitario no puede ser negativo.")
+S.object({ opening_amount: S.coerce.number().min(0, "El monto de apertura no puede ser negativo.") }), S.object({
+	register_id: S.coerce.number().int().positive("El ID de la caja es obligatorio."),
+	closing_amount: S.coerce.number().min(0, "El monto de cierre no puede ser negativo.")
 });
-var saleSchema = z.object({
-	cash_register_id: z.coerce.number().int().positive("El ID de la caja es obligatorio."),
-	client_id: z.coerce.number().int().optional(),
-	client_dni: z.string().optional(),
-	client_name: z.string().optional(),
-	payment_method: z.enum(["CASH", "CARD"]).default("CASH"),
-	items: z.array(saleItemSchema).min(1, "La venta debe tener al menos un producto.")
-});
-z.object({ opening_amount: z.coerce.number().min(0, "El monto de apertura no puede ser negativo.") });
-z.object({
-	register_id: z.coerce.number().int().positive("El ID de la caja es obligatorio."),
-	closing_amount: z.coerce.number().min(0, "El monto de cierre no puede ser negativo.")
-});
-var clientSchema = z.object({
-	dni: z.string().min(1, "El DNI/Documento es obligatorio."),
-	name: z.string().min(1, "El nombre es obligatorio."),
-	phone: z.string().optional().nullable(),
-	code: z.string().min(1, "El código de cliente es obligatorio."),
-	tax_id: z.string().optional().nullable()
-});
-var categorySchema = z.object({ name: z.string().min(1, "El nombre de la categoría es obligatorio.").max(255) });
-z.object({
-	product_id: z.coerce.number().int().positive("El ID del producto es obligatorio."),
-	type: z.enum(["ENTRADA", "SALIDA"], { errorMap: () => ({ message: "El tipo debe ser ENTRADA o SALIDA." }) }),
-	quantity: z.coerce.number().int().positive("La cantidad debe ser mayor a 0.")
+var V = S.object({
+	dni: S.string().min(1, "El DNI/Documento es obligatorio."),
+	name: S.string().min(1, "El nombre es obligatorio."),
+	phone: S.string().optional().nullable(),
+	code: S.string().min(1, "El código de cliente es obligatorio."),
+	tax_id: S.string().optional().nullable()
+}), H = S.object({ name: S.string().min(1, "El nombre de la categoría es obligatorio.").max(255) });
+S.object({
+	product_id: S.coerce.number().int().positive("El ID del producto es obligatorio."),
+	type: S.enum(["ENTRADA", "SALIDA"], { errorMap: () => ({ message: "El tipo debe ser ENTRADA o SALIDA." }) }),
+	quantity: S.coerce.number().int().positive("La cantidad debe ser mayor a 0.")
 });
 //#endregion
 //#region src/main/services/ProductService.ts
-var ProductService = class {
-	constructor(productRepo, categoryRepo, auditLogRepo) {
-		this.productRepo = productRepo;
-		this.categoryRepo = categoryRepo;
-		this.auditLogRepo = auditLogRepo;
+var U = class {
+	constructor(e, t, n) {
+		this.productRepo = e, this.categoryRepo = t, this.auditLogRepo = n;
 	}
-	async getAllProducts(search, categoryId) {
-		return this.productRepo.findAll(search, categoryId);
+	async getAllProducts(e, t) {
+		return this.productRepo.findAll(e, t);
 	}
-	async getProductById(id) {
-		const product = await this.productRepo.findById(id);
-		if (!product) throw new NotFoundError("Producto");
-		return product;
+	async getProductById(e) {
+		let n = await this.productRepo.findById(e);
+		if (!n) throw new t("Producto");
+		return n;
 	}
-	async getLowStockProducts(threshold) {
+	async getLowStockProducts(e) {
 		return this.productRepo.findLowStock();
 	}
-	async createProduct(data, userId = 1) {
-		const validated = productSchema.parse(data);
-		if (await this.productRepo.findBySku(validated.sku)) throw new ConflictError(`El SKU ${validated.sku} ya se encuentra registrado.`);
-		if (validated.category_id) {
-			if (!await this.categoryRepo.findById(validated.category_id)) throw new NotFoundError("Categoría");
-		}
-		const initialStock = validated.stock || 0;
-		const product = await this.productRepo.create(validated);
-		if (initialStock > 0) await this.productRepo.createMovement({
-			product_id: product.id,
+	async createProduct(e, r = 1) {
+		let i = R.parse(e);
+		if (await this.productRepo.findBySku(i.sku)) throw new n(`El SKU ${i.sku} ya se encuentra registrado.`);
+		if (i.category_id && !await this.categoryRepo.findById(i.category_id)) throw new t("Categoría");
+		let a = i.stock || 0, o = await this.productRepo.create(i);
+		return a > 0 && await this.productRepo.createMovement({
+			product_id: o.id,
 			type: "ENTRADA",
-			quantity: initialStock,
+			quantity: a,
 			reason: "INICIAL"
-		});
-		await this.auditLogRepo.create({
-			userId,
+		}), await this.auditLogRepo.create({
+			userId: r,
 			action: "CREATE_PRODUCT",
 			entity: "products",
-			entity_id: product.id
-		});
-		return {
-			success: true,
-			id: product.id
+			entity_id: o.id
+		}), {
+			success: !0,
+			id: o.id
 		};
 	}
-	async updateProduct(id, data, userId = 1) {
-		const existingProduct = await this.productRepo.findById(id);
-		if (!existingProduct) throw new NotFoundError("Producto");
-		const validated = productSchema.parse(data);
-		if (validated.sku !== existingProduct.sku) {
-			if (await this.productRepo.findBySku(validated.sku)) throw new ConflictError(`El SKU ${validated.sku} ya se encuentra registrado.`);
-		}
-		if (validated.category_id) {
-			if (!await this.categoryRepo.findById(validated.category_id)) throw new NotFoundError("Categoría");
-		}
-		const product = await this.productRepo.update(id, validated);
-		await this.auditLogRepo.create({
-			userId,
+	async updateProduct(e, r, i = 1) {
+		let a = await this.productRepo.findById(e);
+		if (!a) throw new t("Producto");
+		let o = R.parse(r);
+		if (o.sku !== a.sku && await this.productRepo.findBySku(o.sku)) throw new n(`El SKU ${o.sku} ya se encuentra registrado.`);
+		if (o.category_id && !await this.categoryRepo.findById(o.category_id)) throw new t("Categoría");
+		let s = await this.productRepo.update(e, o);
+		return await this.auditLogRepo.create({
+			userId: i,
 			action: "UPDATE_PRODUCT",
 			entity: "products",
-			entity_id: product.id
-		});
-		return {
-			success: true,
-			product
+			entity_id: s.id
+		}), {
+			success: !0,
+			product: s
 		};
 	}
-	async deleteProduct(id, userId = 1) {
-		if (!await this.productRepo.findById(id)) throw new NotFoundError("Producto");
-		const salesCount = await this.productRepo.getSalesCount(id);
-		if (salesCount > 0) throw new BusinessRuleError(`No se puede eliminar el producto porque tiene ${salesCount} venta(s) asociada(s).`);
-		await this.productRepo.delete(id);
-		await this.auditLogRepo.create({
-			userId,
+	async deleteProduct(e, n = 1) {
+		if (!await this.productRepo.findById(e)) throw new t("Producto");
+		let r = await this.productRepo.getSalesCount(e);
+		if (r > 0) throw new i(`No se puede eliminar el producto porque tiene ${r} venta(s) asociada(s).`);
+		return await this.productRepo.delete(e), await this.auditLogRepo.create({
+			userId: n,
 			action: "DELETE_PRODUCT",
 			entity: "products",
-			entity_id: id
-		});
-		return { success: true };
+			entity_id: e
+		}), { success: !0 };
 	}
-	async addStock(productId, quantity, userId = 1, reason = "AJUSTE") {
-		if (!await this.productRepo.findById(productId)) throw new NotFoundError("Producto");
-		if (quantity <= 0) throw new ValidationError("La cantidad debe ser mayor a cero.");
-		await this.productRepo.updateStock(productId, quantity);
-		await this.productRepo.createMovement({
-			product_id: productId,
+	async addStock(n, r, i = 1, a = "AJUSTE") {
+		if (!await this.productRepo.findById(n)) throw new t("Producto");
+		if (r <= 0) throw new e("La cantidad debe ser mayor a cero.");
+		return await this.productRepo.updateStock(n, r), await this.productRepo.createMovement({
+			product_id: n,
 			type: "ENTRADA",
-			quantity,
-			reason
-		});
-		await this.auditLogRepo.create({
-			userId,
+			quantity: r,
+			reason: a
+		}), await this.auditLogRepo.create({
+			userId: i,
 			action: "STOCK_ENTRADA",
 			entity: "products",
-			entity_id: productId
-		});
-		return { success: true };
+			entity_id: n
+		}), { success: !0 };
 	}
-	async removeStock(productId, quantity, userId = 1, reason = "AJUSTE") {
-		const product = await this.productRepo.findById(productId);
-		if (!product) throw new NotFoundError("Producto");
-		if (quantity <= 0) throw new ValidationError("La cantidad debe ser mayor a cero.");
-		if (product.stock < quantity) throw new BusinessRuleError(`Stock insuficiente. Stock actual: ${product.stock}, Cantidad solicitada: ${quantity}`);
-		await this.productRepo.updateStock(productId, -quantity);
-		await this.productRepo.createMovement({
-			product_id: productId,
+	async removeStock(n, r, a = 1, o = "AJUSTE") {
+		let s = await this.productRepo.findById(n);
+		if (!s) throw new t("Producto");
+		if (r <= 0) throw new e("La cantidad debe ser mayor a cero.");
+		if (s.stock < r) throw new i(`Stock insuficiente. Stock actual: ${s.stock}, Cantidad solicitada: ${r}`);
+		return await this.productRepo.updateStock(n, -r), await this.productRepo.createMovement({
+			product_id: n,
 			type: "SALIDA",
-			quantity,
-			reason
-		});
-		await this.auditLogRepo.create({
-			userId,
+			quantity: r,
+			reason: o
+		}), await this.auditLogRepo.create({
+			userId: a,
 			action: "STOCK_SALIDA",
 			entity: "products",
-			entity_id: productId
-		});
-		return { success: true };
+			entity_id: n
+		}), { success: !0 };
 	}
-	async getInventoryMovements(productId, limit = 50) {
-		if (!await this.productRepo.findById(productId)) throw new NotFoundError("Producto");
-		return this.productRepo.getMovements(productId, limit);
+	async getInventoryMovements(e, n = 50) {
+		if (!await this.productRepo.findById(e)) throw new t("Producto");
+		return this.productRepo.getMovements(e, n);
 	}
-};
-//#endregion
-//#region src/main/services/ClientService.ts
-var ClientService = class {
-	constructor(clientRepo, auditLogRepo) {
-		this.clientRepo = clientRepo;
-		this.auditLogRepo = auditLogRepo;
+}, de = class {
+	constructor(e, t) {
+		this.clientRepo = e, this.auditLogRepo = t;
 	}
-	async getAllClients(search) {
-		return this.clientRepo.findAll(search);
+	async getAllClients(e) {
+		return this.clientRepo.findAll(e);
 	}
-	async getClientById(id) {
-		return await findOrThrow(() => this.clientRepo.findById(id), "Cliente", id);
+	async getClientById(e) {
+		return await P(() => this.clientRepo.findById(e), "Cliente", e);
 	}
-	async createClient(data, userId = 1) {
-		const validated = clientSchema.parse(data);
-		if (await this.clientRepo.findByDni(validated.dni)) throw new ConflictError(`El DNI ${validated.dni} ya se encuentra registrado.`);
-		if (await this.clientRepo.findByCode(validated.code)) throw new ConflictError(`El código ${validated.code} ya se encuentra registrado.`);
-		if (validated.tax_id) {
-			if (await this.clientRepo.findByTaxId(validated.tax_id)) throw new ConflictError(`El RUC ${validated.tax_id} ya se encuentra registrado.`);
-		}
-		const client = await this.clientRepo.create(validated);
-		await this.auditLogRepo.create({
-			userId,
+	async createClient(e, t = 1) {
+		let r = V.parse(e);
+		if (await this.clientRepo.findByDni(r.dni)) throw new n(`El DNI ${r.dni} ya se encuentra registrado.`);
+		if (await this.clientRepo.findByCode(r.code)) throw new n(`El código ${r.code} ya se encuentra registrado.`);
+		if (r.tax_id && await this.clientRepo.findByTaxId(r.tax_id)) throw new n(`El RUC ${r.tax_id} ya se encuentra registrado.`);
+		let i = await this.clientRepo.create(r);
+		return await this.auditLogRepo.create({
+			userId: t,
 			action: "CREATE_CLIENT",
 			entity: "clients",
-			entity_id: client.id
-		});
-		return {
-			success: true,
-			id: client.id
+			entity_id: i.id
+		}), {
+			success: !0,
+			id: i.id
 		};
 	}
-	async updateClient(id, data, userId = 1) {
-		await findOrThrow(() => this.clientRepo.findById(id), "Cliente", id);
-		const validated = clientSchema.parse(data);
-		const existingDni = await this.clientRepo.findByDni(validated.dni);
-		if (existingDni && existingDni.id !== id) throw new ConflictError(`El DNI ${validated.dni} ya se encuentra registrado.`);
-		const existingCode = await this.clientRepo.findByCode(validated.code);
-		if (existingCode && existingCode.id !== id) throw new ConflictError(`El código ${validated.code} ya se encuentra registrado.`);
-		if (validated.tax_id) {
-			const existingTaxId = await this.clientRepo.findByTaxId(validated.tax_id);
-			if (existingTaxId && existingTaxId.id !== id) throw new ConflictError(`El RUC ${validated.tax_id} ya se encuentra registrado.`);
+	async updateClient(e, t, r = 1) {
+		await P(() => this.clientRepo.findById(e), "Cliente", e);
+		let i = V.parse(t), a = await this.clientRepo.findByDni(i.dni);
+		if (a && a.id !== e) throw new n(`El DNI ${i.dni} ya se encuentra registrado.`);
+		let o = await this.clientRepo.findByCode(i.code);
+		if (o && o.id !== e) throw new n(`El código ${i.code} ya se encuentra registrado.`);
+		if (i.tax_id) {
+			let t = await this.clientRepo.findByTaxId(i.tax_id);
+			if (t && t.id !== e) throw new n(`El RUC ${i.tax_id} ya se encuentra registrado.`);
 		}
-		const client = await this.clientRepo.update(id, validated);
-		await this.auditLogRepo.create({
-			userId,
+		let s = await this.clientRepo.update(e, i);
+		return await this.auditLogRepo.create({
+			userId: r,
 			action: "UPDATE_CLIENT",
 			entity: "clients",
-			entity_id: client.id
-		});
-		return {
-			success: true,
-			client
+			entity_id: s.id
+		}), {
+			success: !0,
+			client: s
 		};
 	}
-	async deleteClient(id, userId = 1) {
-		await findOrThrow(() => this.clientRepo.findById(id), "Cliente", id);
-		const salesCount = await this.clientRepo.getSalesCount(id);
-		if (salesCount > 0) throw new BusinessRuleError(`No se puede eliminar el cliente porque tiene ${salesCount} venta(s) asociada(s).`);
-		await this.clientRepo.delete(id);
-		await this.auditLogRepo.create({
-			userId,
+	async deleteClient(e, t = 1) {
+		await P(() => this.clientRepo.findById(e), "Cliente", e);
+		let n = await this.clientRepo.getSalesCount(e);
+		if (n > 0) throw new i(`No se puede eliminar el cliente porque tiene ${n} venta(s) asociada(s).`);
+		return await this.clientRepo.delete(e), await this.auditLogRepo.create({
+			userId: t,
 			action: "DELETE_CLIENT",
 			entity: "clients",
-			entity_id: id
-		});
-		return { success: true };
+			entity_id: e
+		}), { success: !0 };
 	}
-};
-//#endregion
-//#region src/main/services/SaleService.ts
-var SaleService = class {
-	constructor(saleRepo, productRepo, clientRepo, cashRegisterRepo, settingsRepo, auditLogRepo, dashboardService) {
-		this.saleRepo = saleRepo;
-		this.productRepo = productRepo;
-		this.clientRepo = clientRepo;
-		this.cashRegisterRepo = cashRegisterRepo;
-		this.settingsRepo = settingsRepo;
-		this.auditLogRepo = auditLogRepo;
-		this.dashboardService = dashboardService;
+}, fe = class {
+	constructor(e, t, n, r, i, a, o) {
+		this.saleRepo = e, this.productRepo = t, this.clientRepo = n, this.cashRegisterRepo = r, this.settingsRepo = i, this.auditLogRepo = a, this.dashboardService = o;
 	}
-	async getAllSales(startDate, endDate, clientId, cashRegisterId) {
-		const filter = {};
-		if (startDate) filter.startDate = startDate;
-		if (endDate) filter.endDate = endDate;
-		if (clientId) filter.clientId = clientId;
-		if (cashRegisterId) filter.cashRegisterId = cashRegisterId;
-		return this.saleRepo.findAll(filter);
+	async getAllSales(e, t, n, r) {
+		let i = {};
+		return e && (i.startDate = e), t && (i.endDate = t), n && (i.clientId = n), r && (i.cashRegisterId = r), this.saleRepo.findAll(i);
 	}
-	async getSaleDetails(id) {
-		const sale = await this.saleRepo.findById(id);
-		if (!sale) throw new NotFoundError("Venta");
-		return sale;
+	async getSaleDetails(e) {
+		let n = await this.saleRepo.findById(e);
+		if (!n) throw new t("Venta");
+		return n;
 	}
 	async getTodaySales() {
 		return this.saleRepo.findToday();
 	}
-	async getSalesStats(startDate, endDate) {
-		return this.saleRepo.getStats(startDate, endDate);
+	async getSalesStats(e, t) {
+		return this.saleRepo.getStats(e, t);
 	}
 	async getLastSale() {
 		return this.saleRepo.findLast();
 	}
-	async registerSale(saleData, itemsData, userId = 1) {
-		const validated = saleSchema.parse({
-			...saleData,
-			items: itemsData
+	async registerSale(e, n, r = 1) {
+		let a = B.parse({
+			...e,
+			items: n
 		});
-		if (!await this.cashRegisterRepo.findOpen()) throw new BusinessRuleError("La caja no está abierta o no existe.");
-		let finalClientId = validated.client_id;
-		if (validated.client_dni && validated.client_name && !finalClientId) {
-			const existingClient = await this.clientRepo.findByDni(validated.client_dni);
-			if (existingClient) finalClientId = existingClient.id;
-			else finalClientId = (await this.clientRepo.create({
-				dni: validated.client_dni,
-				name: validated.client_name,
+		if (!await this.cashRegisterRepo.findOpen()) throw new i("La caja no está abierta o no existe.");
+		let o = a.client_id;
+		if (a.client_dni && a.client_name && !o) {
+			let e = await this.clientRepo.findByDni(a.client_dni);
+			o = e ? e.id : (await this.clientRepo.create({
+				dni: a.client_dni,
+				name: a.client_name,
 				code: `CLI-${Date.now()}`
 			})).id;
 		}
-		if (finalClientId) {
-			if (!await this.clientRepo.findById(finalClientId)) throw new NotFoundError("Cliente");
+		if (o && !await this.clientRepo.findById(o)) throw new t("Cliente");
+		let s = a.items.map((e) => e.product_id), c = await this.productRepo.findByIds(s), l = new Map(c.map((e) => [e.id, e]));
+		for (let e of a.items) {
+			let n = l.get(e.product_id);
+			if (!n) throw new t("Producto", e.product_id);
+			if (n.stock < e.quantity) throw new i(`Stock insuficiente para "${n.name}". Stock actual: ${n.stock}, Cantidad solicitada: ${e.quantity}`);
 		}
-		const productIds = validated.items.map((item) => item.product_id);
-		const products = await this.productRepo.findByIds(productIds);
-		const productMap = new Map(products.map((p) => [p.id, p]));
-		for (const item of validated.items) {
-			const product = productMap.get(item.product_id);
-			if (!product) throw new NotFoundError(`Producto`, item.product_id);
-			if (product.stock < item.quantity) throw new BusinessRuleError(`Stock insuficiente para "${product.name}". Stock actual: ${product.stock}, Cantidad solicitada: ${item.quantity}`);
-		}
-		const itemsWithPurchasePrice = validated.items.map((item) => {
-			const product = productMap.get(item.product_id);
+		let u = a.items.map((e) => {
+			let t = l.get(e.product_id);
 			return {
-				product_id: item.product_id,
-				quantity: item.quantity,
-				unit_price: item.unit_price,
-				purchase_price: product?.price_purchase || 0
+				product_id: e.product_id,
+				quantity: e.quantity,
+				unit_price: e.unit_price,
+				purchase_price: t?.price_purchase || 0
 			};
-		});
-		const rawTotal = itemsWithPurchasePrice.reduce((acc, item) => acc + item.unit_price * item.quantity, 0);
-		const taxSettings = await this.settingsRepo.getTaxSettings();
-		let subtotal = rawTotal;
-		let taxAmount = 0;
-		let total = rawTotal;
-		if (taxSettings.taxType !== "none" && taxSettings.taxRate > 0) {
-			taxAmount = parseFloat((rawTotal * taxSettings.taxRate).toFixed(2));
-			total = parseFloat((subtotal + taxAmount).toFixed(2));
-		}
-		const registerInput = {
-			cash_register_id: validated.cash_register_id,
-			client_id: finalClientId || 1,
-			subtotal,
-			tax_amount: taxAmount,
-			total,
-			items: itemsWithPurchasePrice,
-			payment_method: validated.payment_method,
-			exchange_rate: saleData.exchange_rate || 0
-		};
-		const saleId = await this.saleRepo.registerSale(registerInput);
-		this.dashboardService.invalidateCache();
-		await this.auditLogRepo.create({
-			userId,
+		}), d = u.reduce((e, t) => e + t.unit_price * t.quantity, 0), f = await this.settingsRepo.getTaxSettings(), p = d, m = 0, h = d;
+		f.taxType !== "none" && f.taxRate > 0 && (m = parseFloat((d * f.taxRate).toFixed(2)), h = parseFloat((p + m).toFixed(2)));
+		let g = {
+			cash_register_id: a.cash_register_id,
+			client_id: o || 1,
+			subtotal: p,
+			tax_amount: m,
+			total: h,
+			items: u,
+			payment_method: a.payment_method,
+			exchange_rate: e.exchange_rate || 0
+		}, _ = await this.saleRepo.registerSale(g);
+		return this.dashboardService.invalidateCache(), await this.auditLogRepo.create({
+			userId: r,
 			action: "CREATE_SALE",
 			entity: "sales",
-			entity_id: saleId
-		});
-		return {
-			success: true,
-			id: saleId
+			entity_id: _
+		}), {
+			success: !0,
+			id: _
 		};
 	}
-	async cancelSale(saleId, userId = 1) {
-		if (!await this.saleRepo.findById(saleId)) throw new NotFoundError("Venta");
-		await this.saleRepo.cancelSale(saleId);
-		this.dashboardService.invalidateCache();
-		await this.auditLogRepo.create({
-			userId,
+	async cancelSale(e, n = 1) {
+		if (!await this.saleRepo.findById(e)) throw new t("Venta");
+		return await this.saleRepo.cancelSale(e), this.dashboardService.invalidateCache(), await this.auditLogRepo.create({
+			userId: n,
 			action: "CANCEL_SALE",
 			entity: "sales",
-			entity_id: saleId
-		});
-		return { success: true };
+			entity_id: e
+		}), { success: !0 };
 	}
-};
-//#endregion
-//#region src/main/services/CashRegisterService.ts
-var CashRegisterService = class {
-	constructor(cashRegisterRepo, auditLogRepo) {
-		this.cashRegisterRepo = cashRegisterRepo;
-		this.auditLogRepo = auditLogRepo;
+}, pe = class {
+	constructor(e, t) {
+		this.cashRegisterRepo = e, this.auditLogRepo = t;
 	}
 	async getOpenRegister() {
 		return this.cashRegisterRepo.findOpen();
 	}
-	async getAllRegisters(startDate, endDate) {
-		return this.cashRegisterRepo.findAll(startDate, endDate);
+	async getAllRegisters(e, t) {
+		return this.cashRegisterRepo.findAll(e, t);
 	}
-	async getRegisterDetails(id) {
-		const register = await this.cashRegisterRepo.findById(id);
-		if (!register) throw new NotFoundError("Caja");
-		return register;
+	async getRegisterDetails(e) {
+		let n = await this.cashRegisterRepo.findById(e);
+		if (!n) throw new t("Caja");
+		return n;
 	}
-	async openRegister(openingAmount, userId = 1) {
-		if (isNaN(openingAmount) || openingAmount < 0) throw new ValidationError("El monto de apertura no puede ser negativo.");
-		if (await this.cashRegisterRepo.findOpen()) throw new ConflictError("Ya hay una caja abierta para el día de hoy.");
-		const cashRegister = await this.cashRegisterRepo.create(openingAmount);
-		await this.auditLogRepo.create({
-			userId,
+	async openRegister(t, r = 1) {
+		if (isNaN(t) || t < 0) throw new e("El monto de apertura no puede ser negativo.");
+		if (await this.cashRegisterRepo.findOpen()) throw new n("Ya hay una caja abierta para el día de hoy.");
+		let i = await this.cashRegisterRepo.create(t);
+		return await this.auditLogRepo.create({
+			userId: r,
 			action: "OPEN_CASH_REGISTER",
 			entity: "cash_registers",
-			entity_id: cashRegister.id
-		});
-		return {
-			success: true,
-			id: cashRegister.id
+			entity_id: i.id
+		}), {
+			success: !0,
+			id: i.id
 		};
 	}
-	async closeRegister(registerId, closingAmount, userId = 1) {
-		if (isNaN(closingAmount) || closingAmount < 0) throw new ValidationError("El monto de cierre no puede ser negativo.");
-		const register = await this.cashRegisterRepo.findById(registerId);
-		if (!register) throw new NotFoundError("Caja");
-		const expectedCash = Number(register.opening_amount) + Number(register.total_sales);
-		const difference = Number(closingAmount) - expectedCash;
-		const salesCount = await this.cashRegisterRepo.getSalesCount(register.id, register.opened_at);
-		const status = difference === 0 ? "PERFECT" : difference > 0 ? "SURPLUS" : "MISSING";
-		await this.cashRegisterRepo.close(register.id, Number(closingAmount), difference, status);
-		await this.auditLogRepo.create({
-			userId,
+	async closeRegister(n, r, i = 1) {
+		if (isNaN(r) || r < 0) throw new e("El monto de cierre no puede ser negativo.");
+		let a = await this.cashRegisterRepo.findById(n);
+		if (!a) throw new t("Caja");
+		let o = Number(a.opening_amount) + Number(a.total_sales), s = Number(r) - o, c = await this.cashRegisterRepo.getSalesCount(a.id, a.opened_at), l = s === 0 ? "PERFECT" : s > 0 ? "SURPLUS" : "MISSING";
+		return await this.cashRegisterRepo.close(a.id, Number(r), s, l), await this.auditLogRepo.create({
+			userId: i,
 			action: "CLOSE_CASH_REGISTER",
 			entity: "cash_registers",
-			entity_id: register.id
-		});
-		return {
-			success: true,
-			registerId: register.id,
-			openingAmount: register.opening_amount,
-			totalSales: register.total_sales,
-			expectedCash,
-			realCash: Number(closingAmount),
-			difference,
-			status,
-			salesCount
+			entity_id: a.id
+		}), {
+			success: !0,
+			registerId: a.id,
+			openingAmount: a.opening_amount,
+			totalSales: a.total_sales,
+			expectedCash: o,
+			realCash: Number(r),
+			difference: s,
+			status: l,
+			salesCount: c
 		};
 	}
-	async getDailySummary(registerId) {
-		return this.cashRegisterRepo.getDailySummary(registerId);
+	async getDailySummary(e) {
+		return this.cashRegisterRepo.getDailySummary(e);
 	}
-};
-//#endregion
-//#region src/main/services/SupplierService.ts
-var SupplierService = class {
-	constructor(supplierRepo, auditLogRepo) {
-		this.supplierRepo = supplierRepo;
-		this.auditLogRepo = auditLogRepo;
+}, me = class {
+	constructor(e, t) {
+		this.supplierRepo = e, this.auditLogRepo = t;
 	}
-	async getAllSuppliers(search) {
+	async getAllSuppliers(e) {
 		try {
-			return await this.supplierRepo.findAll(search);
-		} catch (error) {
-			console.error("Get all suppliers error:", error);
-			throw new Error("Error al obtener proveedores");
+			return await this.supplierRepo.findAll(e);
+		} catch (e) {
+			throw console.error("Get all suppliers error:", e), Error("Error al obtener proveedores");
 		}
 	}
-	async getSupplierById(id) {
+	async getSupplierById(e) {
 		try {
-			const supplier = await this.supplierRepo.findById(id);
-			if (!supplier) throw new NotFoundError("Proveedor");
-			return supplier;
-		} catch (error) {
-			console.error("Get supplier by ID error:", error);
-			if (error.code === "P2025") throw new NotFoundError("Proveedor");
-			throw error;
+			let n = await this.supplierRepo.findById(e);
+			if (!n) throw new t("Proveedor");
+			return n;
+		} catch (e) {
+			throw console.error("Get supplier by ID error:", e), e.code === "P2025" ? new t("Proveedor") : e;
 		}
 	}
-	async createSupplier(data, createdBy) {
+	async createSupplier(e, t) {
 		try {
-			if (data.ruc) {
-				if (await this.supplierRepo.findByRuc(data.ruc)) throw new ConflictError(`El RUC ${data.ruc} ya está registrado`);
-			}
-			const supplier = await this.supplierRepo.create(data);
-			await this.auditLogRepo.create({
-				userId: createdBy,
+			if (e.ruc && await this.supplierRepo.findByRuc(e.ruc)) throw new n(`El RUC ${e.ruc} ya está registrado`);
+			let r = await this.supplierRepo.create(e);
+			return await this.auditLogRepo.create({
+				userId: t,
 				action: "CREATE_SUPPLIER",
 				entity: "suppliers",
-				entity_id: supplier.id
-			});
-			return supplier;
-		} catch (error) {
-			console.error("Create supplier error:", error);
-			if (error.code === "P2002") throw new ConflictError("El RUC ya está en uso");
-			throw error;
+				entity_id: r.id
+			}), r;
+		} catch (e) {
+			throw console.error("Create supplier error:", e), e.code === "P2002" ? new n("El RUC ya está en uso") : e;
 		}
 	}
-	async updateSupplier(id, data, updatedBy) {
+	async updateSupplier(e, r, i) {
 		try {
-			const existing = await this.supplierRepo.findById(id);
-			if (!existing) throw new NotFoundError("Proveedor");
-			if (data.ruc && data.ruc !== existing.ruc) {
-				if (await this.supplierRepo.findByRuc(data.ruc)) throw new ConflictError(`El RUC ${data.ruc} ya está registrado`);
-			}
-			const supplier = await this.supplierRepo.update(id, data);
-			await this.auditLogRepo.create({
-				userId: updatedBy,
+			let a = await this.supplierRepo.findById(e);
+			if (!a) throw new t("Proveedor");
+			if (r.ruc && r.ruc !== a.ruc && await this.supplierRepo.findByRuc(r.ruc)) throw new n(`El RUC ${r.ruc} ya está registrado`);
+			let o = await this.supplierRepo.update(e, r);
+			return await this.auditLogRepo.create({
+				userId: i,
 				action: "UPDATE_SUPPLIER",
 				entity: "suppliers",
-				entity_id: id
-			});
-			return supplier;
-		} catch (error) {
-			console.error("Update supplier error:", error);
-			if (error.code === "P2025") throw new NotFoundError("Proveedor");
-			throw error;
+				entity_id: e
+			}), o;
+		} catch (e) {
+			throw console.error("Update supplier error:", e), e.code === "P2025" ? new t("Proveedor") : e;
 		}
 	}
-	async deleteSupplier(id, deletedBy) {
+	async deleteSupplier(e, n) {
 		try {
-			if (!await this.supplierRepo.findById(id)) throw new NotFoundError("Proveedor");
-			if (await this.supplierRepo.hasProducts(id)) throw new BusinessRuleError("No se puede eliminar el proveedor porque tiene producto(s) asociado(s)");
-			if (await this.supplierRepo.hasPurchases(id)) throw new BusinessRuleError("No se puede eliminar el proveedor porque tiene compra(s) asociada(s)");
-			await this.supplierRepo.delete(id);
-			await this.auditLogRepo.create({
-				userId: deletedBy,
+			if (!await this.supplierRepo.findById(e)) throw new t("Proveedor");
+			if (await this.supplierRepo.hasProducts(e)) throw new i("No se puede eliminar el proveedor porque tiene producto(s) asociado(s)");
+			if (await this.supplierRepo.hasPurchases(e)) throw new i("No se puede eliminar el proveedor porque tiene compra(s) asociada(s)");
+			return await this.supplierRepo.delete(e), await this.auditLogRepo.create({
+				userId: n,
 				action: "DELETE_SUPPLIER",
 				entity: "suppliers",
-				entity_id: id
-			});
-			return { success: true };
-		} catch (error) {
-			console.error("Delete supplier error:", error);
-			if (error.code === "P2025") throw new NotFoundError("Proveedor");
-			throw error;
+				entity_id: e
+			}), { success: !0 };
+		} catch (e) {
+			throw console.error("Delete supplier error:", e), e.code === "P2025" ? new t("Proveedor") : e;
 		}
 	}
-};
-//#endregion
-//#region src/main/services/PurchaseService.ts
-var PurchaseService = class {
-	constructor(purchaseRepo, supplierRepo, productRepo, auditLogRepo) {
-		this.purchaseRepo = purchaseRepo;
-		this.supplierRepo = supplierRepo;
-		this.productRepo = productRepo;
-		this.auditLogRepo = auditLogRepo;
+}, he = class {
+	constructor(e, t, n, r) {
+		this.purchaseRepo = e, this.supplierRepo = t, this.productRepo = n, this.auditLogRepo = r;
 	}
-	async getAllPurchases(supplierId, status) {
+	async getAllPurchases(e, t) {
 		try {
-			return await this.purchaseRepo.findAll(supplierId, status);
-		} catch (error) {
-			console.error("Get all purchases error:", error);
-			throw new Error("Error al obtener compras");
+			return await this.purchaseRepo.findAll(e, t);
+		} catch (e) {
+			throw console.error("Get all purchases error:", e), Error("Error al obtener compras");
 		}
 	}
-	async getPurchaseById(id) {
+	async getPurchaseById(e) {
 		try {
-			const purchase = await this.purchaseRepo.findById(id);
-			if (!purchase) throw new NotFoundError("Compra");
-			return purchase;
-		} catch (error) {
-			console.error("Get purchase by ID error:", error);
-			if (error.code === "P2025") throw new NotFoundError("Compra");
-			throw error;
+			let n = await this.purchaseRepo.findById(e);
+			if (!n) throw new t("Compra");
+			return n;
+		} catch (e) {
+			throw console.error("Get purchase by ID error:", e), e.code === "P2025" ? new t("Compra") : e;
 		}
 	}
-	async createPurchase(data, createdBy) {
+	async createPurchase(e, n) {
 		try {
-			if (!await this.supplierRepo.findById(data.supplier_id)) throw new NotFoundError("Proveedor");
-			const productIds = data.items.map((item) => item.product_id);
-			if ((await this.productRepo.findByIds(productIds)).length !== productIds.length) throw new NotFoundError("Producto", "uno o más productos no existen");
-			const purchase = await this.purchaseRepo.create(data);
-			await this.auditLogRepo.create({
-				userId: createdBy,
+			if (!await this.supplierRepo.findById(e.supplier_id)) throw new t("Proveedor");
+			let r = e.items.map((e) => e.product_id);
+			if ((await this.productRepo.findByIds(r)).length !== r.length) throw new t("Producto", "uno o más productos no existen");
+			let i = await this.purchaseRepo.create(e);
+			return await this.auditLogRepo.create({
+				userId: n,
 				action: "CREATE_PURCHASE",
 				entity: "purchases",
-				entity_id: purchase.id
-			});
-			return purchase;
-		} catch (error) {
-			console.error("Create purchase error:", error);
-			throw error;
+				entity_id: i.id
+			}), i;
+		} catch (e) {
+			throw console.error("Create purchase error:", e), e;
 		}
 	}
-	async receivePurchase(purchaseId, receivedBy) {
+	async receivePurchase(e, n) {
 		try {
-			await this.purchaseRepo.receive(purchaseId);
-			await this.auditLogRepo.create({
-				userId: receivedBy,
+			return await this.purchaseRepo.receive(e), await this.auditLogRepo.create({
+				userId: n,
 				action: "RECEIVE_PURCHASE",
 				entity: "purchases",
-				entity_id: purchaseId
-			});
-			return { success: true };
-		} catch (error) {
-			console.error("Receive purchase error:", error);
-			if (error.code === "P2025") throw new NotFoundError("Compra");
-			throw error;
+				entity_id: e
+			}), { success: !0 };
+		} catch (e) {
+			throw console.error("Receive purchase error:", e), e.code === "P2025" ? new t("Compra") : e;
 		}
 	}
-	async updatePaymentStatus(purchaseId, paymentStatus) {
+	async updatePaymentStatus(e, n) {
 		try {
-			await this.purchaseRepo.updatePaymentStatus(purchaseId, paymentStatus);
-			return { success: true };
-		} catch (error) {
-			console.error("Update payment status error:", error);
-			if (error.code === "P2025") throw new NotFoundError("Compra");
-			throw error;
+			return await this.purchaseRepo.updatePaymentStatus(e, n), { success: !0 };
+		} catch (e) {
+			throw console.error("Update payment status error:", e), e.code === "P2025" ? new t("Compra") : e;
 		}
 	}
-	async cancelPurchase(purchaseId, cancelledBy) {
+	async cancelPurchase(e, n) {
 		try {
-			await this.purchaseRepo.cancel(purchaseId);
-			await this.auditLogRepo.create({
-				userId: cancelledBy,
+			return await this.purchaseRepo.cancel(e), await this.auditLogRepo.create({
+				userId: n,
 				action: "CANCEL_PURCHASE",
 				entity: "purchases",
-				entity_id: purchaseId
-			});
-			return { success: true };
-		} catch (error) {
-			console.error("Cancel purchase error:", error);
-			if (error.code === "P2025") throw new NotFoundError("Compra");
-			throw error;
+				entity_id: e
+			}), { success: !0 };
+		} catch (e) {
+			throw console.error("Cancel purchase error:", e), e.code === "P2025" ? new t("Compra") : e;
 		}
 	}
-};
-//#endregion
-//#region src/main/services/SettingsService.ts
-var SettingsService = class {
-	constructor(settingsRepo) {
-		this.settingsRepo = settingsRepo;
+}, ge = class {
+	constructor(e) {
+		this.settingsRepo = e;
 	}
 	async getSettings() {
 		return this.settingsRepo.getAll();
 	}
-	async updateSettings(settings) {
-		await this.settingsRepo.upsertMany(settings);
-		return { success: true };
+	async updateSettings(e) {
+		return await this.settingsRepo.upsertMany(e), { success: !0 };
 	}
-	async getSetting(key, defaultValue = "") {
-		return this.settingsRepo.get(key, defaultValue);
+	async getSetting(e, t = "") {
+		return this.settingsRepo.get(e, t);
 	}
 	async getTaxSettings() {
 		return this.settingsRepo.getTaxSettings();
 	}
-	async updateTaxSettings(taxRate, taxType, taxIncluded) {
-		await this.settingsRepo.updateTaxSettings(taxRate, taxType, taxIncluded);
-		return { success: true };
+	async updateTaxSettings(e, t, n) {
+		return await this.settingsRepo.updateTaxSettings(e, t, n), { success: !0 };
 	}
-};
-//#endregion
-//#region src/main/services/UserService.ts
-var UserService = class {
-	constructor(userRepo, auditLogRepo) {
-		this.userRepo = userRepo;
-		this.auditLogRepo = auditLogRepo;
+}, _e = class {
+	constructor(e, t) {
+		this.userRepo = e, this.auditLogRepo = t;
 	}
 	async getAllUsers() {
 		try {
 			return await this.userRepo.findAll();
-		} catch (error) {
-			console.error("Get all users error:", error);
-			throw new Error("Error al obtener usuarios");
+		} catch (e) {
+			throw console.error("Get all users error:", e), Error("Error al obtener usuarios");
 		}
 	}
-	async getUserById(id) {
+	async getUserById(e) {
 		try {
-			const user = await this.userRepo.findById(id);
-			if (!user) throw new NotFoundError("Usuario");
-			return user;
-		} catch (error) {
-			console.error("Get user by ID error:", error);
-			if (error.code === "P2025") throw new NotFoundError("Usuario");
-			throw error;
+			let n = await this.userRepo.findById(e);
+			if (!n) throw new t("Usuario");
+			return n;
+		} catch (e) {
+			throw console.error("Get user by ID error:", e), e.code === "P2025" ? new t("Usuario") : e;
 		}
 	}
-	async createUser(data, createdBy) {
+	async createUser(t, r) {
 		try {
-			if (await this.userRepo.exists(data.username)) throw new ConflictError(`El usuario '${data.username}' ya existe`);
-			if (data.password.length < 6) throw new ValidationError("La contraseña debe tener al menos 6 caracteres");
-			const salt = await bcrypt.genSalt(10);
-			const hashedPassword = await bcrypt.hash(data.password, salt);
-			const user = await this.userRepo.create({
-				username: data.username,
-				password_hash: hashedPassword,
-				role: data.role
+			if (await this.userRepo.exists(t.username)) throw new n(`El usuario '${t.username}' ya existe`);
+			if (t.password.length < 6) throw new e("La contraseña debe tener al menos 6 caracteres");
+			let i = await C.genSalt(10), a = await C.hash(t.password, i), o = await this.userRepo.create({
+				username: t.username,
+				password_hash: a,
+				role: t.role
 			});
-			await this.auditLogRepo.create({
-				userId: createdBy,
+			return await this.auditLogRepo.create({
+				userId: r,
 				action: "CREATE_USER",
 				entity: "users",
-				entity_id: user.id
-			});
-			return user;
-		} catch (error) {
-			console.error("Create user error:", error);
-			if (error.code === "P2002") throw new ConflictError("El nombre de usuario ya está en uso");
-			throw error;
+				entity_id: o.id
+			}), o;
+		} catch (e) {
+			throw console.error("Create user error:", e), e.code === "P2002" ? new n("El nombre de usuario ya está en uso") : e;
 		}
 	}
-	async updateUser(id, data, updatedBy) {
+	async updateUser(e, r, i) {
 		try {
-			if (data.username) {
-				if (await this.userRepo.exists(data.username, id)) throw new ConflictError(`El usuario '${data.username}' ya existe`);
-			}
-			const user = await this.userRepo.update(id, data);
-			await this.auditLogRepo.create({
-				userId: updatedBy,
+			if (r.username && await this.userRepo.exists(r.username, e)) throw new n(`El usuario '${r.username}' ya existe`);
+			let t = await this.userRepo.update(e, r);
+			return await this.auditLogRepo.create({
+				userId: i,
 				action: "UPDATE_USER",
 				entity: "users",
-				entity_id: id
-			});
-			return user;
-		} catch (error) {
-			console.error("Update user error:", error);
-			if (error.code === "P2025") throw new NotFoundError("Usuario");
-			throw error;
+				entity_id: e
+			}), t;
+		} catch (e) {
+			throw console.error("Update user error:", e), e.code === "P2025" ? new t("Usuario") : e;
 		}
 	}
-	async deleteUser(id, deletedBy) {
+	async deleteUser(e, n) {
 		try {
-			if (!await this.userRepo.findById(id)) throw new NotFoundError("Usuario");
-			if (id === deletedBy) throw new BusinessRuleError("No puedes eliminar tu propio usuario");
-			await this.userRepo.delete(id);
-			await this.auditLogRepo.create({
-				userId: deletedBy,
+			if (!await this.userRepo.findById(e)) throw new t("Usuario");
+			if (e === n) throw new i("No puedes eliminar tu propio usuario");
+			return await this.userRepo.delete(e), await this.auditLogRepo.create({
+				userId: n,
 				action: "DELETE_USER",
 				entity: "users",
-				entity_id: id
-			});
-			return { success: true };
-		} catch (error) {
-			console.error("Delete user error:", error);
-			if (error.code === "P2025") throw new NotFoundError("Usuario");
-			throw error;
+				entity_id: e
+			}), { success: !0 };
+		} catch (e) {
+			throw console.error("Delete user error:", e), e.code === "P2025" ? new t("Usuario") : e;
 		}
 	}
-	async changePassword(userId, newPassword, changedBy) {
+	async changePassword(n, r, i) {
 		try {
-			if (newPassword.length < 6) throw new ValidationError("La contraseña debe tener al menos 6 caracteres");
-			const salt = await bcrypt.genSalt(10);
-			const hashedPassword = await bcrypt.hash(newPassword, salt);
-			await this.userRepo.update(userId, { password_hash: hashedPassword });
-			await this.auditLogRepo.create({
-				userId: changedBy,
+			if (r.length < 6) throw new e("La contraseña debe tener al menos 6 caracteres");
+			let t = await C.genSalt(10), a = await C.hash(r, t);
+			return await this.userRepo.update(n, { password_hash: a }), await this.auditLogRepo.create({
+				userId: i,
 				action: "CHANGE_PASSWORD",
 				entity: "users",
-				entity_id: userId
-			});
-			return { success: true };
-		} catch (error) {
-			console.error("Change password error:", error);
-			if (error.code === "P2025") throw new NotFoundError("Usuario");
-			throw error;
+				entity_id: n
+			}), { success: !0 };
+		} catch (e) {
+			throw console.error("Change password error:", e), e.code === "P2025" ? new t("Usuario") : e;
 		}
 	}
-};
-//#endregion
-//#region src/main/services/AuthService.ts
-var AuthService = class {
-	constructor(userRepo) {
-		this.userRepo = userRepo;
+}, ve = class {
+	constructor(e) {
+		this.userRepo = e;
 	}
-	async login(username, password) {
+	async login(e, t) {
 		try {
-			const user = await this.userRepo.findByUsername(username);
-			if (!user) return {
-				success: false,
+			let n = await this.userRepo.findByUsername(e);
+			if (!n) return {
+				success: !1,
 				error: "Usuario no encontrado"
 			};
-			if (!await bcrypt.compare(password, user.password_hash)) return {
-				success: false,
+			if (!await C.compare(t, n.password_hash)) return {
+				success: !1,
 				error: "Contraseña incorrecta"
 			};
-			const { password_hash: _, ...userWithoutPassword } = user;
+			let { password_hash: r, ...i } = n;
 			return {
-				success: true,
-				user: userWithoutPassword
+				success: !0,
+				user: i
 			};
-		} catch (error) {
-			console.error("Login error:", error);
-			if (error.code === "P2025") return {
-				success: false,
+		} catch (e) {
+			return console.error("Login error:", e), e.code === "P2025" ? {
+				success: !1,
 				error: "Usuario no encontrado"
-			};
-			return {
-				success: false,
+			} : {
+				success: !1,
 				error: "Error interno del servidor"
 			};
 		}
 	}
-	async register(userData) {
+	async register(e) {
 		try {
-			if (await this.userRepo.exists(userData.username)) return {
-				success: false,
-				error: `El usuario '${userData.username}' ya existe`
+			if (await this.userRepo.exists(e.username)) return {
+				success: !1,
+				error: `El usuario '${e.username}' ya existe`
 			};
-			if (userData.password.length < 6) return {
-				success: false,
+			if (e.password.length < 6) return {
+				success: !1,
 				error: "La contraseña debe tener al menos 6 caracteres"
 			};
-			const salt = await bcrypt.genSalt(10);
-			const hashedPassword = await bcrypt.hash(userData.password, salt);
-			const user = await this.userRepo.create({
-				username: userData.username,
-				password_hash: hashedPassword,
-				role: userData.role
+			let t = await C.genSalt(10), n = await C.hash(e.password, t), r = await this.userRepo.create({
+				username: e.username,
+				password_hash: n,
+				role: e.role
 			});
 			return {
-				success: true,
+				success: !0,
 				user: {
-					id: user.id,
-					username: user.username,
-					role: user.role,
-					created_at: user.created_at,
-					updated_at: user.updated_at
+					id: r.id,
+					username: r.username,
+					role: r.role,
+					created_at: r.created_at,
+					updated_at: r.updated_at
 				}
 			};
-		} catch (error) {
-			console.error("Register error:", error);
-			if (error.code === "P2002") return {
-				success: false,
+		} catch (e) {
+			return console.error("Register error:", e), e.code === "P2002" ? {
+				success: !1,
 				error: "El nombre de usuario ya está en uso"
-			};
-			return {
-				success: false,
-				error: "Error interno del servidor"
+			} : {
+				success: !1,
+				error: "Error interno del servidor: " + (e.message || String(e))
 			};
 		}
 	}
-	async changePassword(userId, oldPassword, newPassword) {
+	async changePassword(e, t, n) {
 		try {
-			const user = await this.userRepo.findByIdWithPassword(userId);
-			if (!user) return {
-				success: false,
+			let r = await this.userRepo.findByIdWithPassword(e);
+			if (!r) return {
+				success: !1,
 				error: "Usuario no encontrado"
 			};
-			if (!await bcrypt.compare(oldPassword, user.password_hash)) return {
-				success: false,
+			if (!await C.compare(t, r.password_hash)) return {
+				success: !1,
 				error: "Contraseña actual incorrecta"
 			};
-			if (newPassword.length < 6) return {
-				success: false,
+			if (n.length < 6) return {
+				success: !1,
 				error: "La contraseña debe tener al menos 6 caracteres"
 			};
-			const salt = await bcrypt.genSalt(10);
-			const hashedPassword = await bcrypt.hash(newPassword, salt);
-			await this.userRepo.update(userId, { password_hash: hashedPassword });
-			return { success: true };
-		} catch (error) {
-			console.error("Change password error:", error);
-			return {
-				success: false,
+			let i = await C.genSalt(10), a = await C.hash(n, i);
+			return await this.userRepo.update(e, { password_hash: a }), { success: !0 };
+		} catch (e) {
+			return console.error("Change password error:", e), {
+				success: !1,
 				error: "Error interno del servidor"
 			};
 		}
 	}
-};
-//#endregion
-//#region src/main/services/CategoryService.ts
-var CategoryService = class {
-	constructor(categoryRepo, auditLogRepo) {
-		this.categoryRepo = categoryRepo;
-		this.auditLogRepo = auditLogRepo;
+}, ye = class {
+	constructor(e, t) {
+		this.categoryRepo = e, this.auditLogRepo = t;
 	}
-	async getAllCategories(search) {
-		return await this.categoryRepo.findAll(search);
+	async getAllCategories(e) {
+		return await this.categoryRepo.findAll(e);
 	}
-	async getCategoryById(id) {
-		return await findOrThrow(() => this.categoryRepo.findById(id), "Categoría", id);
+	async getCategoryById(e) {
+		return await P(() => this.categoryRepo.findById(e), "Categoría", e);
 	}
-	async createCategory(data, createdBy) {
-		if (await this.categoryRepo.findByName(data.name)) throw new ConflictError(`La categoría "${data.name}" ya existe.`);
-		const category = await this.categoryRepo.create(data);
-		await this.auditLogRepo.create({
-			userId: createdBy,
+	async createCategory(e, t) {
+		if (await this.categoryRepo.findByName(e.name)) throw new n(`La categoría "${e.name}" ya existe.`);
+		let r = await this.categoryRepo.create(e);
+		return await this.auditLogRepo.create({
+			userId: t,
 			action: "CREATE_CATEGORY",
 			entity: "categories",
-			entity_id: category.id
-		});
-		return category;
+			entity_id: r.id
+		}), r;
 	}
-	async updateCategory(id, data, updatedBy) {
-		await findOrThrow(() => this.categoryRepo.findById(id), "Categoría", id);
-		const duplicate = await this.categoryRepo.findByName(data.name);
-		if (duplicate && duplicate.id !== id) throw new ConflictError(`La categoría "${data.name}" ya existe.`);
-		const category = await this.categoryRepo.update(id, data);
-		await this.auditLogRepo.create({
-			userId: updatedBy,
+	async updateCategory(e, t, r) {
+		await P(() => this.categoryRepo.findById(e), "Categoría", e);
+		let i = await this.categoryRepo.findByName(t.name);
+		if (i && i.id !== e) throw new n(`La categoría "${t.name}" ya existe.`);
+		let a = await this.categoryRepo.update(e, t);
+		return await this.auditLogRepo.create({
+			userId: r,
 			action: "UPDATE_CATEGORY",
 			entity: "categories",
-			entity_id: id
-		});
-		return category;
+			entity_id: e
+		}), a;
 	}
-	async deleteCategory(id, deletedBy) {
-		await findOrThrow(() => this.categoryRepo.findById(id), "Categoría", id);
-		const productCount = await this.categoryRepo.getProductCount(id);
-		if (productCount > 0) throw new BusinessRuleError(`No se puede eliminar la categoría porque tiene ${productCount} producto(s) asociado(s).`);
-		await this.categoryRepo.delete(id);
-		await this.auditLogRepo.create({
-			userId: deletedBy,
+	async deleteCategory(e, t) {
+		await P(() => this.categoryRepo.findById(e), "Categoría", e);
+		let n = await this.categoryRepo.getProductCount(e);
+		if (n > 0) throw new i(`No se puede eliminar la categoría porque tiene ${n} producto(s) asociado(s).`);
+		return await this.categoryRepo.delete(e), await this.auditLogRepo.create({
+			userId: t,
 			action: "DELETE_CATEGORY",
 			entity: "categories",
-			entity_id: id
-		});
-		return { success: true };
+			entity_id: e
+		}), { success: !0 };
 	}
-};
-//#endregion
-//#region src/main/services/BackupService.ts
-var BackupService = class {
-	constructor(adapter) {
-		this.adapter = adapter;
+}, be = class {
+	constructor(e) {
+		this.adapter = e;
 	}
-	async createBackup(label) {
-		return this.adapter.createBackup(label);
+	async createBackup(e) {
+		return this.adapter.createBackup(e);
 	}
 	async listBackups() {
 		return this.adapter.listBackups();
 	}
-	async restoreBackup(backupPath) {
-		return this.adapter.restoreBackup(backupPath);
+	async restoreBackup(e) {
+		return this.adapter.restoreBackup(e);
 	}
-	async deleteBackup(backupPath) {
-		return this.adapter.deleteBackup(backupPath);
+	async deleteBackup(e) {
+		return this.adapter.deleteBackup(e);
 	}
 	async createScheduledBackup() {
 		return this.adapter.createScheduledBackup();
 	}
-	async cleanupOldBackups(keep) {
-		return this.adapter.cleanupOldBackups(keep);
+	async cleanupOldBackups(e) {
+		return this.adapter.cleanupOldBackups(e);
 	}
-};
-//#endregion
-//#region src/main/services/DashboardService.ts
-var CACHE_KEY_STATS = "dashboard:stats";
-var DashboardService = class {
-	constructor(repo, cache) {
-		this.repo = repo;
-		this.cache = cache;
+}, xe = "dashboard:stats", Se = class {
+	constructor(e, t) {
+		this.repo = e, this.cache = t;
 	}
-	async getStats(startDate, endDate) {
-		if (startDate || endDate) return this.repo.getStats(startDate, endDate);
-		return this.cache.getOrSet(CACHE_KEY_STATS, () => this.repo.getStats());
+	async getStats(e, t) {
+		return e || t ? this.repo.getStats(e, t) : this.cache.getOrSet(xe, () => this.repo.getStats());
 	}
-	async getWeeklySales(days) {
-		return this.repo.getWeeklySales(days);
+	async getWeeklySales(e) {
+		return this.repo.getWeeklySales(e);
 	}
-	async getLowStockProducts(limit) {
-		return this.repo.getLowStockProducts(limit);
+	async getLowStockProducts(e) {
+		return this.repo.getLowStockProducts(e);
 	}
-	async getSalesByPaymentMethod(startDate, endDate) {
-		return this.repo.getSalesByPaymentMethod(startDate, endDate);
+	async getSalesByPaymentMethod(e, t) {
+		return this.repo.getSalesByPaymentMethod(e, t);
 	}
-	async getTopProducts(limit, startDate, endDate) {
-		return this.repo.getTopProducts(limit, startDate, endDate);
+	async getTopProducts(e, t, n) {
+		return this.repo.getTopProducts(e, t, n);
 	}
-	async getTopClients(limit, startDate, endDate) {
-		return this.repo.getTopClients(limit, startDate, endDate);
+	async getTopClients(e, t, n) {
+		return this.repo.getTopClients(e, t, n);
 	}
-	async getSalesByHour(startDate, endDate) {
-		return this.repo.getSalesByHour(startDate, endDate);
+	async getSalesByHour(e, t) {
+		return this.repo.getSalesByHour(e, t);
 	}
-	async getCashRegisterSummary(startDate, endDate) {
-		return this.repo.getCashRegisterSummary(startDate, endDate);
+	async getCashRegisterSummary(e, t) {
+		return this.repo.getCashRegisterSummary(e, t);
 	}
 	async getInventoryMetrics() {
 		return this.repo.getInventoryMetrics();
@@ -2850,30 +2386,23 @@ var DashboardService = class {
 	invalidateCache() {
 		this.cache.invalidate();
 	}
-};
-//#endregion
-//#region src/main/services/CacheService.ts
-var CacheService = class {
+}, Ce = class {
 	cache = /* @__PURE__ */ new Map();
 	defaultTTL;
-	constructor(defaultTTL = 3e4) {
-		this.defaultTTL = defaultTTL;
+	constructor(e = 3e4) {
+		this.defaultTTL = e;
 	}
-	async getOrSet(key, fn, ttl) {
-		const now = Date.now();
-		const effectiveTTL = ttl ?? this.defaultTTL;
-		const entry = this.cache.get(key);
-		if (entry && now - entry.timestamp < effectiveTTL) return entry.data;
-		const data = await fn();
-		this.cache.set(key, {
-			data,
-			timestamp: now
-		});
-		return data;
+	async getOrSet(e, t, n) {
+		let r = Date.now(), i = n ?? this.defaultTTL, a = this.cache.get(e);
+		if (a && r - a.timestamp < i) return a.data;
+		let o = await t();
+		return this.cache.set(e, {
+			data: o,
+			timestamp: r
+		}), o;
 	}
-	invalidate(key) {
-		if (key) this.cache.delete(key);
-		else this.cache.clear();
+	invalidate(e) {
+		e ? this.cache.delete(e) : this.cache.clear();
 	}
 	clear() {
 		this.cache.clear();
@@ -2881,171 +2410,139 @@ var CacheService = class {
 	get size() {
 		return this.cache.size;
 	}
-};
-//#endregion
-//#region src/main/services/ReportService.ts
-var ReportService = class {
-	constructor(pdfGenerator, excelGenerator, dashboardService, saleService, productService, cashRegisterService, settingsService) {
-		this.pdfGenerator = pdfGenerator;
-		this.excelGenerator = excelGenerator;
-		this.dashboardService = dashboardService;
-		this.saleService = saleService;
-		this.productService = productService;
-		this.cashRegisterService = cashRegisterService;
-		this.settingsService = settingsService;
+}, we = class {
+	constructor(e, t, n, r, i, a, o) {
+		this.pdfGenerator = e, this.excelGenerator = t, this.dashboardService = n, this.saleService = r, this.productService = i, this.cashRegisterService = a, this.settingsService = o;
 	}
-	async generateReport(request) {
-		const generator = request.format === "pdf" ? this.pdfGenerator : this.excelGenerator;
-		const title = request.title ?? this.getDefaultTitle(request.type);
-		switch (request.type) {
-			case "daily_sales": return this.generateSalesReport(generator, request, title, true);
-			case "sales_summary": return this.generateSalesReport(generator, request, title, false);
-			case "profit_summary": return this.generateProfitReport(generator, request, title);
-			case "inventory": return this.generateInventoryReport(generator, false, title);
-			case "low_stock": return this.generateInventoryReport(generator, true, title);
-			case "top_products": return this.generateTopProductsReport(generator, request, title);
-			case "sale_receipt": return this.generateSaleReceipt(request);
-			case "cash_close": return this.generateCashCloseReport(generator, request, title);
+	async generateReport(e) {
+		let t = e.format === "pdf" ? this.pdfGenerator : this.excelGenerator, n = e.title ?? this.getDefaultTitle(e.type);
+		switch (e.type) {
+			case "daily_sales": return this.generateSalesReport(t, e, n, !0);
+			case "sales_summary": return this.generateSalesReport(t, e, n, !1);
+			case "profit_summary": return this.generateProfitReport(t, e, n);
+			case "inventory": return this.generateInventoryReport(t, !1, n);
+			case "low_stock": return this.generateInventoryReport(t, !0, n);
+			case "top_products": return this.generateTopProductsReport(t, e, n);
+			case "sale_receipt": return this.generateSaleReceipt(e);
+			case "cash_close": return this.generateCashCloseReport(t, e, n);
 		}
 	}
-	async generateSalesReport(generator, request, title, showTable = true) {
-		const sales = await this.saleService.getAllSales(request.startDate, request.endDate);
-		const stats = await this.saleService.getSalesStats(request.startDate, request.endDate);
-		const paymentBreakdown = await this.dashboardService.getSalesByPaymentMethod(request.startDate, request.endDate);
-		const cash = paymentBreakdown.find((p) => p.payment_method === "CASH");
-		const card = paymentBreakdown.find((p) => p.payment_method === "CARD");
-		const totals = {
-			totalSales: stats.totalSales,
-			totalRevenue: stats.totalRevenue,
-			averageSale: stats.averageSale,
-			cashSales: cash?._count?.id ?? 0,
-			cashRevenue: cash?._sum?.total ?? 0,
-			cardSales: card?._count?.id ?? 0,
-			cardRevenue: card?._sum?.total ?? 0
-		};
-		const rows = sales.map((s) => {
-			const date = s.created_at instanceof Date ? s.created_at : new Date(s.created_at);
-			const saleWithCount = s;
+	async generateSalesReport(e, t, n, r = !0) {
+		let i = await this.saleService.getAllSales(t.startDate, t.endDate), a = await this.saleService.getSalesStats(t.startDate, t.endDate), o = await this.dashboardService.getSalesByPaymentMethod(t.startDate, t.endDate), s = o.find((e) => e.payment_method === "CASH"), c = o.find((e) => e.payment_method === "CARD"), l = {
+			totalSales: a.totalSales,
+			totalRevenue: a.totalRevenue,
+			averageSale: a.averageSale,
+			cashSales: s?._count?.id ?? 0,
+			cashRevenue: s?._sum?.total ?? 0,
+			cardSales: c?._count?.id ?? 0,
+			cardRevenue: c?._sum?.total ?? 0
+		}, u = i.map((e) => {
+			let t = e.created_at instanceof Date ? e.created_at : new Date(e.created_at), n = e;
 			return {
-				date: date.toLocaleDateString("es-PE"),
-				invoiceNumber: s.id,
-				client: s.client?.name ?? "N/A",
-				itemsCount: saleWithCount._count?.items ?? 0,
-				subtotal: Number(s.subtotal),
-				tax: Number(s.tax_amount),
-				total: Number(s.total),
-				paymentMethod: s.payment_method ?? "N/A"
+				date: t.toLocaleDateString("es-PE"),
+				invoiceNumber: e.id,
+				client: e.client?.name ?? "N/A",
+				itemsCount: n._count?.items ?? 0,
+				subtotal: Number(e.subtotal),
+				tax: Number(e.tax_amount),
+				total: Number(e.total),
+				paymentMethod: e.payment_method ?? "N/A"
 			};
 		});
-		return generator.generateSalesReport(rows, totals, title, showTable);
+		return e.generateSalesReport(u, l, n, r);
 	}
-	async generateProfitReport(generator, request, title) {
-		const stats = await this.dashboardService.getStats(request.startDate, request.endDate);
-		const totals = {
-			totalSales: stats.totalSales,
-			totalRevenue: stats.totalRevenue,
-			averageSale: stats.averageSale
-		};
-		const rows = [{
-			date: `${request.startDate?.toLocaleDateString("es-PE") ?? "Inicio"} - ${request.endDate?.toLocaleDateString("es-PE") ?? "Hoy"}`,
+	async generateProfitReport(e, t, n) {
+		let r = await this.dashboardService.getStats(t.startDate, t.endDate), i = {
+			totalSales: r.totalSales,
+			totalRevenue: r.totalRevenue,
+			averageSale: r.averageSale
+		}, a = [{
+			date: `${t.startDate?.toLocaleDateString("es-PE") ?? "Inicio"} - ${t.endDate?.toLocaleDateString("es-PE") ?? "Hoy"}`,
 			invoiceNumber: 0,
 			client: "-",
 			itemsCount: 0,
 			subtotal: 0,
 			tax: 0,
-			total: stats.totalRevenue,
+			total: r.totalRevenue,
 			paymentMethod: "-"
 		}];
-		return generator.generateSalesReport(rows, totals, title);
+		return e.generateSalesReport(a, i, n);
 	}
-	async generateInventoryReport(generator, lowStockOnly, title) {
-		const products = await this.productService.getAllProducts();
-		const metrics = await this.dashboardService.getInventoryMetrics();
-		const rows = (lowStockOnly ? products.filter((p) => p.stock <= (p.min_stock ?? 5) || p.stock === 0) : products).map((p) => ({
-			sku: p.sku,
-			name: p.name,
-			category: p.category?.name ?? "Sin categoría",
-			stock: p.stock,
-			minStock: p.min_stock,
-			purchasePrice: Number(p.price_purchase),
-			salePrice: Number(p.price_sale),
-			status: p.stock === 0 ? "out" : p.min_stock !== null && p.stock <= p.min_stock ? "low" : "ok"
+	async generateInventoryReport(e, t, n) {
+		let r = await this.productService.getAllProducts(), i = await this.dashboardService.getInventoryMetrics(), a = (t ? r.filter((e) => e.stock <= (e.min_stock ?? 5) || e.stock === 0) : r).map((e) => ({
+			sku: e.sku,
+			name: e.name,
+			category: e.category?.name ?? "Sin categoría",
+			stock: e.stock,
+			minStock: e.min_stock,
+			purchasePrice: Number(e.price_purchase),
+			salePrice: Number(e.price_sale),
+			status: e.stock === 0 ? "out" : e.min_stock !== null && e.stock <= e.min_stock ? "low" : "ok"
 		}));
-		return generator.generateInventoryReport(rows, metrics, title);
+		return e.generateInventoryReport(a, i, n);
 	}
-	async generateTopProductsReport(generator, request, title) {
-		const topProducts = await this.dashboardService.getTopProducts(50, request.startDate, request.endDate);
-		const metrics = await this.dashboardService.getInventoryMetrics();
-		const rows = topProducts.map((p) => ({
-			sku: p.product_sku,
-			name: p.product_name,
-			category: p.category,
-			stock: p.total_quantity,
+	async generateTopProductsReport(e, t, n) {
+		let r = await this.dashboardService.getTopProducts(50, t.startDate, t.endDate), i = await this.dashboardService.getInventoryMetrics(), a = r.map((e) => ({
+			sku: e.product_sku,
+			name: e.product_name,
+			category: e.category,
+			stock: e.total_quantity,
 			minStock: null,
 			purchasePrice: 0,
-			salePrice: p.avg_price,
+			salePrice: e.avg_price,
 			status: "ok"
 		}));
-		return generator.generateInventoryReport(rows, metrics, title);
+		return e.generateInventoryReport(a, i, n);
 	}
-	async generateSaleReceipt(request) {
-		if (!request.saleId) throw new Error("Se requiere saleId para generar un comprobante");
-		const sale = await this.saleService.getSaleDetails(request.saleId);
-		const settings = await this.settingsService.getSettings();
-		const items = (sale.items || []).map((item) => ({
-			quantity: item.quantity,
-			productName: item.product?.name ?? "Producto",
-			unitPrice: Number(item.unit_price),
-			totalPrice: Number(item.unit_price) * item.quantity
-		}));
-		const taxSettings = await this.settingsService.getTaxSettings();
-		const receiptData = {
-			saleId: sale.id,
-			businessName: settings.business_name || "INVENTARIO-POS",
-			businessAddress: settings.business_address || "",
-			businessPhone: settings.business_phone || "",
-			businessTaxId: settings.business_tax_id || "",
-			ticketFooter: settings.ticket_footer || "Gracias por su compra",
-			logoBase64: settings.business_logo || void 0,
-			clientName: sale.client?.name ?? "Cliente General",
-			clientDni: sale.client?.dni ?? "",
-			clientTaxId: sale.client?.tax_id ?? null,
-			createdAt: sale.created_at,
-			paymentMethod: sale.payment_method ?? "CASH",
-			items,
-			subtotal: Number(sale.subtotal),
-			taxAmount: Number(sale.tax_amount),
-			taxType: taxSettings.taxType || "iva",
-			taxRate: taxSettings.taxRate || 0,
-			total: Number(sale.total)
+	async generateSaleReceipt(e) {
+		if (!e.saleId) throw Error("Se requiere saleId para generar un comprobante");
+		let t = await this.saleService.getSaleDetails(e.saleId), n = await this.settingsService.getSettings(), r = (t.items || []).map((e) => ({
+			quantity: e.quantity,
+			productName: e.product?.name ?? "Producto",
+			unitPrice: Number(e.unit_price),
+			totalPrice: Number(e.unit_price) * e.quantity
+		})), i = await this.settingsService.getTaxSettings(), a = {
+			saleId: t.id,
+			businessName: n.business_name || "INVENTARIO-POS",
+			businessAddress: n.business_address || "",
+			businessPhone: n.business_phone || "",
+			businessTaxId: n.business_tax_id || "",
+			ticketFooter: n.ticket_footer || "Gracias por su compra",
+			logoBase64: n.business_logo || void 0,
+			clientName: t.client?.name ?? "Cliente General",
+			clientDni: t.client?.dni ?? "",
+			clientTaxId: t.client?.tax_id ?? null,
+			createdAt: t.created_at,
+			paymentMethod: t.payment_method ?? "CASH",
+			items: r,
+			subtotal: Number(t.subtotal),
+			taxAmount: Number(t.tax_amount),
+			taxType: i.taxType || "iva",
+			taxRate: i.taxRate || 0,
+			total: Number(t.total)
 		};
-		return this.pdfGenerator.generateSaleReceipt(receiptData);
+		return this.pdfGenerator.generateSaleReceipt(a);
 	}
-	async generateCashCloseReport(generator, request, title) {
-		if (!request.registerId) throw new Error("Se requiere registerId para generar reporte de cierre");
-		const details = await this.cashRegisterService.getRegisterDetails(request.registerId);
-		const settings = await this.settingsService.getSettings();
-		const totalCash = details.sales?.filter((s) => s.payment_method === "CASH").reduce((sum, s) => sum + Number(s.total), 0) ?? 0;
-		const totalCard = details.sales?.filter((s) => s.payment_method === "CARD").reduce((sum, s) => sum + Number(s.total), 0) ?? 0;
-		const expectedCash = Number(details.opening_amount) + Number(details.total_sales);
-		const cashCloseData = {
-			registerId: details.id,
-			openDate: details.opened_at,
-			closeDate: details.closed_at || details.updated_at,
-			openingAmount: Number(details.opening_amount),
-			totalSales: Number(details.total_sales),
-			cashSales: totalCash,
-			cardSales: totalCard,
-			salesCount: details.sales?.length ?? 0,
-			expectedCash,
-			realCash: Number(details.closing_amount) || expectedCash,
-			difference: Number(details.difference) || 0,
-			status: details.status || "PERFECT",
-			businessName: settings.business_name || "INVENTARIO-POS"
+	async generateCashCloseReport(e, t, n) {
+		if (!t.registerId) throw Error("Se requiere registerId para generar reporte de cierre");
+		let r = await this.cashRegisterService.getRegisterDetails(t.registerId), i = await this.settingsService.getSettings(), a = r.sales?.filter((e) => e.payment_method === "CASH").reduce((e, t) => e + Number(t.total), 0) ?? 0, o = r.sales?.filter((e) => e.payment_method === "CARD").reduce((e, t) => e + Number(t.total), 0) ?? 0, s = Number(r.opening_amount) + Number(r.total_sales), c = {
+			registerId: r.id,
+			openDate: r.opened_at,
+			closeDate: r.closed_at || r.updated_at,
+			openingAmount: Number(r.opening_amount),
+			totalSales: Number(r.total_sales),
+			cashSales: a,
+			cardSales: o,
+			salesCount: r.sales?.length ?? 0,
+			expectedCash: s,
+			realCash: Number(r.closing_amount) || s,
+			difference: Number(r.difference) || 0,
+			status: r.status || "PERFECT",
+			businessName: i.business_name || "INVENTARIO-POS"
 		};
-		return generator.generateCashCloseReport(cashCloseData);
+		return e.generateCashCloseReport(c);
 	}
-	getDefaultTitle(type) {
+	getDefaultTitle(e) {
 		return {
 			daily_sales: "Reporte de Ventas del Día",
 			sales_summary: "Resumen de Ventas",
@@ -3055,888 +2552,732 @@ var ReportService = class {
 			top_products: "Productos Más Vendidos",
 			sale_receipt: "Comprobante de Venta",
 			cash_close: "Reporte de Cierre de Caja"
-		}[type] ?? "Reporte";
+		}[e] ?? "Reporte";
 	}
-};
-//#endregion
-//#region src/main/services/SchedulerService.ts
-var SCHEDULER_PREFIX = "scheduler_";
-var SchedulerService = class {
+}, W = "scheduler_", Te = class {
 	dailyTimer = null;
 	weeklyTimer = null;
 	statePath;
-	constructor(reportService, backupService) {
-		this.reportService = reportService;
-		this.backupService = backupService;
-		this.statePath = join(process.cwd(), "scheduler-state.json");
+	constructor(e, t) {
+		this.reportService = e, this.backupService = t, this.statePath = D(process.cwd(), "scheduler-state.json");
 	}
 	start() {
-		console.log("[Scheduler] Starting scheduled tasks...");
-		this.scheduleDailyReport();
-		this.scheduleWeeklyReport();
-		this.scheduleDailyBackup();
+		console.log("[Scheduler] Starting scheduled tasks..."), this.scheduleDailyReport(), this.scheduleWeeklyReport(), this.scheduleDailyBackup();
 	}
 	stop() {
-		if (this.dailyTimer) clearInterval(this.dailyTimer);
-		if (this.weeklyTimer) clearInterval(this.weeklyTimer);
-		console.log("[Scheduler] Stopped scheduled tasks");
+		this.dailyTimer && clearInterval(this.dailyTimer), this.weeklyTimer && clearInterval(this.weeklyTimer), console.log("[Scheduler] Stopped scheduled tasks");
 	}
 	scheduleDailyReport() {
-		const runDaily = async () => {
+		let e = async () => {
 			try {
-				const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
-				if (this.getLastRun("daily_report") === today) return;
-				console.log("[Scheduler] Generating daily report...");
-				await this.reportService.generateReport({
+				let e = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+				if (this.getLastRun("daily_report") === e) return;
+				console.log("[Scheduler] Generating daily report..."), await this.reportService.generateReport({
 					type: "daily_sales",
 					format: "pdf",
 					title: `Reporte Diario - ${(/* @__PURE__ */ new Date()).toLocaleDateString("es-PE")}`
-				});
-				this.setLastRun("daily_report", today);
-				console.log("[Scheduler] Daily report saved");
-			} catch (err) {
-				console.error("[Scheduler] Error generating daily report:", err);
+				}), this.setLastRun("daily_report", e), console.log("[Scheduler] Daily report saved");
+			} catch (e) {
+				console.error("[Scheduler] Error generating daily report:", e);
 			}
 		};
-		runDaily();
-		this.dailyTimer = setInterval(runDaily, 3600 * 1e3);
+		e(), this.dailyTimer = setInterval(e, 3600 * 1e3);
 	}
 	scheduleWeeklyReport() {
-		const runWeekly = async () => {
+		let e = async () => {
 			try {
-				const now = /* @__PURE__ */ new Date();
-				const weekNum = this.getWeekNumber(now);
-				if (this.getLastRun("weekly_report") === String(weekNum)) return;
-				const startOfWeek = new Date(now);
-				startOfWeek.setDate(now.getDate() - now.getDay());
-				startOfWeek.setHours(0, 0, 0, 0);
-				console.log("[Scheduler] Generating weekly report...");
-				await this.reportService.generateReport({
+				let e = /* @__PURE__ */ new Date(), t = this.getWeekNumber(e);
+				if (this.getLastRun("weekly_report") === String(t)) return;
+				let n = new Date(e);
+				n.setDate(e.getDate() - e.getDay()), n.setHours(0, 0, 0, 0), console.log("[Scheduler] Generating weekly report..."), await this.reportService.generateReport({
 					type: "sales_summary",
 					format: "pdf",
-					startDate: startOfWeek,
-					endDate: now,
-					title: `Reporte Semanal - Semana ${weekNum}`
-				});
-				this.setLastRun("weekly_report", String(weekNum));
-				console.log("[Scheduler] Weekly report saved");
-			} catch (err) {
-				console.error("[Scheduler] Error generating weekly report:", err);
+					startDate: n,
+					endDate: e,
+					title: `Reporte Semanal - Semana ${t}`
+				}), this.setLastRun("weekly_report", String(t)), console.log("[Scheduler] Weekly report saved");
+			} catch (e) {
+				console.error("[Scheduler] Error generating weekly report:", e);
 			}
 		};
-		runWeekly();
-		this.weeklyTimer = setInterval(runWeekly, 360 * 60 * 1e3);
+		e(), this.weeklyTimer = setInterval(e, 360 * 60 * 1e3);
 	}
 	scheduleDailyBackup() {
-		const runBackup = async () => {
+		let e = async () => {
 			try {
-				const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
-				if (this.getLastRun("daily_backup") === today) return;
-				console.log("[Scheduler] Creating daily backup...");
-				await this.backupService.createBackup(`auto-${today}`);
-				this.setLastRun("daily_backup", today);
-				console.log("[Scheduler] Daily backup created");
-			} catch (err) {
-				console.error("[Scheduler] Error creating daily backup:", err);
+				let e = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+				if (this.getLastRun("daily_backup") === e) return;
+				console.log("[Scheduler] Creating daily backup..."), await this.backupService.createBackup(`auto-${e}`), this.setLastRun("daily_backup", e), console.log("[Scheduler] Daily backup created");
+			} catch (e) {
+				console.error("[Scheduler] Error creating daily backup:", e);
 			}
 		};
-		runBackup();
-		setInterval(runBackup, 3600 * 1e3);
+		e(), setInterval(e, 3600 * 1e3);
 	}
-	getLastRun(key) {
+	getLastRun(e) {
 		try {
-			if (!existsSync(this.statePath)) return "";
-			return JSON.parse(readFileSync(this.statePath, "utf-8"))[SCHEDULER_PREFIX + key] ?? "";
+			return w(this.statePath) ? JSON.parse(T(this.statePath, "utf-8"))[W + e] ?? "" : "";
 		} catch {
 			return "";
 		}
 	}
-	setLastRun(key, value) {
+	setLastRun(e, t) {
 		try {
-			let data = {};
-			if (existsSync(this.statePath)) data = JSON.parse(readFileSync(this.statePath, "utf-8"));
-			data[SCHEDULER_PREFIX + key] = value;
-			writeFileSync(this.statePath, JSON.stringify(data, null, 2));
+			let n = {};
+			w(this.statePath) && (n = JSON.parse(T(this.statePath, "utf-8"))), n[W + e] = t, E(this.statePath, JSON.stringify(n, null, 2));
 		} catch {}
 	}
-	getWeekNumber(date) {
-		const startOfYear = new Date(date.getFullYear(), 0, 1);
-		const diff = date.getTime() - startOfYear.getTime();
-		return Math.ceil((diff / 864e5 + startOfYear.getDay() + 1) / 7);
+	getWeekNumber(e) {
+		let t = new Date(e.getFullYear(), 0, 1), n = e.getTime() - t.getTime();
+		return Math.ceil((n / 864e5 + t.getDay() + 1) / 7);
 	}
 };
 //#endregion
 //#region src/main/di/container.ts
-var prisma = new PrismaClient();
-var productRepo = new PrismaProductRepository(prisma);
-var clientRepo = new PrismaClientRepository(prisma);
-var saleRepo = new PrismaSaleRepository(prisma);
-var cashRegisterRepo = new PrismaCashRegisterRepository(prisma);
-var supplierRepo = new PrismaSupplierRepository(prisma);
-var purchaseRepo = new PrismaPurchaseRepository(prisma);
-var settingsRepo = new PrismaSettingsRepository(prisma);
-var userRepo = new PrismaUserRepository(prisma);
-var categoryRepo = new PrismaCategoryRepository(prisma);
-var auditLogRepo = new PrismaAuditLogRepository(prisma);
-var dashboardRepo = new PrismaDashboardRepository(prisma);
-var cacheService = new CacheService();
-var backupAdapter = new ElectronBackupService();
-var pdfReportGenerator = new PDFReportGenerator();
-var excelReportGenerator = new ExcelReportGenerator();
-var dashboardService = new DashboardService(dashboardRepo, cacheService);
-var productService = new ProductService(productRepo, categoryRepo, auditLogRepo);
-var clientService = new ClientService(clientRepo, auditLogRepo);
-var cashRegisterService = new CashRegisterService(cashRegisterRepo, auditLogRepo);
-var settingsService = new SettingsService(settingsRepo);
-var userService = new UserService(userRepo, auditLogRepo);
-var authService = new AuthService(userRepo);
-var supplierService = new SupplierService(supplierRepo, auditLogRepo);
-var purchaseService = new PurchaseService(purchaseRepo, supplierRepo, productRepo, auditLogRepo);
-var saleService = new SaleService(saleRepo, productRepo, clientRepo, cashRegisterRepo, settingsRepo, auditLogRepo, dashboardService);
-var backupService = new BackupService(backupAdapter);
-var categoryService = new CategoryService(categoryRepo, auditLogRepo);
-var reportService = new ReportService(pdfReportGenerator, excelReportGenerator, dashboardService, saleService, productService, cashRegisterService, settingsService);
-var container = {
-	prisma,
-	productService,
-	clientService,
-	saleService,
-	cashRegisterService,
-	settingsService,
-	userService,
-	authService,
-	supplierService,
-	purchaseService,
-	categoryService,
-	dashboardService,
-	backupService,
-	reportService,
-	schedulerService: new SchedulerService(reportService, backupService),
-	cacheService
-};
-//#endregion
-//#region src/main/utils/ipcWrapper.ts
-function formatError(error) {
-	if (error instanceof ZodError) return {
-		success: false,
-		message: "Error de validación: " + error.issues.map((e) => e.message).join(", "),
-		errors: error.issues.map((e) => `${e.path.join(".")}: ${e.message}`),
-		code: "VALIDATION"
-	};
-	if (error instanceof DomainError) return {
-		success: false,
-		message: error.message,
-		code: error.code,
-		errors: error instanceof ValidationError ? error.errors : void 0
-	};
-	console.error("Unhandled IPC Error:", error);
+function Ee(e) {
+	let t = new ee(e), n = new M(e), r = new F(e), i = new te(e), a = new ne(e), o = new re(e), s = new ie(e), c = new ae(e), l = new oe(e), u = new se(e), d = new ce(e), f = new Ce(), p = new le(), m = new ue(), h = new L(), g = new Se(d, f), _ = new U(t, l, u), v = new de(n, u), y = new pe(i, u), b = new ge(s), x = new _e(c, u), S = new ve(c), C = new me(a, u), w = new he(o, a, t, u), T = new fe(r, t, n, i, s, u, g), E = new be(p), D = new ye(l, u), O = new we(m, h, g, T, _, y, b);
 	return {
-		success: false,
-		message: error.message || "Ocurrió un error inesperado en el sistema",
-		code: "INTERNAL"
+		prisma: e,
+		userRepo: c,
+		productService: _,
+		clientService: v,
+		saleService: T,
+		cashRegisterService: y,
+		settingsService: b,
+		userService: x,
+		authService: S,
+		supplierService: C,
+		purchaseService: w,
+		categoryService: D,
+		dashboardService: g,
+		backupService: E,
+		reportService: O,
+		schedulerService: new Te(O, E),
+		cacheService: f
 	};
 }
-function wrapIpc(handler, schema) {
-	return async (_event, ...args) => {
+//#endregion
+//#region src/main/di/registry.ts
+var G = null;
+function De() {
+	if (!G) throw Error("Container not initialized");
+	return G;
+}
+function Oe(e) {
+	G = e;
+}
+//#endregion
+//#region src/main/utils/ipcWrapper.ts
+function ke(t) {
+	return t instanceof x ? {
+		success: !1,
+		message: "Error de validación: " + t.issues.map((e) => e.message).join(", "),
+		errors: t.issues.map((e) => `${e.path.join(".")}: ${e.message}`),
+		code: "VALIDATION"
+	} : t instanceof r ? {
+		success: !1,
+		message: t.message,
+		code: t.code,
+		errors: t instanceof e ? t.errors : void 0
+	} : (console.error("Unhandled IPC Error:", t), {
+		success: !1,
+		message: t.message || "Ocurrió un error inesperado en el sistema",
+		code: "INTERNAL"
+	});
+}
+function K(e, t) {
+	return async (n, ...r) => {
 		try {
-			if (schema && args.length > 0) {
-				const result = schema.safeParse(args[0]);
-				if (!result.success) return {
-					success: false,
-					message: "Error de validación: " + result.error.issues.map((e) => e.message).join(", "),
-					errors: result.error.issues.map((e) => `${e.path.join(".")}: ${e.message}`),
+			if (t && r.length > 0) {
+				let e = t.safeParse(r[0]);
+				if (!e.success) return {
+					success: !1,
+					message: "Error de validación: " + e.error.issues.map((e) => e.message).join(", "),
+					errors: e.error.issues.map((e) => `${e.path.join(".")}: ${e.message}`),
 					code: "VALIDATION"
 				};
-				args[0] = result.data;
+				r[0] = e.data;
 			}
-			const data = await handler(...args);
-			if (data && typeof data === "object" && "success" in data) return data;
-			return {
-				success: true,
-				data
+			let n = await e(...r);
+			return n && typeof n == "object" && "success" in n ? n : {
+				success: !0,
+				data: n
 			};
-		} catch (error) {
-			return formatError(error);
+		} catch (e) {
+			return ke(e);
 		}
 	};
 }
 //#endregion
 //#region src/main/ipc.ts
-function setupIpcHandlers() {
-	/**
-	* HEALTH CHECK
-	*/
-	ipcMain.handle("dialog:showConfirm", async (_, options) => {
-		return (await dialog.showMessageBox({
-			type: "question",
-			buttons: ["Sí", "No"],
-			defaultId: 0,
-			cancelId: 1,
-			title: options.title || "Confirmación",
-			message: options.message
-		})).response === 0;
-	});
-	ipcMain.handle("health:check", async () => {
+var q = new Proxy({}, { get(e, t) {
+	return De()[t];
+} });
+function J() {
+	c.handle("dialog:showConfirm", async (e, t) => (await s.showMessageBox({
+		type: "question",
+		buttons: ["Sí", "No"],
+		defaultId: 0,
+		cancelId: 1,
+		title: t.title || "Confirmación",
+		message: t.message
+	})).response === 0), c.handle("health:check", async () => {
 		try {
-			await container.prisma.$queryRaw`SELECT 1`;
-			return {
-				success: true,
+			return await q.prisma.$queryRaw`SELECT 1`, {
+				success: !0,
 				database: "connected",
 				timestamp: (/* @__PURE__ */ new Date()).toISOString()
 			};
-		} catch (error) {
+		} catch (e) {
 			return {
-				success: false,
+				success: !1,
 				database: "disconnected",
-				error: error.message,
+				error: e.message,
 				timestamp: (/* @__PURE__ */ new Date()).toISOString()
 			};
 		}
-	});
-	/**
-	* DASHBOARD
-	*/
-	ipcMain.handle("dashboard:getStats", async (_, startDate, endDate) => {
+	}), c.handle("dashboard:getStats", async (e, t, n) => {
 		try {
-			return await container.dashboardService.getStats(startDate, endDate);
-		} catch (error) {
+			return await q.dashboardService.getStats(t, n);
+		} catch (e) {
 			return {
-				success: false,
-				message: error.message
+				success: !1,
+				message: e.message
 			};
 		}
-	});
-	ipcMain.handle("dashboard:getWeeklySales", async (_, days) => {
+	}), c.handle("dashboard:getWeeklySales", async (e, t) => {
 		try {
-			return await container.dashboardService.getWeeklySales(days);
-		} catch (error) {
+			return await q.dashboardService.getWeeklySales(t);
+		} catch {
 			return [];
 		}
-	});
-	ipcMain.handle("dashboard:getLowStock", async (_, limit) => {
+	}), c.handle("dashboard:getLowStock", async (e, t) => {
 		try {
-			return await container.dashboardService.getLowStockProducts(limit || 50);
-		} catch (error) {
-			console.error("[IPC] Error getting low stock:", error);
+			return await q.dashboardService.getLowStockProducts(t || 50);
+		} catch (e) {
+			return console.error("[IPC] Error getting low stock:", e), [];
+		}
+	}), c.handle("dashboard:getSalesByPayment", async (e, t, n) => {
+		try {
+			return await q.dashboardService.getSalesByPaymentMethod(t, n);
+		} catch {
 			return [];
 		}
-	});
-	ipcMain.handle("dashboard:getSalesByPayment", async (_, startDate, endDate) => {
+	}), c.handle("dashboard:getTopProducts", async (e, t, n, r) => {
 		try {
-			return await container.dashboardService.getSalesByPaymentMethod(startDate, endDate);
-		} catch (error) {
+			return await q.dashboardService.getTopProducts(t, n, r);
+		} catch {
 			return [];
 		}
-	});
-	ipcMain.handle("dashboard:getTopProducts", async (_, limit, startDate, endDate) => {
+	}), c.handle("dashboard:getTopClients", async (e, t, n, r) => {
 		try {
-			return await container.dashboardService.getTopProducts(limit, startDate, endDate);
-		} catch (error) {
+			return await q.dashboardService.getTopClients(t, n, r);
+		} catch {
 			return [];
 		}
-	});
-	ipcMain.handle("dashboard:getTopClients", async (_, limit, startDate, endDate) => {
+	}), c.handle("dashboard:getSalesByHour", async (e, t, n) => {
 		try {
-			return await container.dashboardService.getTopClients(limit, startDate, endDate);
-		} catch (error) {
+			return await q.dashboardService.getSalesByHour(t, n);
+		} catch {
 			return [];
 		}
-	});
-	ipcMain.handle("dashboard:getSalesByHour", async (_, startDate, endDate) => {
+	}), c.handle("dashboard:getCashSummary", async (e, t, n) => {
 		try {
-			return await container.dashboardService.getSalesByHour(startDate, endDate);
-		} catch (error) {
-			return [];
-		}
-	});
-	ipcMain.handle("dashboard:getCashSummary", async (_, startDate, endDate) => {
-		try {
-			return await container.dashboardService.getCashRegisterSummary(startDate, endDate);
-		} catch (error) {
+			return await q.dashboardService.getCashRegisterSummary(t, n);
+		} catch (e) {
 			return {
-				success: false,
-				message: error.message
+				success: !1,
+				message: e.message
 			};
 		}
-	});
-	ipcMain.handle("dashboard:getInventoryMetrics", async () => {
+	}), c.handle("dashboard:getInventoryMetrics", async () => {
 		try {
-			return await container.dashboardService.getInventoryMetrics();
-		} catch (error) {
+			return await q.dashboardService.getInventoryMetrics();
+		} catch (e) {
 			return {
-				success: false,
-				message: error.message
+				success: !1,
+				message: e.message
 			};
 		}
-	});
-	ipcMain.handle("dashboard:invalidateCache", async () => {
+	}), c.handle("dashboard:invalidateCache", async () => {
 		try {
-			container.dashboardService.invalidateCache();
-			return { success: true };
-		} catch (error) {
+			return q.dashboardService.invalidateCache(), { success: !0 };
+		} catch (e) {
 			return {
-				success: false,
-				message: error.message
+				success: !1,
+				message: e.message
 			};
 		}
-	});
-	/**
-	* SETTINGS
-	*/
-	ipcMain.handle("settings:getAll", async () => {
+	}), c.handle("settings:getAll", async () => {
 		try {
-			return await container.settingsService.getSettings();
-		} catch (error) {
+			return await q.settingsService.getSettings();
+		} catch {
 			return {};
 		}
-	});
-	ipcMain.handle("settings:update", async (_, settings) => {
+	}), c.handle("settings:update", async (e, t) => {
 		try {
-			return await container.settingsService.updateSettings(settings);
-		} catch (error) {
+			return await q.settingsService.updateSettings(t);
+		} catch (e) {
 			return {
-				success: false,
-				message: error.message
+				success: !1,
+				message: e.message
 			};
 		}
-	});
-	/**
-	* CASH REGISTERS
-	*/
-	ipcMain.handle("cash:getOpen", async () => {
+	}), c.handle("cash:getOpen", async () => {
 		try {
-			return await container.cashRegisterService.getOpenRegister();
-		} catch (error) {
+			return await q.cashRegisterService.getOpenRegister();
+		} catch {
 			return null;
 		}
-	});
-	ipcMain.handle("cash:getAll", async (_, startDate, endDate) => {
+	}), c.handle("cash:getAll", async (e, t, n) => {
 		try {
-			return await container.cashRegisterService.getAllRegisters(startDate, endDate);
-		} catch (error) {
+			return await q.cashRegisterService.getAllRegisters(t, n);
+		} catch (e) {
 			return {
-				success: false,
-				message: error.message || "Error al obtener cajas"
+				success: !1,
+				message: e.message || "Error al obtener cajas"
 			};
 		}
-	});
-	ipcMain.handle("cash:getDetails", async (_, id) => {
+	}), c.handle("cash:getDetails", async (e, t) => {
 		try {
-			return await container.cashRegisterService.getRegisterDetails(id);
-		} catch (error) {
+			return await q.cashRegisterService.getRegisterDetails(t);
+		} catch (e) {
 			return {
-				success: false,
-				message: error.message || "Error al obtener detalles de caja"
+				success: !1,
+				message: e.message || "Error al obtener detalles de caja"
 			};
 		}
-	});
-	ipcMain.handle("cash:getDailySummary", async (_, registerId) => {
+	}), c.handle("cash:getDailySummary", async (e, t) => {
 		try {
-			return await container.cashRegisterService.getDailySummary(registerId);
-		} catch (error) {
+			return await q.cashRegisterService.getDailySummary(t);
+		} catch (e) {
 			return {
-				success: false,
-				message: error.message || "Error al obtener resumen del día"
+				success: !1,
+				message: e.message || "Error al obtener resumen del día"
 			};
 		}
-	});
-	ipcMain.handle("cash:open", wrapIpc((amount, userId) => container.cashRegisterService.openRegister(amount, userId)));
-	ipcMain.handle("cash:close", wrapIpc((id, amount, userId) => container.cashRegisterService.closeRegister(id, amount, userId)));
-	/**
-	* AUTH
-	*/
-	ipcMain.handle("auth:login", async (_, username, password) => {
+	}), c.handle("cash:open", K((e, t) => q.cashRegisterService.openRegister(e, t))), c.handle("cash:close", K((e, t, n) => q.cashRegisterService.closeRegister(e, t, n))), c.handle("auth:login", async (e, t, n) => {
 		try {
-			return await container.authService.login(username, password);
-		} catch (error) {
+			return await q.authService.login(t, n);
+		} catch (e) {
 			return {
-				success: false,
-				message: error.message || "Error de autenticación"
+				success: !1,
+				message: e.message || "Error de autenticación"
 			};
 		}
-	});
-	/**
-	* CLIENTS
-	*/
-	ipcMain.handle("clients:getAll", async (_, search) => {
+	}), c.handle("setup:status", async () => {
 		try {
-			return await container.clientService.getAllClients(search);
-		} catch (error) {
+			return { needsSetup: await q.userRepo.count() === 0 };
+		} catch (e) {
 			return {
-				success: false,
-				message: error.message || "Error al obtener clientes"
+				needsSetup: !0,
+				error: e.message
 			};
 		}
-	});
-	ipcMain.handle("clients:getById", async (_, id) => {
+	}), c.handle("setup:complete", async (e, t) => {
 		try {
-			return await container.clientService.getClientById(id);
-		} catch (error) {
+			let e = await q.authService.register({
+				username: t.user.username,
+				password: t.user.password,
+				role: "ADMIN",
+				password_hash: ""
+			});
+			return e.success ? (await q.settingsService.updateSettings(t.settings), {
+				success: !0,
+				user: e.user
+			}) : {
+				success: !1,
+				message: e.error || "Error al crear el usuario"
+			};
+		} catch (e) {
 			return {
-				success: false,
-				message: error.message || "Error al obtener cliente"
+				success: !1,
+				message: e.message || "Error durante la configuración inicial"
 			};
 		}
-	});
-	ipcMain.handle("clients:create", wrapIpc((clientData, userId) => container.clientService.createClient(clientData, userId), clientSchema));
-	ipcMain.handle("clients:update", wrapIpc((id, clientData, userId) => container.clientService.updateClient(id, clientData, userId)));
-	ipcMain.handle("clients:delete", async (_, id, userId) => {
+	}), c.handle("clients:getAll", async (e, t) => {
 		try {
-			return await container.clientService.deleteClient(id, userId);
-		} catch (error) {
+			return await q.clientService.getAllClients(t);
+		} catch (e) {
 			return {
-				success: false,
-				message: error.message || "Error al eliminar cliente"
+				success: !1,
+				message: e.message || "Error al obtener clientes"
 			};
 		}
-	});
-	/**
-	* PRODUCTS
-	*/
-	ipcMain.handle("products:getAll", async (_, search, categoryId) => {
+	}), c.handle("clients:getById", async (e, t) => {
 		try {
-			return await container.productService.getAllProducts(search, categoryId);
-		} catch (error) {
+			return await q.clientService.getClientById(t);
+		} catch (e) {
 			return {
-				success: false,
-				message: error.message || "Error al obtener productos"
+				success: !1,
+				message: e.message || "Error al obtener cliente"
 			};
 		}
-	});
-	ipcMain.handle("products:getById", async (_, id) => {
+	}), c.handle("clients:create", K((e, t) => q.clientService.createClient(e, t), V)), c.handle("clients:update", K((e, t, n) => q.clientService.updateClient(e, t, n))), c.handle("clients:delete", async (e, t, n) => {
 		try {
-			return await container.productService.getProductById(id);
-		} catch (error) {
+			return await q.clientService.deleteClient(t, n);
+		} catch (e) {
 			return {
-				success: false,
-				message: error.message || "Error al obtener producto"
+				success: !1,
+				message: e.message || "Error al eliminar cliente"
 			};
 		}
-	});
-	ipcMain.handle("products:getLowStock", async () => {
+	}), c.handle("products:getAll", async (e, t, n) => {
 		try {
-			return await container.dashboardService.getLowStockProducts(50);
-		} catch (error) {
-			console.error("Get low stock products error:", error);
-			return [];
-		}
-	});
-	ipcMain.handle("products:create", wrapIpc((productData, userId) => container.productService.createProduct(productData, userId), productSchema));
-	ipcMain.handle("products:update", wrapIpc((id, productData, userId) => container.productService.updateProduct(id, productData, userId)));
-	ipcMain.handle("products:delete", async (_, id, userId) => {
-		try {
-			return await container.productService.deleteProduct(id, userId);
-		} catch (error) {
+			return await q.productService.getAllProducts(t, n);
+		} catch (e) {
 			return {
-				success: false,
-				message: error.message || "Error al eliminar producto"
+				success: !1,
+				message: e.message || "Error al obtener productos"
 			};
 		}
-	});
-	ipcMain.handle("products:addStock", async (_, productId, quantity, userId, reason) => {
+	}), c.handle("products:getById", async (e, t) => {
 		try {
-			return await container.productService.addStock(productId, quantity, userId, reason);
-		} catch (error) {
+			return await q.productService.getProductById(t);
+		} catch (e) {
 			return {
-				success: false,
-				message: error.message || "Error al añadir stock"
+				success: !1,
+				message: e.message || "Error al obtener producto"
 			};
 		}
-	});
-	ipcMain.handle("products:removeStock", async (_, productId, quantity, userId, reason) => {
+	}), c.handle("products:getLowStock", async () => {
 		try {
-			return await container.productService.removeStock(productId, quantity, userId, reason);
-		} catch (error) {
+			return await q.dashboardService.getLowStockProducts(50);
+		} catch (e) {
+			return console.error("Get low stock products error:", e), [];
+		}
+	}), c.handle("products:create", K((e, t) => q.productService.createProduct(e, t), R)), c.handle("products:update", K((e, t, n) => q.productService.updateProduct(e, t, n))), c.handle("products:delete", async (e, t, n) => {
+		try {
+			return await q.productService.deleteProduct(t, n);
+		} catch (e) {
 			return {
-				success: false,
-				message: error.message || "Error al reducir stock"
+				success: !1,
+				message: e.message || "Error al eliminar producto"
 			};
 		}
-	});
-	ipcMain.handle("products:getMovements", async (_, productId, limit) => {
+	}), c.handle("products:addStock", async (e, t, n, r, i) => {
 		try {
-			return await container.productService.getInventoryMovements(productId, limit);
-		} catch (error) {
+			return await q.productService.addStock(t, n, r, i);
+		} catch (e) {
 			return {
-				success: false,
-				message: error.message || "Error al obtener movimientos"
+				success: !1,
+				message: e.message || "Error al añadir stock"
 			};
 		}
-	});
-	/**
-	* SALES
-	*/
-	ipcMain.handle("sales:getAll", async (_, startDate, endDate, clientId, cashRegisterId) => {
+	}), c.handle("products:removeStock", async (e, t, n, r, i) => {
 		try {
-			return await container.saleService.getAllSales(startDate, endDate, clientId, cashRegisterId);
-		} catch (error) {
+			return await q.productService.removeStock(t, n, r, i);
+		} catch (e) {
 			return {
-				success: false,
-				message: error.message || "Error al obtener ventas"
+				success: !1,
+				message: e.message || "Error al reducir stock"
 			};
 		}
-	});
-	ipcMain.handle("sales:getToday", async () => {
+	}), c.handle("products:getMovements", async (e, t, n) => {
 		try {
-			return await container.saleService.getTodaySales();
-		} catch (error) {
+			return await q.productService.getInventoryMovements(t, n);
+		} catch (e) {
 			return {
-				success: false,
-				message: error.message || "Error al obtener ventas del día"
+				success: !1,
+				message: e.message || "Error al obtener movimientos"
 			};
 		}
-	});
-	ipcMain.handle("sales:getLast", async () => {
+	}), c.handle("sales:getAll", async (e, t, n, r, i) => {
 		try {
-			return await container.saleService.getLastSale();
-		} catch (error) {
+			return await q.saleService.getAllSales(t, n, r, i);
+		} catch (e) {
+			return {
+				success: !1,
+				message: e.message || "Error al obtener ventas"
+			};
+		}
+	}), c.handle("sales:getToday", async () => {
+		try {
+			return await q.saleService.getTodaySales();
+		} catch (e) {
+			return {
+				success: !1,
+				message: e.message || "Error al obtener ventas del día"
+			};
+		}
+	}), c.handle("sales:getLast", async () => {
+		try {
+			return await q.saleService.getLastSale();
+		} catch {
 			return null;
 		}
-	});
-	ipcMain.handle("sales:getStats", async (_, startDate, endDate) => {
+	}), c.handle("sales:getStats", async (e, t, n) => {
 		try {
-			return await container.saleService.getSalesStats(startDate, endDate);
-		} catch (error) {
+			return await q.saleService.getSalesStats(t, n);
+		} catch (e) {
 			return {
-				success: false,
-				message: error.message || "Error al obtener estadísticas"
+				success: !1,
+				message: e.message || "Error al obtener estadísticas"
 			};
 		}
-	});
-	ipcMain.handle("sales:getDetails", async (_, saleId) => {
+	}), c.handle("sales:getDetails", async (e, t) => {
 		try {
-			return await container.saleService.getSaleDetails(saleId);
-		} catch (error) {
+			return await q.saleService.getSaleDetails(t);
+		} catch (e) {
 			return {
-				success: false,
-				message: error.message || "Error al obtener detalles de venta"
+				success: !1,
+				message: e.message || "Error al obtener detalles de venta"
 			};
 		}
-	});
-	ipcMain.handle("sales:register", wrapIpc(async (saleData, itemsData, userId) => {
-		return container.saleService.registerSale(saleData, itemsData, userId);
-	}, saleSchema.omit({ items: true })));
-	ipcMain.handle("sales:cancel", async (_, saleId, userId) => {
+	}), c.handle("sales:register", K(async (e, t, n) => q.saleService.registerSale(e, t, n), B.omit({ items: !0 }))), c.handle("sales:cancel", async (e, t, n) => {
 		try {
-			return await container.saleService.cancelSale(saleId, userId);
-		} catch (error) {
+			return await q.saleService.cancelSale(t, n);
+		} catch (e) {
 			return {
-				success: false,
-				message: error.message || "Error al cancelar venta"
+				success: !1,
+				message: e.message || "Error al cancelar venta"
 			};
 		}
-	});
-	/**
-	* CATEGORIES
-	*/
-	ipcMain.handle("categories:getAll", async (_, search) => {
-		return await container.categoryService.getAllCategories(search);
-	});
-	ipcMain.handle("categories:getById", async (_, id) => {
+	}), c.handle("categories:getAll", async (e, t) => await q.categoryService.getAllCategories(t)), c.handle("categories:getById", async (e, t) => {
 		try {
-			return await container.categoryService.getCategoryById(id);
-		} catch (error) {
+			return await q.categoryService.getCategoryById(t);
+		} catch (e) {
 			return {
-				success: false,
-				message: error.message || "Error al obtener categoría"
+				success: !1,
+				message: e.message || "Error al obtener categoría"
 			};
 		}
-	});
-	ipcMain.handle("categories:create", wrapIpc(async (categoryData, userId) => {
-		return await container.categoryService.createCategory(categoryData, userId);
-	}, categorySchema));
-	ipcMain.handle("categories:update", wrapIpc(async (id, categoryData, userId) => {
-		const parsed = categorySchema.parse(categoryData);
-		return await container.categoryService.updateCategory(id, parsed, userId);
-	}));
-	ipcMain.handle("categories:delete", wrapIpc(async (id, userId) => {
-		return await container.categoryService.deleteCategory(id, userId);
-	}));
-	/**
-	* USERS
-	*/
-	ipcMain.handle("users:getAll", async () => {
+	}), c.handle("categories:create", K(async (e, t) => await q.categoryService.createCategory(e, t), H)), c.handle("categories:update", K(async (e, t, n) => {
+		let r = H.parse(t);
+		return await q.categoryService.updateCategory(e, r, n);
+	})), c.handle("categories:delete", K(async (e, t) => await q.categoryService.deleteCategory(e, t))), c.handle("users:getAll", async () => {
 		try {
-			return await container.userService.getAllUsers();
-		} catch (error) {
+			return await q.userService.getAllUsers();
+		} catch (e) {
 			return {
-				success: false,
-				message: error.message || "Error al obtener usuarios"
+				success: !1,
+				message: e.message || "Error al obtener usuarios"
 			};
 		}
-	});
-	ipcMain.handle("users:getById", async (_, id) => {
+	}), c.handle("users:getById", async (e, t) => {
 		try {
-			return await container.userService.getUserById(id);
-		} catch (error) {
+			return await q.userService.getUserById(t);
+		} catch (e) {
 			return {
-				success: false,
-				message: error.message || "Error al obtener usuario"
+				success: !1,
+				message: e.message || "Error al obtener usuario"
 			};
 		}
-	});
-	ipcMain.handle("users:create", async (_, userData, createdBy) => {
+	}), c.handle("users:create", async (e, t, n) => {
 		try {
 			return {
-				success: true,
-				user: await container.userService.createUser(userData, createdBy)
+				success: !0,
+				user: await q.userService.createUser(t, n)
 			};
-		} catch (error) {
+		} catch (e) {
 			return {
-				success: false,
-				message: error.message || "Error al crear usuario"
+				success: !1,
+				message: e.message || "Error al crear usuario"
 			};
 		}
-	});
-	ipcMain.handle("users:update", async (_, id, userData, updatedBy) => {
+	}), c.handle("users:update", async (e, t, n, r) => {
 		try {
 			return {
-				success: true,
-				user: await container.userService.updateUser(id, userData, updatedBy)
+				success: !0,
+				user: await q.userService.updateUser(t, n, r)
 			};
-		} catch (error) {
+		} catch (e) {
 			return {
-				success: false,
-				message: error.message || "Error al actualizar usuario"
-			};
-		}
-	});
-	ipcMain.handle("users:delete", async (_, id, deletedBy) => {
-		try {
-			return await container.userService.deleteUser(id, deletedBy);
-		} catch (error) {
-			return {
-				success: false,
-				message: error.message || "Error al eliminar usuario"
+				success: !1,
+				message: e.message || "Error al actualizar usuario"
 			};
 		}
-	});
-	ipcMain.handle("users:changePassword", async (_, userId, newPassword, changedBy) => {
+	}), c.handle("users:delete", async (e, t, n) => {
 		try {
-			return await container.userService.changePassword(userId, newPassword, changedBy);
-		} catch (error) {
+			return await q.userService.deleteUser(t, n);
+		} catch (e) {
 			return {
-				success: false,
-				message: error.message || "Error al cambiar contraseña"
+				success: !1,
+				message: e.message || "Error al eliminar usuario"
 			};
 		}
-	});
-	/**
-	* INVENTORY MOVEMENTS
-	*/
-	ipcMain.handle("movements:getAll", async () => {
+	}), c.handle("users:changePassword", async (e, t, n, r) => {
 		try {
-			return await container.prisma.inventoryMovement.findMany({
+			return await q.userService.changePassword(t, n, r);
+		} catch (e) {
+			return {
+				success: !1,
+				message: e.message || "Error al cambiar contraseña"
+			};
+		}
+	}), c.handle("movements:getAll", async () => {
+		try {
+			return await q.prisma.inventoryMovement.findMany({
 				include: { product: { select: {
-					id: true,
-					name: true,
-					sku: true
+					id: !0,
+					name: !0,
+					sku: !0
 				} } },
 				orderBy: { created_at: "desc" },
 				take: 500
 			});
-		} catch (error) {
+		} catch {
 			return [];
 		}
-	});
-	/**
-	* SUPPLIERS
-	*/
-	ipcMain.handle("suppliers:getAll", async (_, search) => {
+	}), c.handle("suppliers:getAll", async (e, t) => {
 		try {
-			return await container.supplierService.getAllSuppliers(search);
-		} catch (error) {
+			return await q.supplierService.getAllSuppliers(t);
+		} catch {
 			return [];
 		}
-	});
-	ipcMain.handle("suppliers:getById", async (_, id) => {
+	}), c.handle("suppliers:getById", async (e, t) => {
 		try {
-			return await container.supplierService.getSupplierById(id);
-		} catch (error) {
+			return await q.supplierService.getSupplierById(t);
+		} catch {
 			return null;
 		}
-	});
-	ipcMain.handle("suppliers:create", async (_, data, userId) => {
+	}), c.handle("suppliers:create", async (e, t, n) => {
 		try {
 			return {
-				success: true,
-				supplier: await container.supplierService.createSupplier(data, userId)
+				success: !0,
+				supplier: await q.supplierService.createSupplier(t, n)
 			};
-		} catch (error) {
+		} catch (e) {
 			return {
-				success: false,
-				message: error.message || "Error al crear proveedor"
+				success: !1,
+				message: e.message || "Error al crear proveedor"
 			};
 		}
-	});
-	ipcMain.handle("suppliers:update", async (_, id, data, userId) => {
+	}), c.handle("suppliers:update", async (e, t, n, r) => {
 		try {
 			return {
-				success: true,
-				supplier: await container.supplierService.updateSupplier(id, data, userId)
+				success: !0,
+				supplier: await q.supplierService.updateSupplier(t, n, r)
 			};
-		} catch (error) {
+		} catch (e) {
 			return {
-				success: false,
-				message: error.message || "Error al actualizar proveedor"
-			};
-		}
-	});
-	ipcMain.handle("suppliers:delete", async (_, id, userId) => {
-		try {
-			return await container.supplierService.deleteSupplier(id, userId);
-		} catch (error) {
-			return {
-				success: false,
-				message: error.message || "Error al eliminar proveedor"
+				success: !1,
+				message: e.message || "Error al actualizar proveedor"
 			};
 		}
-	});
-	/**
-	* PURCHASES
-	*/
-	ipcMain.handle("purchases:getAll", async (_, supplierId, status) => {
+	}), c.handle("suppliers:delete", async (e, t, n) => {
 		try {
-			return await container.purchaseService.getAllPurchases(supplierId, status);
-		} catch (error) {
+			return await q.supplierService.deleteSupplier(t, n);
+		} catch (e) {
+			return {
+				success: !1,
+				message: e.message || "Error al eliminar proveedor"
+			};
+		}
+	}), c.handle("purchases:getAll", async (e, t, n) => {
+		try {
+			return await q.purchaseService.getAllPurchases(t, n);
+		} catch {
 			return [];
 		}
-	});
-	ipcMain.handle("purchases:getById", async (_, id) => {
+	}), c.handle("purchases:getById", async (e, t) => {
 		try {
-			return await container.purchaseService.getPurchaseById(id);
-		} catch (error) {
+			return await q.purchaseService.getPurchaseById(t);
+		} catch {
 			return null;
 		}
-	});
-	ipcMain.handle("purchases:create", async (_, data, userId) => {
+	}), c.handle("purchases:create", async (e, t, n) => {
 		try {
 			return {
-				success: true,
-				purchase: await container.purchaseService.createPurchase(data, userId)
+				success: !0,
+				purchase: await q.purchaseService.createPurchase(t, n)
 			};
-		} catch (error) {
+		} catch (e) {
 			return {
-				success: false,
-				message: error.message || "Error al crear orden de compra"
-			};
-		}
-	});
-	ipcMain.handle("purchases:receive", async (_, purchaseId, userId) => {
-		try {
-			return await container.purchaseService.receivePurchase(purchaseId, userId);
-		} catch (error) {
-			return {
-				success: false,
-				message: error.message || "Error al recibir compra"
+				success: !1,
+				message: e.message || "Error al crear orden de compra"
 			};
 		}
-	});
-	ipcMain.handle("purchases:cancel", async (_, purchaseId, userId) => {
+	}), c.handle("purchases:receive", async (e, t, n) => {
 		try {
-			return await container.purchaseService.cancelPurchase(purchaseId, userId);
-		} catch (error) {
+			return await q.purchaseService.receivePurchase(t, n);
+		} catch (e) {
 			return {
-				success: false,
-				message: error.message || "Error al cancelar compra"
+				success: !1,
+				message: e.message || "Error al recibir compra"
 			};
 		}
-	});
-	ipcMain.handle("purchases:updatePaymentStatus", async (_, purchaseId, paymentStatus) => {
+	}), c.handle("purchases:cancel", async (e, t, n) => {
 		try {
-			return await container.purchaseService.updatePaymentStatus(purchaseId, paymentStatus);
-		} catch (error) {
+			return await q.purchaseService.cancelPurchase(t, n);
+		} catch (e) {
 			return {
-				success: false,
-				message: error.message || "Error al actualizar estado de pago"
+				success: !1,
+				message: e.message || "Error al cancelar compra"
 			};
 		}
-	});
-	ipcMain.handle("backup:create", async (_, label) => {
+	}), c.handle("purchases:updatePaymentStatus", async (e, t, n) => {
 		try {
-			return await container.backupService.createBackup(label);
-		} catch (error) {
-			console.error("[IPC] Error creating backup:", error);
+			return await q.purchaseService.updatePaymentStatus(t, n);
+		} catch (e) {
 			return {
-				success: false,
-				message: error.message
+				success: !1,
+				message: e.message || "Error al actualizar estado de pago"
 			};
 		}
-	});
-	ipcMain.handle("backup:list", async () => {
+	}), c.handle("backup:create", async (e, t) => {
 		try {
-			return await container.backupService.listBackups();
-		} catch (error) {
-			console.error("[IPC] Error listing backups:", error);
-			return [];
-		}
-	});
-	ipcMain.handle("backup:restore", async (_, backupPath) => {
-		try {
-			return await container.backupService.restoreBackup(backupPath);
-		} catch (error) {
-			console.error("[IPC] Error restoring backup:", error);
-			return {
-				success: false,
-				message: error.message
+			return await q.backupService.createBackup(t);
+		} catch (e) {
+			return console.error("[IPC] Error creating backup:", e), {
+				success: !1,
+				message: e.message
 			};
 		}
-	});
-	ipcMain.handle("backup:delete", async (_, backupPath) => {
+	}), c.handle("backup:list", async () => {
 		try {
-			return await container.backupService.deleteBackup(backupPath);
-		} catch (error) {
-			console.error("[IPC] Error deleting backup:", error);
-			return {
-				success: false,
-				message: error.message
+			return await q.backupService.listBackups();
+		} catch (e) {
+			return console.error("[IPC] Error listing backups:", e), [];
+		}
+	}), c.handle("backup:restore", async (e, t) => {
+		try {
+			return await q.backupService.restoreBackup(t);
+		} catch (e) {
+			return console.error("[IPC] Error restoring backup:", e), {
+				success: !1,
+				message: e.message
 			};
 		}
-	});
-	ipcMain.handle("settings:getTax", async () => {
+	}), c.handle("backup:delete", async (e, t) => {
 		try {
-			return await container.settingsService.getTaxSettings();
-		} catch (error) {
-			console.error("[IPC] Error getting tax settings:", error);
-			return {
+			return await q.backupService.deleteBackup(t);
+		} catch (e) {
+			return console.error("[IPC] Error deleting backup:", e), {
+				success: !1,
+				message: e.message
+			};
+		}
+	}), c.handle("settings:getTax", async () => {
+		try {
+			return await q.settingsService.getTaxSettings();
+		} catch (e) {
+			return console.error("[IPC] Error getting tax settings:", e), {
 				taxRate: 0,
 				taxType: "none",
-				taxIncluded: false
+				taxIncluded: !1
 			};
 		}
-	});
-	ipcMain.handle("settings:updateTax", async (_, taxRate, taxType, taxIncluded) => {
+	}), c.handle("settings:updateTax", async (e, t, n, r) => {
 		try {
-			return await container.settingsService.updateTaxSettings(taxRate, taxType, taxIncluded);
-		} catch (error) {
-			console.error("[IPC] Error updating tax settings:", error);
-			return {
-				success: false,
-				message: error.message
+			return await q.settingsService.updateTaxSettings(t, n, r);
+		} catch (e) {
+			return console.error("[IPC] Error updating tax settings:", e), {
+				success: !1,
+				message: e.message
 			};
 		}
-	});
-	ipcMain.handle("reports:generate", async (_, raw) => {
+	}), c.handle("reports:generate", async (e, t) => {
 		try {
-			const startDate = raw.startDate ? new Date(raw.startDate) : void 0;
-			let endDate;
-			if (raw.endDate) {
-				endDate = new Date(raw.endDate);
-				endDate.setHours(23, 59, 59, 999);
-			} else if (startDate) {
-				endDate = new Date(startDate);
-				endDate.setHours(23, 59, 59, 999);
-			}
-			const request = {
-				...raw,
-				startDate,
-				endDate
-			};
-			const buffer = await container.reportService.generateReport(request);
-			const ext = request.format === "pdf" ? "pdf" : "xlsx";
-			const { filePath, canceled } = await dialog.showSaveDialog({
-				defaultPath: `${request.type}-${Date.now()}.${ext}`,
-				filters: request.format === "pdf" ? [{
+			let e = t.startDate ? new Date(t.startDate) : void 0, n;
+			t.endDate ? (n = new Date(t.endDate), n.setHours(23, 59, 59, 999)) : e && (n = new Date(e), n.setHours(23, 59, 59, 999));
+			let r = {
+				...t,
+				startDate: e,
+				endDate: n
+			}, i = await q.reportService.generateReport(r), a = r.format === "pdf" ? "pdf" : "xlsx", { filePath: o, canceled: c } = await s.showSaveDialog({
+				defaultPath: `${r.type}-${Date.now()}.${a}`,
+				filters: r.format === "pdf" ? [{
 					name: "PDF",
 					extensions: ["pdf"]
 				}] : [{
@@ -3944,173 +3285,240 @@ function setupIpcHandlers() {
 					extensions: ["xlsx"]
 				}]
 			});
-			if (canceled || !filePath) return {
-				success: false,
+			return c || !o ? {
+				success: !1,
 				message: "Cancelado por el usuario"
-			};
-			await fs.writeFile(filePath, buffer);
-			return {
-				success: true,
-				path: filePath
-			};
-		} catch (error) {
-			console.error("[IPC] Error generating report:", error);
-			return {
-				success: false,
-				message: error.message
+			} : (await O.writeFile(o, i), {
+				success: !0,
+				path: o
+			});
+		} catch (e) {
+			return console.error("[IPC] Error generating report:", e), {
+				success: !1,
+				message: e.message
 			};
 		}
-	});
-	ipcMain.handle("reports:generateReceipt", async (_, saleId) => {
+	}), c.handle("reports:generateReceipt", async (e, t) => {
 		try {
-			const request = {
+			let e = {
 				type: "sale_receipt",
 				format: "pdf",
-				saleId
-			};
-			const buffer = await container.reportService.generateReport(request);
-			const { filePath, canceled } = await dialog.showSaveDialog({
-				defaultPath: `comprobante-${saleId}-${Date.now()}.pdf`,
+				saleId: t
+			}, n = await q.reportService.generateReport(e), { filePath: r, canceled: i } = await s.showSaveDialog({
+				defaultPath: `comprobante-${t}-${Date.now()}.pdf`,
 				filters: [{
 					name: "PDF",
 					extensions: ["pdf"]
 				}]
 			});
-			if (canceled || !filePath) return {
-				success: false,
+			return i || !r ? {
+				success: !1,
 				message: "Cancelado por el usuario"
-			};
-			await fs.writeFile(filePath, buffer);
-			return {
-				success: true,
-				path: filePath
-			};
-		} catch (error) {
-			console.error("[IPC] Error generating receipt:", error);
-			return {
-				success: false,
-				message: error.message
+			} : (await O.writeFile(r, n), {
+				success: !0,
+				path: r
+			});
+		} catch (e) {
+			return console.error("[IPC] Error generating receipt:", e), {
+				success: !1,
+				message: e.message
 			};
 		}
-	});
-	ipcMain.handle("reports:generateCashClose", async (_, registerId) => {
+	}), c.handle("reports:generateCashClose", async (e, t) => {
 		try {
-			const request = {
+			let e = {
 				type: "cash_close",
 				format: "pdf",
-				registerId
-			};
-			const buffer = await container.reportService.generateReport(request);
-			const { filePath, canceled } = await dialog.showSaveDialog({
-				defaultPath: `cierre-caja-${registerId}-${Date.now()}.pdf`,
+				registerId: t
+			}, n = await q.reportService.generateReport(e), { filePath: r, canceled: i } = await s.showSaveDialog({
+				defaultPath: `cierre-caja-${t}-${Date.now()}.pdf`,
 				filters: [{
 					name: "PDF",
 					extensions: ["pdf"]
 				}]
 			});
-			if (canceled || !filePath) return {
-				success: false,
+			return i || !r ? {
+				success: !1,
 				message: "Cancelado por el usuario"
-			};
-			await fs.writeFile(filePath, buffer);
-			return {
-				success: true,
-				path: filePath
-			};
-		} catch (error) {
-			console.error("[IPC] Error generating cash close report:", error);
-			return {
-				success: false,
-				message: error.message
+			} : (await O.writeFile(r, n), {
+				success: !0,
+				path: r
+			});
+		} catch (e) {
+			return console.error("[IPC] Error generating cash close report:", e), {
+				success: !1,
+				message: e.message
 			};
 		}
 	});
 }
 //#endregion
+//#region src/main/utils/migrationRunner.ts
+function Ae(e) {
+	let t = [], n = "", r = !1, i = "";
+	for (let a = 0; a < e.length; a++) {
+		let o = e[a], s = e[a + 1] || "";
+		if (r) {
+			n += o, o === i && e[a - 1] !== "\\" && (r = !1);
+			continue;
+		}
+		if (o === "-" && s === "-") {
+			for (; a < e.length && e[a] !== "\n";) a++;
+			continue;
+		}
+		if (o === "/" && s === "*") {
+			for (a += 2; a < e.length && !(e[a] === "*" && e[a + 1] === "/");) a++;
+			a += 2;
+			continue;
+		}
+		if (o === "'" || o === "\"") {
+			r = !0, i = o, n += o;
+			continue;
+		}
+		if (o === ";") {
+			let e = n.trim();
+			e && t.push(e), n = "";
+			continue;
+		}
+		n += o;
+	}
+	let a = n.trim();
+	return a && t.push(a), t;
+}
+function je() {
+	let e = [];
+	o.isPackaged && (e.push(l.join(process.resourcesPath, "prisma", "schema.sql")), e.push(l.join(process.resourcesPath, "schema.sql")));
+	try {
+		let t = l.dirname(d(import.meta.url));
+		e.push(l.join(t, "..", "prisma", "schema.sql"));
+	} catch {}
+	for (let t of e) if (u.existsSync(t)) return t;
+	return null;
+}
+async function Me(e) {
+	try {
+		let t = await e.$queryRawUnsafe("SELECT name FROM sqlite_master WHERE type='table' AND name='users'");
+		return Array.isArray(t) && t.length > 0;
+	} catch {
+		return !1;
+	}
+}
+async function Ne(e) {
+	if (await Me(e)) return console.log("[Migration] Database already initialized, skipping."), { applied: !1 };
+	let t = je();
+	if (!t) {
+		let e = "schema.sql not found in any expected location";
+		return console.error("[Migration] " + e), {
+			applied: !1,
+			error: e
+		};
+	}
+	console.log(`[Migration] Loading schema from ${t}`);
+	let n = Ae(u.readFileSync(t, "utf-8"));
+	console.log(`[Migration] Found ${n.length} SQL statements to execute`);
+	for (let t = 0; t < n.length; t++) {
+		let r = n[t];
+		try {
+			await e.$executeRawUnsafe(r);
+		} catch (e) {
+			if (e.message && e.message.includes("already exists")) {
+				console.log(`[Migration] Skipping statement ${t + 1} (already exists): ${r.slice(0, 60)}...`);
+				continue;
+			}
+			let n = `Migration failed at statement ${t + 1}: ${e.message || e}`;
+			return console.error("[Migration] " + n), console.error("[Migration] SQL: " + r.slice(0, 200)), {
+				applied: !1,
+				error: n
+			};
+		}
+	}
+	return console.log("[Migration] Schema applied successfully!"), { applied: !0 };
+}
+//#endregion
 //#region src/main/index.ts
-var __dirname = path.dirname(fileURLToPath(import.meta.url));
-process.env.DIST = path.join(__dirname, "../dist");
-process.env.VITE_PUBLIC = app.isPackaged ? process.env.DIST : path.join(process.env.DIST, "../public");
-var win = null;
-var VITE_DEV_SERVER_URL = process.env["VITE_DEV_SERVER_URL"];
-async function createWindow() {
-	win = new BrowserWindow({
+var { PrismaClient: Pe } = p;
+j();
+var Y = Ee(new Pe({ datasources: { db: { url: process.env.DATABASE_URL } } }));
+Oe(Y);
+var X = l.dirname(d(import.meta.url));
+process.env.DIST = l.join(X, "../dist"), process.env.VITE_PUBLIC = o.isPackaged ? process.env.DIST : l.join(process.env.DIST, "../public");
+var Z = null, Q = process.env.VITE_DEV_SERVER_URL;
+async function $() {
+	Z = new a({
 		width: 1200,
 		height: 800,
 		minWidth: 900,
 		minHeight: 600,
-		icon: path.join(process.env.VITE_PUBLIC, "favicon.ico"),
+		icon: l.join(process.env.VITE_PUBLIC, "favicon.ico"),
 		webPreferences: {
-			preload: path.join(__dirname, "index.mjs"),
-			contextIsolation: true,
-			nodeIntegration: false
+			preload: l.join(X, "index.mjs"),
+			contextIsolation: !0,
+			nodeIntegration: !1
 		},
-		autoHideMenuBar: true
-	});
-	if (VITE_DEV_SERVER_URL) {
-		win.loadURL(VITE_DEV_SERVER_URL);
-		win.webContents.openDevTools();
-	} else win.loadFile(path.join(process.env.DIST, "index.html"));
-	win.on("blur", () => {
+		autoHideMenuBar: !0
+	}), Q ? (Z.loadURL(Q), Z.webContents.openDevTools()) : Z.loadFile(l.join(process.env.DIST, "index.html")), Z.on("blur", () => {
 		setTimeout(() => {
-			if (win && !win.isDestroyed() && !win.isFocused()) {
-				const focusedWindow = BrowserWindow.getFocusedWindow();
-				if (!focusedWindow || focusedWindow === win) win.focus();
+			if (Z && !Z.isDestroyed() && !Z.isFocused()) {
+				let e = a.getFocusedWindow();
+				(!e || e === Z) && Z.focus();
 			}
 		}, 100);
-	});
-	win.on("focus", () => {
-		if (win && win.webContents) win.webContents.focus();
-	});
-	win.on("closed", () => {
-		win = null;
+	}), Z.on("focus", () => {
+		Z && Z.webContents && Z.webContents.focus();
+	}), Z.on("closed", () => {
+		Z = null;
 	});
 }
-ipcMain.handle("window:focus", () => {
-	if (win && !win.isDestroyed()) {
-		win.focus();
-		win.webContents.focus();
-		return true;
-	}
-	return false;
-});
-ipcMain.handle("window:is-ready", () => {
-	return win && !win.isDestroyed();
-});
-ipcMain.handle("dialog:showMessageBox", (event, options) => {
-	const focusedWindow = BrowserWindow.getFocusedWindow() || win;
-	return dialog.showMessageBox(focusedWindow, options);
-});
-ipcMain.handle("dialog:showOpenDialog", (event, options) => {
-	const focusedWindow = BrowserWindow.getFocusedWindow() || win;
-	return dialog.showOpenDialog(focusedWindow, options);
-});
-ipcMain.handle("dialog:showSaveDialog", (event, options) => {
-	const focusedWindow = BrowserWindow.getFocusedWindow() || win;
-	return dialog.showSaveDialog(focusedWindow, options);
-});
-app.on("window-all-closed", () => {
-	if (process.platform !== "darwin") {
-		app.quit();
-		win = null;
-	}
-});
-app.whenReady().then(async () => {
+c.handle("window:focus", () => Z && !Z.isDestroyed() ? (Z.focus(), Z.webContents.focus(), !0) : !1), c.handle("window:is-ready", () => Z && !Z.isDestroyed()), c.handle("dialog:showMessageBox", (e, t) => {
+	let n = a.getFocusedWindow() || Z;
+	return s.showMessageBox(n, t);
+}), c.handle("dialog:showOpenDialog", (e, t) => {
+	let n = a.getFocusedWindow() || Z;
+	return s.showOpenDialog(n, t);
+}), c.handle("dialog:showSaveDialog", (e, t) => {
+	let n = a.getFocusedWindow() || Z;
+	return s.showSaveDialog(n, t);
+}), o.on("window-all-closed", () => {
+	process.platform !== "darwin" && (o.quit(), Z = null);
+}), o.whenReady().then(async () => {
+	let e = !1;
 	try {
-		await container.prisma.$connect();
-		await container.prisma.$queryRaw`PRAGMA journal_mode=WAL`;
-		await container.prisma.$queryRaw`PRAGMA synchronous=NORMAL`;
-		await container.prisma.$queryRaw`PRAGMA cache_size=10000`;
-		await container.prisma.$queryRaw`PRAGMA temp_store=MEMORY`;
-		console.log("✅ Prisma connected to SQLite successfully.");
-	} catch (err) {
-		console.error("❌ Failed to connect to SQLite:", err);
+		await Y.prisma.$connect(), await Y.prisma.$queryRaw`PRAGMA journal_mode=WAL`, await Y.prisma.$queryRaw`PRAGMA synchronous=NORMAL`, await Y.prisma.$queryRaw`PRAGMA cache_size=10000`, await Y.prisma.$queryRaw`PRAGMA temp_store=MEMORY`, console.log("✅ Prisma connected to SQLite successfully."), e = !0;
+	} catch (e) {
+		let t = [
+			`Error: ${e.message || String(e)}`,
+			e.code ? `Code: ${e.code}` : "",
+			`DATABASE_URL: ${process.env.DATABASE_URL || "(not set)"}`,
+			`PRISMA_QUERY_ENGINE_LIBRARY: ${process.env.PRISMA_QUERY_ENGINE_LIBRARY || "(not set)"}`,
+			`resourcesPath: ${process.resourcesPath || "(not set)"}`,
+			`appPath: ${o.getAppPath()}`
+		].filter(Boolean).join("\n");
+		console.error("❌ Failed to connect to SQLite:\n" + t);
+		try {
+			await s.showMessageBox({
+				type: "error",
+				title: "Error de Base de Datos",
+				message: "No se pudo conectar a la base de datos SQLite.",
+				detail: `El motor de Prisma no pudo cargarse.\n\n${t}\n\nVerifica que el empaquetado incluya los archivos nativos correctamente.`
+			});
+		} catch {}
 	}
-	setupIpcHandlers();
-	container.schedulerService.start();
-	createWindow();
-	app.on("activate", () => {
-		if (BrowserWindow.getAllWindows().length === 0) createWindow();
+	if (e) {
+		let e = await Ne(Y.prisma);
+		if (e.error) {
+			console.error("❌ Migration error:", e.error);
+			try {
+				await s.showMessageBox({
+					type: "error",
+					title: "Error de Migración",
+					message: "No se pudieron aplicar las migraciones de la base de datos.",
+					detail: e.error
+				});
+			} catch {}
+		}
+	}
+	J(), Y.schedulerService.start(), $(), o.on("activate", () => {
+		a.getAllWindows().length === 0 && $();
 	});
 });
 //#endregion

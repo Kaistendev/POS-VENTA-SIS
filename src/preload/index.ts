@@ -8,6 +8,10 @@ contextBridge.exposeInMainWorld('api', {
   // Health Check
   checkHealth: () => ipcRenderer.invoke('health:check'),
 
+  // Setup (First-run wizard)
+  checkSetupStatus: () => ipcRenderer.invoke('setup:status'),
+  completeSetup: (data: { user: { username: string, password: string }, settings: Record<string, string> }) => ipcRenderer.invoke('setup:complete', data),
+
   // Auth
   login: (username: string, password: string) => ipcRenderer.invoke('auth:login', username, password),
 

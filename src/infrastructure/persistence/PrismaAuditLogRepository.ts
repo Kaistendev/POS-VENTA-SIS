@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import type { PrismaClient } from '@prisma/client';
 import { IAuditLogRepository } from '../../domain/ports/IAuditLogRepository.js';
 import { AuditLogEntryDTO } from '../../domain/dtos.js';
 

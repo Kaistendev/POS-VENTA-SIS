@@ -63,7 +63,7 @@ export class AuthService {
     } catch (error: any) {
       console.error('Register error:', error);
       if (error.code === 'P2002') return { success: false, error: 'El nombre de usuario ya está en uso' };
-      return { success: false, error: 'Error interno del servidor' };
+      return { success: false, error: 'Error interno del servidor: ' + (error.message || String(error)) };
     }
   }
 
