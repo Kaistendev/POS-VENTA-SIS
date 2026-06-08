@@ -1,12 +1,5 @@
 require("dotenv").config();
 
-// Determine the Prisma engine filename for the current platform
-const isWin = process.platform === 'win32';
-const engineName = isWin
-  ? 'query_engine-windows.dll.node'
-  : 'libquery_engine-debian-openssl-3.0.x.so.node';
-const engineDestName = isWin ? 'prisma-engine.dll.node' : 'prisma-engine.so.node';
-
 module.exports = {
   appId: "com.inventario.pos",
   productName: "InventarioPOS",
@@ -29,15 +22,9 @@ module.exports = {
     },
   ],
   extraResources: [
-    // Bundle the generated schema DDL for first-run DB initialization
     {
       from: "prisma/schema.sql",
       to: "prisma/schema.sql"
-    },
-    // Bundle the Prisma query engine directly as a reliable fallback
-    {
-      from: `node_modules/.prisma/client/${engineName}`,
-      to: engineDestName
     },
   ],
   win: {
@@ -58,7 +45,6 @@ module.exports = {
   asar: true,
   asarUnpack: [
     "node_modules/@prisma/client/**",
-    "node_modules/@prisma/engines/**",
     "node_modules/better-sqlite3/**",
     "node_modules/.prisma/**",
   ],

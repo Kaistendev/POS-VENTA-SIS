@@ -4,6 +4,7 @@ import { ISupplierRepository } from '../../domain/ports/ISupplierRepository.js';
 import { IProductRepository } from '../../domain/ports/IProductRepository.js';
 import { CreatePurchaseDTO } from '../../domain/dtos.js';
 import { NotFoundError, BusinessRuleError } from '../../shared/errors.js';
+import { logger } from '../../shared/logger.js';
 
 export class PurchaseService {
   constructor(
@@ -17,7 +18,7 @@ export class PurchaseService {
     try {
       return await this.purchaseRepo.findAll(supplierId, status);
     } catch (error: any) {
-      console.error('Get all purchases error:', error);
+      logger.error('Get all purchases error:', error);
       throw new Error('Error al obtener compras');
     }
   }
@@ -28,7 +29,7 @@ export class PurchaseService {
       if (!purchase) throw new NotFoundError('Compra');
       return purchase;
     } catch (error: any) {
-      console.error('Get purchase by ID error:', error);
+      logger.error('Get purchase by ID error:', error);
       if (error.code === 'P2025') throw new NotFoundError('Compra');
       throw error;
     }
@@ -54,7 +55,7 @@ export class PurchaseService {
 
       return purchase;
     } catch (error: any) {
-      console.error('Create purchase error:', error);
+      logger.error('Create purchase error:', error);
       throw error;
     }
   }
@@ -72,7 +73,7 @@ export class PurchaseService {
 
       return { success: true };
     } catch (error: any) {
-      console.error('Receive purchase error:', error);
+      logger.error('Receive purchase error:', error);
       if (error.code === 'P2025') throw new NotFoundError('Compra');
       throw error;
     }
@@ -83,7 +84,7 @@ export class PurchaseService {
       await this.purchaseRepo.updatePaymentStatus(purchaseId, paymentStatus);
       return { success: true };
     } catch (error: any) {
-      console.error('Update payment status error:', error);
+      logger.error('Update payment status error:', error);
       if (error.code === 'P2025') throw new NotFoundError('Compra');
       throw error;
     }
@@ -102,7 +103,7 @@ export class PurchaseService {
 
       return { success: true };
     } catch (error: any) {
-      console.error('Cancel purchase error:', error);
+      logger.error('Cancel purchase error:', error);
       if (error.code === 'P2025') throw new NotFoundError('Compra');
       throw error;
     }

@@ -2,6 +2,7 @@ import { ISupplierRepository } from '../../domain/ports/ISupplierRepository.js';
 import { IAuditLogRepository } from '../../domain/ports/IAuditLogRepository.js';
 import { CreateSupplierDTO, UpdateSupplierDTO } from '../../domain/dtos.js';
 import { NotFoundError, ConflictError, BusinessRuleError } from '../../shared/errors.js';
+import { logger } from '../../shared/logger.js';
 
 export class SupplierService {
   constructor(
@@ -13,7 +14,7 @@ export class SupplierService {
     try {
       return await this.supplierRepo.findAll(search);
     } catch (error: any) {
-      console.error('Get all suppliers error:', error);
+      logger.error('Get all suppliers error:', error);
       throw new Error('Error al obtener proveedores');
     }
   }
@@ -24,7 +25,7 @@ export class SupplierService {
       if (!supplier) throw new NotFoundError('Proveedor');
       return supplier;
     } catch (error: any) {
-      console.error('Get supplier by ID error:', error);
+      logger.error('Get supplier by ID error:', error);
       if (error.code === 'P2025') throw new NotFoundError('Proveedor');
       throw error;
     }
@@ -48,7 +49,7 @@ export class SupplierService {
 
       return supplier;
     } catch (error: any) {
-      console.error('Create supplier error:', error);
+      logger.error('Create supplier error:', error);
       if (error.code === 'P2002') throw new ConflictError('El RUC ya está en uso');
       throw error;
     }
@@ -75,7 +76,7 @@ export class SupplierService {
 
       return supplier;
     } catch (error: any) {
-      console.error('Update supplier error:', error);
+      logger.error('Update supplier error:', error);
       if (error.code === 'P2025') throw new NotFoundError('Proveedor');
       throw error;
     }
@@ -103,7 +104,7 @@ export class SupplierService {
 
       return { success: true };
     } catch (error: any) {
-      console.error('Delete supplier error:', error);
+      logger.error('Delete supplier error:', error);
       if (error.code === 'P2025') throw new NotFoundError('Proveedor');
       throw error;
     }

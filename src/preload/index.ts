@@ -10,10 +10,15 @@ contextBridge.exposeInMainWorld('api', {
 
   // Setup (First-run wizard)
   checkSetupStatus: () => ipcRenderer.invoke('setup:status'),
-  completeSetup: (data: { user: { username: string, password: string }, settings: Record<string, string> }) => ipcRenderer.invoke('setup:complete', data),
+  completeSetup: (data: { user: { username: string, password: string, security_question?: string, security_answer?: string }, settings: Record<string, string> }) => ipcRenderer.invoke('setup:complete', data),
 
   // Auth
   login: (username: string, password: string) => ipcRenderer.invoke('auth:login', username, password),
+  checkSession: () => ipcRenderer.invoke('auth:checkSession'),
+  getSecurityQuestion: (username: string) => ipcRenderer.invoke('auth:getSecurityQuestion', username),
+  verifySecurityAnswer: (username: string, answer: string) => ipcRenderer.invoke('auth:verifySecurityAnswer', username, answer),
+  resetPassword: (token: string, newPassword: string) => ipcRenderer.invoke('auth:resetPassword', token, newPassword),
+  setSecurityQuestion: (userId: number, question: string, answer: string) => ipcRenderer.invoke('auth:setSecurityQuestion', userId, question, answer),
 
   // Dashboard
   getDashboardStats: (startDate?: Date, endDate?: Date) => ipcRenderer.invoke('dashboard:getStats', startDate, endDate),

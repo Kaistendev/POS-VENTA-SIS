@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { ReportService } from './ReportService.js';
 import { BackupService } from './BackupService.js';
+import { logger } from '../../shared/logger.js';
 
 const SCHEDULER_PREFIX = 'scheduler_';
 
@@ -18,7 +19,7 @@ export class SchedulerService {
   }
 
   start() {
-    console.log('[Scheduler] Starting scheduled tasks...');
+    logger.info('Starting scheduled tasks');
     this.scheduleDailyReport();
     this.scheduleWeeklyReport();
     this.scheduleDailyBackup();
@@ -27,7 +28,7 @@ export class SchedulerService {
   stop() {
     if (this.dailyTimer) clearInterval(this.dailyTimer);
     if (this.weeklyTimer) clearInterval(this.weeklyTimer);
-    console.log('[Scheduler] Stopped scheduled tasks');
+    logger.info('Stopped scheduled tasks');
   }
 
   private scheduleDailyReport() {
@@ -37,16 +38,16 @@ export class SchedulerService {
         const lastRun = this.getLastRun('daily_report');
         if (lastRun === today) return;
 
-        console.log('[Scheduler] Generating daily report...');
+        logger.info('Generating daily report');
         await this.reportService.generateReport({
           type: 'daily_sales',
           format: 'pdf',
           title: `Reporte Diario - ${new Date().toLocaleDateString('es-PE')}`,
         });
         this.setLastRun('daily_report', today);
-        console.log('[Scheduler] Daily report saved');
+        logger.info('Daily report saved');
       } catch (err) {
-        console.error('[Scheduler] Error generating daily report:', err);
+        logger.error({ err }, 'Error generating daily report');
       }
     };
 
@@ -66,7 +67,7 @@ export class SchedulerService {
         startOfWeek.setDate(now.getDate() - now.getDay());
         startOfWeek.setHours(0, 0, 0, 0);
 
-        console.log('[Scheduler] Generating weekly report...');
+        logger.info('Generating weekly report');
         await this.reportService.generateReport({
           type: 'sales_summary',
           format: 'pdf',
@@ -75,9 +76,9 @@ export class SchedulerService {
           title: `Reporte Semanal - Semana ${weekNum}`,
         });
         this.setLastRun('weekly_report', String(weekNum));
-        console.log('[Scheduler] Weekly report saved');
+        logger.info('Weekly report saved');
       } catch (err) {
-        console.error('[Scheduler] Error generating weekly report:', err);
+        logger.error({ err }, 'Error generating weekly report');
       }
     };
 
@@ -92,12 +93,12 @@ export class SchedulerService {
         const lastBackup = this.getLastRun('daily_backup');
         if (lastBackup === today) return;
 
-        console.log('[Scheduler] Creating daily backup...');
+        logger.info('Creating daily backup');
         await this.backupService.createBackup(`auto-${today}`);
         this.setLastRun('daily_backup', today);
-        console.log('[Scheduler] Daily backup created');
+        logger.info('Daily backup created');
       } catch (err) {
-        console.error('[Scheduler] Error creating daily backup:', err);
+        logger.error({ err }, 'Error creating daily backup');
       }
     };
 

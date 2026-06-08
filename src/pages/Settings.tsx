@@ -26,12 +26,14 @@ export default function Settings() {
     const loadSettings = async () => {
       if (window.api) {
         const s = await window.api.getSettings();
-        if (Object.keys(s).length > 0) {
+        if (s && typeof s === 'object' && !('success' in s && !s.success)) {
           setSettings(prev => ({ ...prev, ...s }));
         }
         // Load tax settings
         const tax = await window.api.getTaxSettings();
-        setTaxSettings(tax);
+        if (tax && typeof tax === 'object' && 'taxRate' in tax) {
+          setTaxSettings(tax as { taxRate: number; taxType: string; taxIncluded: boolean });
+        }
       }
     };
     loadSettings();
@@ -44,7 +46,7 @@ export default function Settings() {
       if (result.success) {
         success('Configuración guardada correctamente');
       } else {
-        toastError('Error al guardar');
+        toastError(result.message || 'Error al guardar');
       }
     } catch (err) {
       toastError('Error de comunicación');

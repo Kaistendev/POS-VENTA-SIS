@@ -1,8 +1,9 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, ShoppingCart, Package, Users, Package2, Wallet, Tags, LogOut, History, Settings as SettingsIcon, ChevronLeft, ChevronRight, Shield, RotateCcw, FolderOutput, Truck, ShoppingBag, FileText } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, Package, Users, Wallet, Tags, LogOut, History, Settings as SettingsIcon, ChevronLeft, ChevronRight, Shield, RotateCcw, FolderOutput, Truck, ShoppingBag, FileText } from 'lucide-react';
 import { cn } from '../../lib/utils.ts';
 import { useAuthStore, useUIStore } from '../../store/useStore.ts';
 import { useEffect } from 'react';
+import logoSidebar from '../../assets/tienda.png';
 
 export default function Sidebar() {
   const navigate = useNavigate();
@@ -56,8 +57,8 @@ export default function Sidebar() {
         {sidebarCollapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronLeft className="w-3 h-3" />}
       </button>
       
-      <div className="h-16 flex items-center px-6 border-b border-[#2e303a]">
-        <Package2 className="w-8 h-8 text-primary mr-3 min-w-[32px]" />
+      <div className="h-16 flex items-center px-4 border-b border-[#2e303a] gap-3">
+        <img src={logoSidebar} alt="InventarioPOS" className="w-9 h-9 object-contain rounded-lg" />
         {!sidebarCollapsed && (
           <h1 className="text-xl font-bold tracking-tight text-white m-0">Inventario<span className="text-primary">POS</span></h1>
         )}

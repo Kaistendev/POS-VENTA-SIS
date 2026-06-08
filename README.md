@@ -389,10 +389,32 @@ El proyecto ha superado la fase de "Prototipo" y se encuentra en **Desarrollo Av
 |------|--------|
 | **Base Técnica** | ✅ Sólida (Electron, React, Prisma, SQLite) |
 | **UI/UX** | ✅ Moderna (MUI, Framer Motion, Skeletons) |
-| **Seguridad** | ✅ Roles (Admin/Vendedor) y Auditoría (AuditLog) |
+| **Seguridad** | ✅ Roles (Admin/Vendedor), Auditoría, Rate Limiting, Validación de contraseñas |
 | **Ventas** | ✅ Funcional (POS, Historial, Caja) |
 | **Inventario** | ⚠️ Básico (Falta gestión de proveedores) |
 | **Reportes** | ⚠️ En progreso (Falta exportación PDF) |
+
+---
+
+## 🔒 Arquitectura de Seguridad
+
+### Autenticación y Control de Acceso
+- **Hash de contraseñas:** bcryptjs con salt rounds=10.
+- **Rate Limiting:** Bloqueo de login tras 5 intentos fallidos por usuario durante 15 minutos (en memoria).
+- **Política de contraseñas:** Mínimo 8 caracteres, mayúscula, minúscula, número y carácter especial.
+- **Roles:** ADMIN y VENDEDOR. Los handlers IPC verifican el rol antes de ejecutar operaciones sensibles.
+
+### Validación de Datos
+- **Zod schemas:** Toda entrada del renderer se valida contra esquemas tipados antes de procesarse.
+- **Path traversal:** Las operaciones de archivo (backups) validan que las rutas estén dentro del directorio permitido mediante `isPathWithin()`.
+
+### Protección de Stock
+- **3 capas de defensa:** Validación en servicio (`ProductService.removeStock`), condición atómica en repositorio (`PrismaProductRepository.updateStock` con `stock >= quantity`), y verificación post-actualización.
+
+### Prácticas de Desarrollo Seguro
+- **eslint-plugin-security:** Reglas de seguridad automáticas en CI.
+- **Dependencias:** Auditoría regular con `npm audit`.
+- **Secreto en entorno:** `DATABASE_URL` y credenciales solo en `.env` (excluido del repositorio via `.gitignore`).
 
 ---
 

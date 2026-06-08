@@ -1,8 +1,19 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Store, User, CheckCircle2, ArrowLeft, ArrowRight, Building2, Smartphone, DollarSign, Printer, ShieldCheck } from 'lucide-react';
+import { Store, User, CheckCircle2, ArrowLeft, ArrowRight, Building2, Smartphone, DollarSign, Printer, ShieldCheck, ShieldQuestion } from 'lucide-react';
+import { validatePassword } from '../common/validation.js';
 
 type Step = 'business' | 'admin' | 'confirm';
+
+const SECURITY_QUESTIONS = [
+  '¿Cuál es el nombre de tu primera mascota?',
+  '¿Cuál es el nombre de tu ciudad natal?',
+  '¿Cuál es el nombre de tu mejor amigo de la infancia?',
+  '¿Cuál es tu comida favorita?',
+  '¿Cuál es el nombre de tu profesor favorito?',
+  '¿Cuál es tu película favorita?',
+  '¿Cuál es el modelo de tu primer auto?',
+];
 
 interface SetupData {
   business_name: string;
@@ -12,9 +23,11 @@ interface SetupData {
   exchange_rate_usd_ves: string;
   username: string;
   password: string;
+  security_question: string;
+  security_answer: string;
 }
 
-export default function Setup({ onComplete }: { onComplete: () => void }) {
+export default function Setup({ onComplete }: { onComplete: (user?: any) => void }) {
   const [step, setStep] = useState<Step>('business');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -26,6 +39,8 @@ export default function Setup({ onComplete }: { onComplete: () => void }) {
     exchange_rate_usd_ves: '0',
     username: '',
     password: '',
+    security_question: '',
+    security_answer: '',
   });
 
   const update = (field: keyof SetupData, value: string) => {
@@ -54,8 +69,9 @@ export default function Setup({ onComplete }: { onComplete: () => void }) {
       setError('La contraseña es obligatoria');
       return false;
     }
-    if (data.password.length < 6) {
-      setError('La contraseña debe tener al menos 6 caracteres');
+    const pwCheck = validatePassword(data.password);
+    if (!pwCheck.valid) {
+      setError(pwCheck.error);
       return false;
     }
     return true;
@@ -71,7 +87,11 @@ export default function Setup({ onComplete }: { onComplete: () => void }) {
         return;
       }
       const result = await window.api.completeSetup({
-        user: { username: data.username.trim(), password: data.password },
+        user: { 
+          username: data.username.trim(), 
+          password: data.password,
+          ...(data.security_question && data.security_answer ? { security_question: data.security_question, security_answer: data.security_answer } : {}),
+        },
         settings: {
           business_name: data.business_name.trim(),
           business_address: data.business_address.trim(),
@@ -81,7 +101,7 @@ export default function Setup({ onComplete }: { onComplete: () => void }) {
         },
       });
       if (result.success) {
-        onComplete();
+        onComplete(result.user);
       } else {
         setError(result.message || 'Error al guardar la configuración');
       }
@@ -254,6 +274,35 @@ export default function Setup({ onComplete }: { onComplete: () => void }) {
                       className="w-full bg-[#0f0f1a] border border-[#2a2a45] rounded-lg px-4 py-2.5 text-sm text-[#e2e8f0] placeholder-[#475569] focus:outline-none focus:border-[#6d28d9]/60 focus:ring-1 focus:ring-[#6d28d9]/40 transition-all shadow-inner"
                     />
                   </div>
+                  <hr className="border-[#2a2a45]" />
+                  <div>
+                    <label className="block text-xs font-medium text-[#94a3b8] mb-1.5">
+                      <ShieldQuestion className="w-3.5 h-3.5 inline mr-1.5 text-[#a78bfa]" />
+                      Pregunta de Seguridad (opcional)
+                    </label>
+                    <select
+                      value={data.security_question}
+                      onChange={e => update('security_question', e.target.value)}
+                      className="w-full bg-[#0f0f1a] border border-[#2a2a45] rounded-lg px-4 py-2.5 text-sm text-[#e2e8f0] placeholder-[#475569] focus:outline-none focus:border-[#6d28d9]/60 focus:ring-1 focus:ring-[#6d28d9]/40 transition-all shadow-inner"
+                    >
+                      <option value="">Sin pregunta de seguridad</option>
+                      {SECURITY_QUESTIONS.map((q) => (
+                        <option key={q} value={q}>{q}</option>
+                      ))}
+                    </select>
+                  </div>
+                  {data.security_question && (
+                    <div>
+                      <label className="block text-xs font-medium text-[#94a3b8] mb-1.5">Respuesta <span className="text-red-400">*</span></label>
+                      <input
+                        type="text"
+                        value={data.security_answer}
+                        onChange={e => update('security_answer', e.target.value)}
+                        placeholder="tu respuesta"
+                        className="w-full bg-[#0f0f1a] border border-[#2a2a45] rounded-lg px-4 py-2.5 text-sm text-[#e2e8f0] placeholder-[#475569] focus:outline-none focus:border-[#6d28d9]/60 focus:ring-1 focus:ring-[#6d28d9]/40 transition-all shadow-inner"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {error && <p className="text-red-400 text-xs mt-4">{error}</p>}

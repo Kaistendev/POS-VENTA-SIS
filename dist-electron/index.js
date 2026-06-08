@@ -1,60 +1,37 @@
 import { a as e, i as t, n, r, t as i } from "./errors-CBdiC9hv.js";
 import "dotenv/config";
-import { BrowserWindow as a, app as o, dialog as s, ipcMain as c } from "electron";
-import l from "path";
-import u from "fs";
-import { fileURLToPath as d } from "url";
-import { createRequire as f } from "module";
-import p from "@prisma/client";
-import { pipeline as m } from "stream";
-import { promisify as h } from "util";
-import { createGunzip as g, createGzip as _ } from "zlib";
-import { jsPDF as v } from "jspdf";
-import y from "jspdf-autotable";
-import b from "exceljs";
-import { ZodError as x, z as S } from "zod";
+import { BrowserWindow as a, app as o, dialog as s, ipcMain as c, session as l } from "electron";
+import u from "path";
+import d from "fs";
+import f from "pino";
+import { PrismaClient as p } from "@prisma/client";
+import { PrismaBetterSqlite3 as m } from "@prisma/adapter-better-sqlite3";
+import { pipeline as h } from "stream";
+import { promisify as g } from "util";
+import { createGunzip as _, createGzip as v } from "zlib";
+import { jsPDF as y } from "jspdf";
+import b from "jspdf-autotable";
+import x from "exceljs";
+import { ZodError as ee, z as S } from "zod";
 import C from "bcryptjs";
-import { existsSync as w, readFileSync as T, writeFileSync as E } from "node:fs";
-import { join as D } from "node:path";
+import w from "node:crypto";
+import { existsSync as T, readFileSync as E, writeFileSync as D } from "node:fs";
+import { join as te } from "node:path";
+import { fileURLToPath as ne } from "url";
 import O from "node:fs/promises";
-//#region src/main/env.ts
-var k = !1;
-function A(e) {
-	let t = [];
-	t.push(l.join(process.resourcesPath, "app.asar.unpacked", "node_modules", ".prisma", "client", e)), t.push(l.join(process.resourcesPath, "node_modules", ".prisma", "client", e)), t.push(l.join(process.resourcesPath, "..", "app.asar.unpacked", "node_modules", ".prisma", "client", e)), t.push(l.join(o.getAppPath(), "node_modules", ".prisma", "client", e)), t.push(l.join(o.getAppPath().replace("app.asar", "app.asar.unpacked"), "node_modules", ".prisma", "client", e));
-	try {
-		let n = l.dirname(d(import.meta.url));
-		t.push(l.join(n.replace("app.asar", "app.asar.unpacked"), "..", "node_modules", ".prisma", "client", e)), t.push(l.join(n, "..", "node_modules", ".prisma", "client", e)), t.push(l.join(n.replace("app.asar", "app.asar.unpacked"), "..", "node_modules", "@prisma", "client", e));
-	} catch {}
-	try {
-		let n = f(import.meta.url).resolve("@prisma/client"), r = l.dirname(n);
-		t.push(l.join(r, "..", "..", ".prisma", "client", e)), t.push(l.join(r.replace("app.asar", "app.asar.unpacked"), "..", "..", ".prisma", "client", e));
-	} catch {}
-	let n = process.platform === "win32" ? "prisma-engine.dll.node" : "prisma-engine.so.node";
-	t.push(l.join(process.resourcesPath, n));
-	let r = /* @__PURE__ */ new Set();
-	for (let e of t) if (!r.has(e)) {
-		r.add(e);
-		try {
-			if (u.existsSync(e)) return e;
-		} catch {}
-	}
-	return null;
-}
-function j() {
-	if (k) return;
-	if (k = !0, !o.isPackaged) {
-		console.log("[Prisma] Running in development mode");
-		return;
-	}
-	let e = o.getPath("userData"), t = l.join(e, "dev.sqlite3");
-	u.existsSync(e) || u.mkdirSync(e, { recursive: !0 }), u.existsSync(t) || (console.log(`[Prisma] Creating fresh database at ${t}`), u.writeFileSync(t, "")), process.env.DATABASE_URL = `file:${t}`, console.log(`[Prisma] Database URL: ${process.env.DATABASE_URL}`);
-	let n = process.platform === "win32" ? "query_engine-windows.dll.node" : "libquery_engine-debian-openssl-3.0.x.so.node", r = A(n);
-	r ? (process.env.PRISMA_QUERY_ENGINE_LIBRARY = r, console.log(`[Prisma] Using engine: ${r}`)) : (console.error(`[Prisma] Engine NOT FOUND! Tried multiple locations. Engine name: ${n}`), console.error(`[Prisma] resourcesPath: ${process.resourcesPath}`), console.error(`[Prisma] getAppPath(): ${o.getAppPath()}`));
+//#region src/shared/logger.ts
+var k = f({
+	level: "info",
+	timestamp: f.stdTimeFunctions.isoTime
+}), A = !1;
+function re() {
+	if (A || (A = !0, !o.isPackaged)) return;
+	let e = o.getPath("userData"), t = u.join(e, "dev.sqlite3");
+	d.existsSync(e) || d.mkdirSync(e, { recursive: !0 }), d.existsSync(t) || k.info(`Database will be created at ${t} on first connect`), process.env.DATABASE_URL = `file:${t}`, k.info(`Database URL: ${process.env.DATABASE_URL}`);
 }
 //#endregion
 //#region src/infrastructure/persistence/PrismaProductRepository.ts
-var ee = class {
+var ie = class {
 	constructor(e) {
 		this.prisma = e;
 	}
@@ -153,7 +130,15 @@ var ee = class {
 		return this.prisma.saleItem.count({ where: { product_id: e } });
 	}
 	async updateStock(e, t) {
-		await this.prisma.product.update({
+		if (t < 0) {
+			if ((await this.prisma.product.updateMany({
+				where: {
+					id: e,
+					stock: { gte: Math.abs(t) }
+				},
+				data: { stock: { increment: t } }
+			})).count === 0) throw new i("Stock insuficiente");
+		} else await this.prisma.product.update({
 			where: { id: e },
 			data: { stock: { increment: t } }
 		});
@@ -168,7 +153,7 @@ var ee = class {
 			take: t
 		});
 	}
-}, M = class {
+}, ae = class {
 	constructor(e) {
 		this.prisma = e;
 	}
@@ -226,7 +211,7 @@ var ee = class {
 };
 //#endregion
 //#region src/shared/helpers.ts
-function N(e, t, n) {
+function j(e, t, n) {
 	if (!t && !n) return {};
 	let r = {};
 	return t && (r[e] = {
@@ -237,7 +222,7 @@ function N(e, t, n) {
 		lte: n
 	}), r;
 }
-async function P(e, t, n) {
+async function M(e, t, n) {
 	let r = await e();
 	if (!r) {
 		let { NotFoundError: e } = await import("./errors-CBdiC9hv.js").then((e) => e.o);
@@ -247,13 +232,13 @@ async function P(e, t, n) {
 }
 //#endregion
 //#region src/infrastructure/persistence/PrismaSaleRepository.ts
-var F = class {
+var oe = class {
 	constructor(e) {
 		this.prisma = e;
 	}
 	async findAll(e) {
 		let t = {};
-		return Object.assign(t, N("created_at", e?.startDate, e?.endDate)), e?.clientId && (t.client_id = e.clientId), e?.cashRegisterId && (t.cash_register_id = e.cashRegisterId), this.prisma.sale.findMany({
+		return Object.assign(t, j("created_at", e?.startDate, e?.endDate)), e?.clientId && (t.client_id = e.clientId), e?.cashRegisterId && (t.cash_register_id = e.cashRegisterId), this.prisma.sale.findMany({
 			where: t,
 			select: {
 				id: !0,
@@ -314,7 +299,7 @@ var F = class {
 	}
 	async getStats(e, t) {
 		let n = {};
-		Object.assign(n, N("created_at", e, t));
+		Object.assign(n, j("created_at", e, t));
 		let r = await this.prisma.sale.aggregate({
 			where: n,
 			_count: { id: !0 },
@@ -338,21 +323,27 @@ var F = class {
 				payment_method: e.payment_method,
 				exchange_rate: e.exchange_rate || 0
 			} });
-			for (let r of e.items) await t.saleItem.create({ data: {
-				sale_id: n.id,
-				product_id: r.product_id,
-				quantity: r.quantity,
-				unit_price: r.unit_price,
-				purchase_price: r.purchase_price
-			} }), await t.product.update({
-				where: { id: r.product_id },
-				data: { stock: { decrement: r.quantity } }
-			}), await t.inventoryMovement.create({ data: {
-				product_id: r.product_id,
-				type: "SALIDA",
-				quantity: r.quantity,
-				reason: "VENTA"
-			} });
+			for (let r of e.items) {
+				if (await t.saleItem.create({ data: {
+					sale_id: n.id,
+					product_id: r.product_id,
+					quantity: r.quantity,
+					unit_price: r.unit_price,
+					purchase_price: r.purchase_price
+				} }), (await t.product.updateMany({
+					where: {
+						id: r.product_id,
+						stock: { gte: r.quantity }
+					},
+					data: { stock: { decrement: r.quantity } }
+				})).count === 0) throw new i(`Stock insuficiente para el producto ${r.product_id}`);
+				await t.inventoryMovement.create({ data: {
+					product_id: r.product_id,
+					type: "SALIDA",
+					quantity: r.quantity,
+					reason: "VENTA"
+				} });
+			}
 			return await t.cashRegister.update({
 				where: { id: e.cash_register_id },
 				data: { total_sales: { increment: e.total } }
@@ -381,7 +372,7 @@ var F = class {
 			}), await n.sale.delete({ where: { id: e } });
 		});
 	}
-}, te = class {
+}, se = class {
 	constructor(e) {
 		this.prisma = e;
 	}
@@ -402,7 +393,7 @@ var F = class {
 	}
 	async findAll(e, t) {
 		let n = {};
-		return Object.assign(n, N("opened_at", e, t)), this.prisma.cashRegister.findMany({
+		return Object.assign(n, j("opened_at", e, t)), this.prisma.cashRegister.findMany({
 			where: n,
 			include: { _count: { select: { sales: !0 } } },
 			orderBy: { opened_at: "desc" }
@@ -472,7 +463,7 @@ var F = class {
 			salesByPayment: o
 		};
 	}
-}, ne = class {
+}, ce = class {
 	constructor(e) {
 		this.prisma = e;
 	}
@@ -538,7 +529,7 @@ var F = class {
 	async hasPurchases(e) {
 		return await this.prisma.purchase.count({ where: { supplier_id: e } }) > 0;
 	}
-}, re = class {
+}, le = class {
 	constructor(e) {
 		this.prisma = e;
 	}
@@ -633,7 +624,7 @@ var F = class {
 			data: { payment_status: t }
 		});
 	}
-}, ie = class {
+}, ue = class {
 	constructor(e) {
 		this.prisma = e;
 	}
@@ -680,7 +671,7 @@ var F = class {
 			tax_included: n.toString()
 		});
 	}
-}, ae = class {
+}, de = class {
 	constructor(e) {
 		this.prisma = e;
 	}
@@ -749,10 +740,24 @@ var F = class {
 			select: { id: !0 }
 		});
 	}
+	async updateByUsername(e, t) {
+		return this.prisma.user.update({
+			where: { username: e },
+			data: t,
+			select: {
+				id: !0,
+				username: !0,
+				role: !0,
+				security_question: !0,
+				created_at: !0,
+				updated_at: !0
+			}
+		});
+	}
 	async count() {
 		return this.prisma.user.count();
 	}
-}, oe = class {
+}, fe = class {
 	constructor(e) {
 		this.prisma = e;
 	}
@@ -801,7 +806,7 @@ var F = class {
 	async getProductCount(e) {
 		return this.prisma.product.count({ where: { category_id: e } });
 	}
-}, se = class {
+}, pe = class {
 	constructor(e) {
 		this.prisma = e;
 	}
@@ -849,13 +854,13 @@ var F = class {
 			return null;
 		}
 	}
-}, ce = class {
+}, me = class {
 	constructor(e) {
 		this.prisma = e;
 	}
 	async getStats(e, t) {
 		let n = {};
-		Object.assign(n, N("created_at", e, t));
+		Object.assign(n, j("created_at", e, t));
 		let r = Object.keys(n).length === 0 ? { created_at: { gte: new Date((/* @__PURE__ */ new Date()).setHours(0, 0, 0, 0)) } } : n, i = await this.prisma.sale.aggregate({
 			where: r,
 			_sum: { total: !0 }
@@ -923,7 +928,7 @@ var F = class {
 	}
 	async getSalesByPaymentMethod(e, t) {
 		let n = {};
-		return Object.assign(n, N("created_at", e, t)), this.prisma.sale.groupBy({
+		return Object.assign(n, j("created_at", e, t)), this.prisma.sale.groupBy({
 			by: ["payment_method"],
 			where: n,
 			_count: { id: !0 },
@@ -933,7 +938,7 @@ var F = class {
 	}
 	async getTopProducts(e = 10, t, n) {
 		let r = {};
-		Object.assign(r, N("created_at", t, n));
+		Object.assign(r, j("created_at", t, n));
 		let i = await this.prisma.saleItem.groupBy({
 			by: ["product_id"],
 			where: r,
@@ -961,7 +966,7 @@ var F = class {
 	}
 	async getTopClients(e = 10, t, n) {
 		let r = {};
-		Object.assign(r, N("created_at", t, n));
+		Object.assign(r, j("created_at", t, n));
 		let i = await this.prisma.sale.groupBy({
 			by: ["client_id"],
 			where: r,
@@ -985,7 +990,7 @@ var F = class {
 	}
 	async getSalesByHour(e, t) {
 		let n = {};
-		Object.assign(n, N("created_at", e, t));
+		Object.assign(n, j("created_at", e, t));
 		let r = await this.prisma.sale.findMany({
 			where: n,
 			select: {
@@ -1004,7 +1009,7 @@ var F = class {
 	}
 	async getCashRegisterSummary(e, t) {
 		let n = {};
-		Object.assign(n, N("opened_at", e, t));
+		Object.assign(n, j("opened_at", e, t));
 		let r = await this.prisma.cashRegister.findMany({
 			where: n,
 			select: {
@@ -1054,81 +1059,105 @@ var F = class {
 			recentMovements: o
 		};
 	}
-}, I = h(m), le = class {
+};
+//#endregion
+//#region src/main/utils/pathValidation.ts
+function he(e, t) {
+	let n = u.resolve(e), r = u.resolve(t);
+	return r === n || r.startsWith(n + u.sep);
+}
+function ge(e, t, n) {
+	if (!he(e, t)) throw Error(`${n || "Ruta"} no válida: debe estar dentro del directorio permitido`);
+}
+//#endregion
+//#region src/infrastructure/backup/ElectronBackupService.ts
+var N = g(h), _e = class {
 	getDbPath() {
-		if (!o.isPackaged) return l.resolve(process.cwd(), "prisma", "dev.sqlite3");
+		if (!o.isPackaged) return u.resolve(process.cwd(), "prisma", "dev.sqlite3");
 		let e = o.getPath("userData");
-		return l.join(e, "dev.sqlite3");
+		return u.join(e, "dev.sqlite3");
 	}
 	getBackupDir() {
 		let e = !o.isPackaged, t;
 		t = e ? process.cwd() : o.getPath("userData");
-		let n = l.join(t, "backups");
-		return u.existsSync(n) || u.mkdirSync(n, { recursive: !0 }), n;
+		let n = u.join(t, "backups");
+		return d.existsSync(n) || d.mkdirSync(n, { recursive: !0 }), n;
 	}
 	async createBackup(e) {
 		try {
 			let t = this.getDbPath();
-			if (!u.existsSync(t)) return {
+			if (!d.existsSync(t)) return {
 				success: !1,
 				message: "Database file not found"
 			};
-			let n = this.getBackupDir(), r = `backup-${(/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-").split("T")[0]}${e ? `-${e}` : ""}.sqlite.gz`, i = l.join(n, r);
-			return await I(u.createReadStream(t), _(), u.createWriteStream(i)), {
+			let n = this.getBackupDir(), r = `backup-${(/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-").split("T")[0]}${e ? `-${e}` : ""}.sqlite.gz`, i = u.join(n, r);
+			return await N(d.createReadStream(t), v(), d.createWriteStream(i)), {
 				success: !0,
-				path: i
+				path: r
 			};
 		} catch (e) {
-			return console.error("[ElectronBackupService] Error creating backup:", e), {
+			return k.error({ err: e }, "Error creating backup"), {
 				success: !1,
-				message: e.message
+				message: "Error al crear respaldo"
 			};
 		}
 	}
 	async listBackups() {
 		try {
 			let e = this.getBackupDir();
-			return u.existsSync(e) ? u.readdirSync(e).filter((e) => e.endsWith(".sqlite.gz")).map((t) => {
-				let n = l.join(e, t), r = u.statSync(n);
+			return d.existsSync(e) ? d.readdirSync(e).filter((e) => e.endsWith(".sqlite.gz")).map((t) => {
+				let n = u.join(e, t), r = d.statSync(n);
 				return {
 					filename: t,
-					path: n,
+					path: t,
 					size: r.size,
 					created: r.mtime
 				};
 			}).sort((e, t) => t.created.getTime() - e.created.getTime()) : [];
 		} catch (e) {
-			return console.error("[ElectronBackupService] Error listing backups:", e), [];
+			return k.error({ err: e }, "Error listing backups"), [];
 		}
 	}
 	async restoreBackup(e) {
 		try {
-			if (!u.existsSync(e)) return {
+			let t = this.getBackupDir();
+			if (u.isAbsolute(e)) return {
 				success: !1,
-				message: "Backup file not found"
+				message: "Ruta absoluta no permitida. Use solo el nombre del archivo."
 			};
-			let t = this.getDbPath();
-			return await this.createBackup("before-restore"), await I(u.createReadStream(e), g(), u.createWriteStream(t)), {
+			let n = u.join(t, e);
+			if (ge(t, n, "Archivo de backup"), !d.existsSync(n)) return {
+				success: !1,
+				message: "Archivo de backup no encontrado"
+			};
+			let r = this.getDbPath();
+			return await this.createBackup("before-restore"), await N(d.createReadStream(n), _(), d.createWriteStream(r)), {
 				success: !0,
-				message: "Backup restored successfully. Restart the app to see changes."
+				message: "Backup restaurado correctamente. Reinicia la aplicación."
 			};
 		} catch (e) {
-			return console.error("[ElectronBackupService] Error restoring backup:", e), {
+			return k.error({ err: e }, "Error restoring backup"), {
 				success: !1,
-				message: e.message
+				message: "Error al restaurar respaldo"
 			};
 		}
 	}
 	async deleteBackup(e) {
 		try {
-			return u.existsSync(e) ? (u.unlinkSync(e), { success: !0 }) : {
+			let t = this.getBackupDir();
+			if (u.isAbsolute(e)) return {
 				success: !1,
-				message: "Backup file not found"
+				message: "Ruta absoluta no permitida. Use solo el nombre del archivo."
+			};
+			let n = u.join(t, e);
+			return ge(t, n, "Archivo de backup"), d.existsSync(n) ? (d.unlinkSync(n), { success: !0 }) : {
+				success: !1,
+				message: "Archivo de backup no encontrado"
 			};
 		} catch (e) {
-			return console.error("[ElectronBackupService] Error deleting backup:", e), {
+			return k.error({ err: e }, "Error deleting backup"), {
 				success: !1,
-				message: e.message
+				message: "Error al eliminar respaldo"
 			};
 		}
 	}
@@ -1137,29 +1166,32 @@ var F = class {
 		e.find((e) => {
 			let t = new Date(e.created);
 			return new Date(t.getFullYear(), t.getMonth(), t.getDate()).getTime() === n.getTime();
-		}) || (await this.createBackup("auto"), console.log("[ElectronBackupService] Automatic backup created"));
+		}) || (await this.createBackup("auto"), k.info("Automatic backup created"));
 	}
 	async cleanupOldBackups(e = 10) {
 		try {
-			let t = await this.listBackups();
-			if (t.length > e) {
-				let n = t.slice(e);
-				for (let e of n) u.unlinkSync(e.path);
-				console.log(`[ElectronBackupService] Cleaned up ${n.length} old backups`);
+			let t = this.getBackupDir(), n = await this.listBackups();
+			if (n.length > e) {
+				let r = n.slice(e);
+				for (let e of r) {
+					let n = u.join(t, e.path);
+					d.unlinkSync(n);
+				}
+				k.info(`Cleaned up ${r.length} old backups`);
 			}
 		} catch (e) {
-			console.error("[ElectronBackupService] Error cleaning up backups:", e);
+			k.error({ err: e }, "Error cleaning up backups");
 		}
 	}
-}, ue = class {
+}, ve = class {
 	async generateSalesReport(e, t, n = "Reporte de Ventas", r = !0) {
-		let i = new v({
+		let i = new y({
 			unit: "mm",
 			format: "a4"
 		});
 		i.setFontSize(16), i.text(n, 14, 20), i.setFontSize(10), i.text(`Generado: ${(/* @__PURE__ */ new Date()).toLocaleDateString("es-PE")}`, 14, 28);
 		let a = 34;
-		return r && e.length > 0 && (y(i, {
+		return r && e.length > 0 && (b(i, {
 			head: [[
 				"Fecha",
 				"# Factura",
@@ -1191,11 +1223,11 @@ var F = class {
 		}), a = i.lastAutoTable.finalY + 10), i.setFontSize(10), i.text(`Total Ventas: ${t.totalSales}`, 14, a), i.text(`Ingreso Total: $ ${t.totalRevenue.toFixed(2)}`, 14, a + 6), i.text(`Promedio: $ ${t.averageSale.toFixed(2)}`, 14, a + 12), (t.cashSales !== void 0 || t.cardSales !== void 0) && (i.text(`Efectivo: ${t.cashSales ?? 0} ventas  |  $ ${(t.cashRevenue ?? 0).toFixed(2)}`, 14, a + 18), i.text(`Tarjeta: ${t.cardSales ?? 0} ventas  |  $ ${(t.cardRevenue ?? 0).toFixed(2)}`, 14, a + 24)), new Uint8Array(i.output("arraybuffer"));
 	}
 	async generateInventoryReport(e, t, n = "Reporte de Inventario") {
-		let r = new v({
+		let r = new y({
 			unit: "mm",
 			format: "a4"
 		});
-		r.setFontSize(16), r.text(n, 14, 20), r.setFontSize(10), r.text(`Generado: ${(/* @__PURE__ */ new Date()).toLocaleDateString("es-PE")}`, 14, 28), y(r, {
+		r.setFontSize(16), r.text(n, 14, 20), r.setFontSize(10), r.text(`Generado: ${(/* @__PURE__ */ new Date()).toLocaleDateString("es-PE")}`, 14, 28), b(r, {
 			head: [[
 				"SKU",
 				"Producto",
@@ -1247,7 +1279,7 @@ var F = class {
 		return r.setFontSize(10), r.text(`Total Productos: ${t.totalProducts}`, 14, i), r.text(`Con Stock: ${t.productsWithStock}  |  Sin Stock: ${t.productsWithoutStock}  |  Stock Bajo: ${t.lowStockProducts}`, 14, i + 6), r.text(`Valor Compra: $ ${t.totalPurchaseValue.toFixed(2)}  |  Valor Venta: $ ${t.totalSaleValue.toFixed(2)}`, 14, i + 12), r.text(`Ganancia Potencial: $ ${t.potentialProfit.toFixed(2)}`, 14, i + 18), new Uint8Array(r.output("arraybuffer"));
 	}
 	async generateSaleReceipt(e) {
-		let t = new v({
+		let t = new y({
 			unit: "mm",
 			format: [80, 120 + e.items.length * 6]
 		}), n = 10;
@@ -1259,7 +1291,7 @@ var F = class {
 		}), t.text("-".repeat(32), 5, n + 2), n += 6, t.setFontSize(8), t.text("Subtotal:", 5, n), t.text(`$ ${e.subtotal.toFixed(2)}`, 75, n, { align: "right" }), n += 5, e.taxAmount > 0 && (t.text(`${e.taxType.toUpperCase()} (${(e.taxRate * 100).toFixed(1)}%):`, 5, n), t.text(`$ ${e.taxAmount.toFixed(2)}`, 75, n, { align: "right" }), n += 5), t.setFontSize(10), t.text("TOTAL:", 5, n + 2), t.text(`$ ${e.total.toFixed(2)}`, 75, n + 2, { align: "right" }), n += 8, t.setFontSize(7), t.text(e.ticketFooter || "Gracias por su compra", 40, n, { align: "center" }), new Uint8Array(t.output("arraybuffer"));
 	}
 	async generateCashCloseReport(e) {
-		let t = new v({
+		let t = new y({
 			unit: "mm",
 			format: "a4"
 		}), n = 20;
@@ -1288,9 +1320,9 @@ var F = class {
 		];
 		return t.setTextColor(...i), t.setFontSize(12), t.text(`${r}: $ ${Math.abs(e.difference).toFixed(2)}`, 14, n), t.setTextColor(0, 0, 0), n += 8, t.setFontSize(8), t.setTextColor(100, 100, 100), t.text(`Estado: ${e.status === "PERFECT" ? "Cuadra Perfectamente" : e.status === "SURPLUS" ? "Sobrante detectado" : "Faltante detectado"}`, 14, n), n += 6, t.text("Firma del responsable: _______________________________", 14, n), new Uint8Array(t.output("arraybuffer"));
 	}
-}, L = class {
+}, ye = class {
 	async generateSalesReport(e, t, n = "Reporte de Ventas", r = !0) {
-		let i = new b.Workbook();
+		let i = new x.Workbook();
 		i.creator = "POS Venta SIS", i.created = /* @__PURE__ */ new Date();
 		let a = i.addWorksheet("Ventas");
 		a.mergeCells("A1:H1");
@@ -1393,7 +1425,7 @@ var F = class {
 		return new Uint8Array(d);
 	}
 	async generateInventoryReport(e, t, n = "Reporte de Inventario") {
-		let r = new b.Workbook();
+		let r = new x.Workbook();
 		r.creator = "POS Venta SIS", r.created = /* @__PURE__ */ new Date();
 		let i = r.addWorksheet("Inventario");
 		i.mergeCells("A1:H1");
@@ -1493,7 +1525,7 @@ var F = class {
 		return new Uint8Array(c);
 	}
 	async generateSaleReceipt(e) {
-		let t = new b.Workbook();
+		let t = new x.Workbook();
 		t.creator = "POS Venta SIS", t.created = /* @__PURE__ */ new Date();
 		let n = t.addWorksheet("Comprobante");
 		n.mergeCells("A1:D1");
@@ -1556,7 +1588,7 @@ var F = class {
 		return new Uint8Array(s);
 	}
 	async generateCashCloseReport(e) {
-		let t = new b.Workbook();
+		let t = new x.Workbook();
 		t.creator = "POS Venta SIS", t.created = /* @__PURE__ */ new Date();
 		let n = t.addWorksheet("Cierre de Caja");
 		n.mergeCells("A1:B1");
@@ -1632,7 +1664,7 @@ var F = class {
 		let o = await t.xlsx.writeBuffer();
 		return new Uint8Array(o);
 	}
-}, R = S.object({
+}, P = S.object({
 	sku: S.string().min(1, "El SKU es obligatorio."),
 	name: S.string().min(1, "El nombre es obligatorio."),
 	description: S.string().optional(),
@@ -1642,37 +1674,83 @@ var F = class {
 	price_sale: S.coerce.number().min(0, "El precio de venta no puede ser negativo."),
 	stock: S.coerce.number().int().optional(),
 	min_stock: S.coerce.number().int().min(0).optional().default(10)
-}), z = S.object({
+}), be = S.object({
 	product_id: S.coerce.number().int().positive("El ID del producto es obligatorio."),
 	quantity: S.coerce.number().int().positive("La cantidad debe ser mayor a 0."),
 	unit_price: S.coerce.number().min(0, "El precio unitario no puede ser negativo.")
-}), B = S.object({
+}), F = S.object({
 	cash_register_id: S.coerce.number().int().positive("El ID de la caja es obligatorio."),
 	client_id: S.coerce.number().int().optional(),
 	client_dni: S.string().optional(),
 	client_name: S.string().optional(),
 	payment_method: S.enum(["CASH", "CARD"]).default("CASH"),
-	items: S.array(z).min(1, "La venta debe tener al menos un producto.")
+	items: S.array(be).min(1, "La venta debe tener al menos un producto.")
 });
 S.object({ opening_amount: S.coerce.number().min(0, "El monto de apertura no puede ser negativo.") }), S.object({
 	register_id: S.coerce.number().int().positive("El ID de la caja es obligatorio."),
 	closing_amount: S.coerce.number().min(0, "El monto de cierre no puede ser negativo.")
 });
-var V = S.object({
+var I = S.object({
 	dni: S.string().min(1, "El DNI/Documento es obligatorio."),
 	name: S.string().min(1, "El nombre es obligatorio."),
 	phone: S.string().optional().nullable(),
 	code: S.string().min(1, "El código de cliente es obligatorio."),
 	tax_id: S.string().optional().nullable()
-}), H = S.object({ name: S.string().min(1, "El nombre de la categoría es obligatorio.").max(255) });
+}), L = S.object({ name: S.string().min(1, "El nombre de la categoría es obligatorio.").max(255) });
 S.object({
 	product_id: S.coerce.number().int().positive("El ID del producto es obligatorio."),
 	type: S.enum(["ENTRADA", "SALIDA"], { errorMap: () => ({ message: "El tipo debe ser ENTRADA o SALIDA." }) }),
 	quantity: S.coerce.number().int().positive("La cantidad debe ser mayor a 0.")
 });
-//#endregion
-//#region src/main/services/ProductService.ts
-var U = class {
+var R = S.object({
+	name: S.string().min(1, "El nombre del proveedor es obligatorio."),
+	ruc: S.string().optional().nullable(),
+	phone: S.string().optional().nullable(),
+	email: S.string().email("Email inválido").optional().nullable().or(S.literal("")),
+	address: S.string().optional().nullable()
+});
+S.object({
+	name: S.string().min(1, "El nombre del proveedor es obligatorio.").optional(),
+	ruc: S.string().optional().nullable(),
+	phone: S.string().optional().nullable(),
+	email: S.string().email("Email inválido").optional().nullable().or(S.literal("")),
+	address: S.string().optional().nullable()
+});
+var xe = S.object({
+	product_id: S.coerce.number().int().positive("El ID del producto es obligatorio."),
+	quantity: S.coerce.number().int().positive("La cantidad debe ser mayor a 0."),
+	unit_cost: S.coerce.number().min(0, "El costo unitario no puede ser negativo.")
+}), Se = S.object({
+	supplier_id: S.coerce.number().int().positive("El ID del proveedor es obligatorio."),
+	items: S.array(xe).min(1, "La orden debe tener al menos un producto."),
+	payment_status: S.enum([
+		"PENDING",
+		"PAID",
+		"CANCELED"
+	]).optional().default("PENDING")
+}), Ce = S.object({
+	username: S.string().min(1, "El nombre de usuario es obligatorio.").max(50),
+	password: S.string().min(8, "La contraseña debe tener al menos 8 caracteres, una mayúscula, un número y un carácter especial").regex(/[A-Z]/, "Debe contener al menos una mayúscula").regex(/[a-z]/, "Debe contener al menos una minúscula").regex(/[0-9]/, "Debe contener al menos un número").regex(/[!@#$%^&*()_\-+=<>?/{}~|]/, "Debe contener al menos un carácter especial"),
+	role: S.enum(["ADMIN", "VENDEDOR"], { errorMap: () => ({ message: "El rol debe ser ADMIN o VENDEDOR." }) }),
+	question: S.string().optional(),
+	answer: S.string().optional()
+});
+S.object({
+	username: S.string().min(1, "El nombre de usuario es obligatorio.").max(50).optional(),
+	role: S.enum(["ADMIN", "VENDEDOR"]).optional()
+});
+var we = S.record(S.enum([
+	"business_name",
+	"business_phone",
+	"business_address",
+	"business_tax_id",
+	"ticket_footer",
+	"business_logo",
+	"exchange_rate_usd_ves",
+	"tax_rate",
+	"tax_type",
+	"tax_included"
+]), S.string()).refine((e) => Object.keys(e).length > 0, { message: "Debe enviar al menos una configuración." }), Te = class {
 	constructor(e, t, n) {
 		this.productRepo = e, this.categoryRepo = t, this.auditLogRepo = n;
 	}
@@ -1688,7 +1766,7 @@ var U = class {
 		return this.productRepo.findLowStock();
 	}
 	async createProduct(e, r = 1) {
-		let i = R.parse(e);
+		let i = P.parse(e);
 		if (await this.productRepo.findBySku(i.sku)) throw new n(`El SKU ${i.sku} ya se encuentra registrado.`);
 		if (i.category_id && !await this.categoryRepo.findById(i.category_id)) throw new t("Categoría");
 		let a = i.stock || 0, o = await this.productRepo.create(i);
@@ -1710,7 +1788,7 @@ var U = class {
 	async updateProduct(e, r, i = 1) {
 		let a = await this.productRepo.findById(e);
 		if (!a) throw new t("Producto");
-		let o = R.parse(r);
+		let o = P.parse(r);
 		if (o.sku !== a.sku && await this.productRepo.findBySku(o.sku)) throw new n(`El SKU ${o.sku} ya se encuentra registrado.`);
 		if (o.category_id && !await this.categoryRepo.findById(o.category_id)) throw new t("Categoría");
 		let s = await this.productRepo.update(e, o);
@@ -1755,7 +1833,10 @@ var U = class {
 		if (!s) throw new t("Producto");
 		if (r <= 0) throw new e("La cantidad debe ser mayor a cero.");
 		if (s.stock < r) throw new i(`Stock insuficiente. Stock actual: ${s.stock}, Cantidad solicitada: ${r}`);
-		return await this.productRepo.updateStock(n, -r), await this.productRepo.createMovement({
+		await this.productRepo.updateStock(n, -r);
+		let c = await this.productRepo.findById(n);
+		if (c && c.stock < 0) throw new i("Error interno: el stock no puede ser negativo");
+		return await this.productRepo.createMovement({
 			product_id: n,
 			type: "SALIDA",
 			quantity: r,
@@ -1771,7 +1852,7 @@ var U = class {
 		if (!await this.productRepo.findById(e)) throw new t("Producto");
 		return this.productRepo.getMovements(e, n);
 	}
-}, de = class {
+}, Ee = class {
 	constructor(e, t) {
 		this.clientRepo = e, this.auditLogRepo = t;
 	}
@@ -1779,10 +1860,10 @@ var U = class {
 		return this.clientRepo.findAll(e);
 	}
 	async getClientById(e) {
-		return await P(() => this.clientRepo.findById(e), "Cliente", e);
+		return await M(() => this.clientRepo.findById(e), "Cliente", e);
 	}
 	async createClient(e, t = 1) {
-		let r = V.parse(e);
+		let r = I.parse(e);
 		if (await this.clientRepo.findByDni(r.dni)) throw new n(`El DNI ${r.dni} ya se encuentra registrado.`);
 		if (await this.clientRepo.findByCode(r.code)) throw new n(`El código ${r.code} ya se encuentra registrado.`);
 		if (r.tax_id && await this.clientRepo.findByTaxId(r.tax_id)) throw new n(`El RUC ${r.tax_id} ya se encuentra registrado.`);
@@ -1798,8 +1879,8 @@ var U = class {
 		};
 	}
 	async updateClient(e, t, r = 1) {
-		await P(() => this.clientRepo.findById(e), "Cliente", e);
-		let i = V.parse(t), a = await this.clientRepo.findByDni(i.dni);
+		await M(() => this.clientRepo.findById(e), "Cliente", e);
+		let i = I.parse(t), a = await this.clientRepo.findByDni(i.dni);
 		if (a && a.id !== e) throw new n(`El DNI ${i.dni} ya se encuentra registrado.`);
 		let o = await this.clientRepo.findByCode(i.code);
 		if (o && o.id !== e) throw new n(`El código ${i.code} ya se encuentra registrado.`);
@@ -1819,7 +1900,7 @@ var U = class {
 		};
 	}
 	async deleteClient(e, t = 1) {
-		await P(() => this.clientRepo.findById(e), "Cliente", e);
+		await M(() => this.clientRepo.findById(e), "Cliente", e);
 		let n = await this.clientRepo.getSalesCount(e);
 		if (n > 0) throw new i(`No se puede eliminar el cliente porque tiene ${n} venta(s) asociada(s).`);
 		return await this.clientRepo.delete(e), await this.auditLogRepo.create({
@@ -1829,7 +1910,7 @@ var U = class {
 			entity_id: e
 		}), { success: !0 };
 	}
-}, fe = class {
+}, De = class {
 	constructor(e, t, n, r, i, a, o) {
 		this.saleRepo = e, this.productRepo = t, this.clientRepo = n, this.cashRegisterRepo = r, this.settingsRepo = i, this.auditLogRepo = a, this.dashboardService = o;
 	}
@@ -1852,7 +1933,7 @@ var U = class {
 		return this.saleRepo.findLast();
 	}
 	async registerSale(e, n, r = 1) {
-		let a = B.parse({
+		let a = F.parse({
 			...e,
 			items: n
 		});
@@ -1912,7 +1993,7 @@ var U = class {
 			entity_id: e
 		}), { success: !0 };
 	}
-}, pe = class {
+}, Oe = class {
 	constructor(e, t) {
 		this.cashRegisterRepo = e, this.auditLogRepo = t;
 	}
@@ -1966,7 +2047,7 @@ var U = class {
 	async getDailySummary(e) {
 		return this.cashRegisterRepo.getDailySummary(e);
 	}
-}, me = class {
+}, ke = class {
 	constructor(e, t) {
 		this.supplierRepo = e, this.auditLogRepo = t;
 	}
@@ -1974,7 +2055,7 @@ var U = class {
 		try {
 			return await this.supplierRepo.findAll(e);
 		} catch (e) {
-			throw console.error("Get all suppliers error:", e), Error("Error al obtener proveedores");
+			throw k.error("Get all suppliers error:", e), Error("Error al obtener proveedores");
 		}
 	}
 	async getSupplierById(e) {
@@ -1983,7 +2064,7 @@ var U = class {
 			if (!n) throw new t("Proveedor");
 			return n;
 		} catch (e) {
-			throw console.error("Get supplier by ID error:", e), e.code === "P2025" ? new t("Proveedor") : e;
+			throw k.error("Get supplier by ID error:", e), e.code === "P2025" ? new t("Proveedor") : e;
 		}
 	}
 	async createSupplier(e, t) {
@@ -1997,7 +2078,7 @@ var U = class {
 				entity_id: r.id
 			}), r;
 		} catch (e) {
-			throw console.error("Create supplier error:", e), e.code === "P2002" ? new n("El RUC ya está en uso") : e;
+			throw k.error("Create supplier error:", e), e.code === "P2002" ? new n("El RUC ya está en uso") : e;
 		}
 	}
 	async updateSupplier(e, r, i) {
@@ -2013,7 +2094,7 @@ var U = class {
 				entity_id: e
 			}), o;
 		} catch (e) {
-			throw console.error("Update supplier error:", e), e.code === "P2025" ? new t("Proveedor") : e;
+			throw k.error("Update supplier error:", e), e.code === "P2025" ? new t("Proveedor") : e;
 		}
 	}
 	async deleteSupplier(e, n) {
@@ -2028,10 +2109,10 @@ var U = class {
 				entity_id: e
 			}), { success: !0 };
 		} catch (e) {
-			throw console.error("Delete supplier error:", e), e.code === "P2025" ? new t("Proveedor") : e;
+			throw k.error("Delete supplier error:", e), e.code === "P2025" ? new t("Proveedor") : e;
 		}
 	}
-}, he = class {
+}, Ae = class {
 	constructor(e, t, n, r) {
 		this.purchaseRepo = e, this.supplierRepo = t, this.productRepo = n, this.auditLogRepo = r;
 	}
@@ -2039,7 +2120,7 @@ var U = class {
 		try {
 			return await this.purchaseRepo.findAll(e, t);
 		} catch (e) {
-			throw console.error("Get all purchases error:", e), Error("Error al obtener compras");
+			throw k.error("Get all purchases error:", e), Error("Error al obtener compras");
 		}
 	}
 	async getPurchaseById(e) {
@@ -2048,7 +2129,7 @@ var U = class {
 			if (!n) throw new t("Compra");
 			return n;
 		} catch (e) {
-			throw console.error("Get purchase by ID error:", e), e.code === "P2025" ? new t("Compra") : e;
+			throw k.error("Get purchase by ID error:", e), e.code === "P2025" ? new t("Compra") : e;
 		}
 	}
 	async createPurchase(e, n) {
@@ -2064,7 +2145,7 @@ var U = class {
 				entity_id: i.id
 			}), i;
 		} catch (e) {
-			throw console.error("Create purchase error:", e), e;
+			throw k.error("Create purchase error:", e), e;
 		}
 	}
 	async receivePurchase(e, n) {
@@ -2076,14 +2157,14 @@ var U = class {
 				entity_id: e
 			}), { success: !0 };
 		} catch (e) {
-			throw console.error("Receive purchase error:", e), e.code === "P2025" ? new t("Compra") : e;
+			throw k.error("Receive purchase error:", e), e.code === "P2025" ? new t("Compra") : e;
 		}
 	}
 	async updatePaymentStatus(e, n) {
 		try {
 			return await this.purchaseRepo.updatePaymentStatus(e, n), { success: !0 };
 		} catch (e) {
-			throw console.error("Update payment status error:", e), e.code === "P2025" ? new t("Compra") : e;
+			throw k.error("Update payment status error:", e), e.code === "P2025" ? new t("Compra") : e;
 		}
 	}
 	async cancelPurchase(e, n) {
@@ -2095,10 +2176,10 @@ var U = class {
 				entity_id: e
 			}), { success: !0 };
 		} catch (e) {
-			throw console.error("Cancel purchase error:", e), e.code === "P2025" ? new t("Compra") : e;
+			throw k.error("Cancel purchase error:", e), e.code === "P2025" ? new t("Compra") : e;
 		}
 	}
-}, ge = class {
+}, je = class {
 	constructor(e) {
 		this.settingsRepo = e;
 	}
@@ -2117,7 +2198,19 @@ var U = class {
 	async updateTaxSettings(e, t, n) {
 		return await this.settingsRepo.updateTaxSettings(e, t, n), { success: !0 };
 	}
-}, _e = class {
+}, Me = 8, Ne = /[A-Z]/, Pe = /[a-z]/, Fe = /[0-9]/, Ie = /[!@#$%^&*()_\-+=<>?/{}~|]/, Le = `La contraseña debe tener al menos ${Me} caracteres, una mayúscula, un número y un carácter especial`;
+function z(e) {
+	return e.length < Me || !Ne.test(e) || !Pe.test(e) || !Fe.test(e) || !Ie.test(e) ? {
+		valid: !1,
+		error: Le
+	} : {
+		valid: !0,
+		error: ""
+	};
+}
+//#endregion
+//#region src/main/services/UserService.ts
+var Re = class {
 	constructor(e, t) {
 		this.userRepo = e, this.auditLogRepo = t;
 	}
@@ -2125,7 +2218,7 @@ var U = class {
 		try {
 			return await this.userRepo.findAll();
 		} catch (e) {
-			throw console.error("Get all users error:", e), Error("Error al obtener usuarios");
+			throw k.error("Get all users error:", e), Error("Error al obtener usuarios");
 		}
 	}
 	async getUserById(e) {
@@ -2134,26 +2227,34 @@ var U = class {
 			if (!n) throw new t("Usuario");
 			return n;
 		} catch (e) {
-			throw console.error("Get user by ID error:", e), e.code === "P2025" ? new t("Usuario") : e;
+			throw k.error("Get user by ID error:", e), e.code === "P2025" ? new t("Usuario") : e;
 		}
 	}
 	async createUser(t, r) {
 		try {
 			if (await this.userRepo.exists(t.username)) throw new n(`El usuario '${t.username}' ya existe`);
-			if (t.password.length < 6) throw new e("La contraseña debe tener al menos 6 caracteres");
-			let i = await C.genSalt(10), a = await C.hash(t.password, i), o = await this.userRepo.create({
+			let i = z(t.password);
+			if (!i.valid) throw new e(i.error);
+			let a = await C.genSalt(10), o = await C.hash(t.password, a), s;
+			if (t.question && t.answer) {
+				let e = await C.genSalt(10);
+				s = await C.hash(t.answer.toLowerCase().trim(), e);
+			}
+			let c = await this.userRepo.create({
 				username: t.username,
-				password_hash: a,
-				role: t.role
+				password_hash: o,
+				role: t.role,
+				security_question: t.question || null,
+				security_answer_hash: s || null
 			});
 			return await this.auditLogRepo.create({
 				userId: r,
 				action: "CREATE_USER",
 				entity: "users",
-				entity_id: o.id
-			}), o;
+				entity_id: c.id
+			}), c;
 		} catch (e) {
-			throw console.error("Create user error:", e), e.code === "P2002" ? new n("El nombre de usuario ya está en uso") : e;
+			throw k.error("Create user error:", e), e.code === "P2002" ? new n("El nombre de usuario ya está en uso") : e;
 		}
 	}
 	async updateUser(e, r, i) {
@@ -2167,7 +2268,7 @@ var U = class {
 				entity_id: e
 			}), t;
 		} catch (e) {
-			throw console.error("Update user error:", e), e.code === "P2025" ? new t("Usuario") : e;
+			throw k.error("Update user error:", e), e.code === "P2025" ? new t("Usuario") : e;
 		}
 	}
 	async deleteUser(e, n) {
@@ -2181,48 +2282,181 @@ var U = class {
 				entity_id: e
 			}), { success: !0 };
 		} catch (e) {
-			throw console.error("Delete user error:", e), e.code === "P2025" ? new t("Usuario") : e;
+			throw k.error("Delete user error:", e), e.code === "P2025" ? new t("Usuario") : e;
 		}
 	}
 	async changePassword(n, r, i) {
 		try {
-			if (r.length < 6) throw new e("La contraseña debe tener al menos 6 caracteres");
-			let t = await C.genSalt(10), a = await C.hash(r, t);
-			return await this.userRepo.update(n, { password_hash: a }), await this.auditLogRepo.create({
+			let t = z(r);
+			if (!t.valid) throw new e(t.error);
+			let a = await C.genSalt(10), o = await C.hash(r, a);
+			return await this.userRepo.update(n, { password_hash: o }), await this.auditLogRepo.create({
 				userId: i,
 				action: "CHANGE_PASSWORD",
 				entity: "users",
 				entity_id: n
 			}), { success: !0 };
 		} catch (e) {
-			throw console.error("Change password error:", e), e.code === "P2025" ? new t("Usuario") : e;
+			throw k.error("Change password error:", e), e.code === "P2025" ? new t("Usuario") : e;
 		}
 	}
-}, ve = class {
+}, ze = 5, Be = 900 * 1e3, B = /* @__PURE__ */ new Map();
+function Ve(e) {
+	let t = B.get(e);
+	return t || (t = {
+		count: 0,
+		firstAttempt: Date.now()
+	}, B.set(e, t)), t;
+}
+function He(e) {
+	let t = Ve(e), n = Date.now() - t.firstAttempt;
+	if (t.count >= ze) {
+		if (n < Be) return {
+			allowed: !1,
+			remainingAttempts: 0,
+			locked: !0,
+			lockoutRemainingMs: Be - n
+		};
+		t.count = 0, t.firstAttempt = Date.now();
+	}
+	return {
+		allowed: !0,
+		remainingAttempts: ze - t.count,
+		locked: !1,
+		lockoutRemainingMs: 0
+	};
+}
+function V(e) {
+	let t = Ve(e);
+	t.count += 1, t.count === 1 && (t.firstAttempt = Date.now());
+}
+function Ue(e) {
+	B.delete(e);
+}
+//#endregion
+//#region src/main/services/AuthService.ts
+var H = /* @__PURE__ */ new Map(), We = class {
 	constructor(e) {
 		this.userRepo = e;
 	}
-	async login(e, t) {
+	async getSecurityQuestion(e) {
 		try {
-			let n = await this.userRepo.findByUsername(e);
-			if (!n) return {
+			let t = await this.userRepo.findByUsername(e);
+			return !t || !t.security_question ? {
 				success: !1,
-				error: "Usuario no encontrado"
-			};
-			if (!await C.compare(t, n.password_hash)) return {
-				success: !1,
-				error: "Contraseña incorrecta"
-			};
-			let { password_hash: r, ...i } = n;
-			return {
+				error: "Usuario no encontrado o no tiene pregunta de seguridad configurada"
+			} : {
 				success: !0,
-				user: i
+				question: t.security_question
 			};
 		} catch (e) {
-			return console.error("Login error:", e), e.code === "P2025" ? {
+			return k.error({ err: e }, "Get security question error"), {
 				success: !1,
-				error: "Usuario no encontrado"
-			} : {
+				error: "Error interno del servidor"
+			};
+		}
+	}
+	async verifySecurityAnswer(e, t) {
+		try {
+			let n = await this.userRepo.findByUsername(e);
+			if (!n || !n.security_answer_hash) return {
+				success: !1,
+				error: "Usuario no encontrado o no tiene pregunta de seguridad configurada"
+			};
+			if (!await C.compare(t.toLowerCase().trim(), n.security_answer_hash)) return {
+				success: !1,
+				error: "Respuesta incorrecta"
+			};
+			let r = w.randomUUID();
+			return H.set(r, {
+				username: e,
+				expiresAt: Date.now() + 600 * 1e3
+			}), {
+				success: !0,
+				token: r
+			};
+		} catch (e) {
+			return k.error({ err: e }, "Verify security answer error"), {
+				success: !1,
+				error: "Error interno del servidor"
+			};
+		}
+	}
+	async resetPassword(e, t) {
+		let n = H.get(e);
+		if (!n || n.expiresAt < Date.now()) return H.delete(e), {
+			success: !1,
+			error: "Token inválido o expirado"
+		};
+		let r = z(t);
+		if (!r.valid) return {
+			success: !1,
+			error: r.error
+		};
+		try {
+			let r = await C.genSalt(10), i = await C.hash(t, r);
+			return await this.userRepo.updateByUsername(n.username, { password_hash: i }), H.delete(e), { success: !0 };
+		} catch (e) {
+			return k.error({ err: e }, "Reset password error"), {
+				success: !1,
+				error: "Error interno del servidor"
+			};
+		}
+	}
+	async setSecurityQuestion(e, t, n) {
+		try {
+			let r = await C.genSalt(10), i = await C.hash(n.toLowerCase().trim(), r);
+			return await this.userRepo.update(e, {
+				security_question: t,
+				security_answer_hash: i
+			}), { success: !0 };
+		} catch (e) {
+			return k.error({ err: e }, "Set security question error"), {
+				success: !1,
+				error: "Error interno del servidor"
+			};
+		}
+	}
+	async login(e, t) {
+		let n = He(e);
+		if (!n.allowed) {
+			let e = Math.ceil(n.lockoutRemainingMs / 6e4);
+			return {
+				success: !1,
+				error: `Demasiados intentos. Bloqueado por ${e} minuto${e > 1 ? "s" : ""}`,
+				remainingAttempts: 0,
+				locked: !0,
+				lockoutRemainingMs: n.lockoutRemainingMs
+			};
+		}
+		try {
+			let r = await this.userRepo.findByUsername(e);
+			if (!r) return V(e), {
+				success: !1,
+				error: "Usuario no encontrado",
+				remainingAttempts: n.remainingAttempts - 1
+			};
+			if (!await C.compare(t, r.password_hash)) {
+				V(e);
+				let t = n.remainingAttempts - 1;
+				return {
+					success: !1,
+					error: t > 0 ? `Contraseña incorrecta. Intentos restantes: ${t}` : "Contraseña incorrecta",
+					remainingAttempts: t
+				};
+			}
+			Ue(e);
+			let { password_hash: i, ...a } = r;
+			return {
+				success: !0,
+				user: a
+			};
+		} catch (t) {
+			return k.error({ err: t }, "Login error"), t.code === "P2025" ? (V(e), {
+				success: !1,
+				error: "Usuario no encontrado",
+				remainingAttempts: 0
+			}) : {
 				success: !1,
 				error: "Error interno del servidor"
 			};
@@ -2234,27 +2468,35 @@ var U = class {
 				success: !1,
 				error: `El usuario '${e.username}' ya existe`
 			};
-			if (e.password.length < 6) return {
+			let t = z(e.password);
+			if (!t.valid) return {
 				success: !1,
-				error: "La contraseña debe tener al menos 6 caracteres"
+				error: t.error
 			};
-			let t = await C.genSalt(10), n = await C.hash(e.password, t), r = await this.userRepo.create({
+			let n = await C.genSalt(10), r = await C.hash(e.password, n), i;
+			if (e.security_question && e.security_answer) {
+				let t = await C.genSalt(10);
+				i = await C.hash(e.security_answer.toLowerCase().trim(), t);
+			}
+			let a = await this.userRepo.create({
 				username: e.username,
-				password_hash: n,
-				role: e.role
+				password_hash: r,
+				role: e.role,
+				security_question: e.security_question || null,
+				security_answer_hash: i || null
 			});
 			return {
 				success: !0,
 				user: {
-					id: r.id,
-					username: r.username,
-					role: r.role,
-					created_at: r.created_at,
-					updated_at: r.updated_at
+					id: a.id,
+					username: a.username,
+					role: a.role,
+					created_at: a.created_at,
+					updated_at: a.updated_at
 				}
 			};
 		} catch (e) {
-			return console.error("Register error:", e), e.code === "P2002" ? {
+			return k.error({ err: e }, "Register error"), e.code === "P2002" ? {
 				success: !1,
 				error: "El nombre de usuario ya está en uso"
 			} : {
@@ -2274,20 +2516,21 @@ var U = class {
 				success: !1,
 				error: "Contraseña actual incorrecta"
 			};
-			if (n.length < 6) return {
+			let i = z(n);
+			if (!i.valid) return {
 				success: !1,
-				error: "La contraseña debe tener al menos 6 caracteres"
+				error: i.error
 			};
-			let i = await C.genSalt(10), a = await C.hash(n, i);
-			return await this.userRepo.update(e, { password_hash: a }), { success: !0 };
+			let a = await C.genSalt(10), o = await C.hash(n, a);
+			return await this.userRepo.update(e, { password_hash: o }), { success: !0 };
 		} catch (e) {
-			return console.error("Change password error:", e), {
+			return k.error({ err: e }, "Change password error"), {
 				success: !1,
 				error: "Error interno del servidor"
 			};
 		}
 	}
-}, ye = class {
+}, Ge = class {
 	constructor(e, t) {
 		this.categoryRepo = e, this.auditLogRepo = t;
 	}
@@ -2295,7 +2538,7 @@ var U = class {
 		return await this.categoryRepo.findAll(e);
 	}
 	async getCategoryById(e) {
-		return await P(() => this.categoryRepo.findById(e), "Categoría", e);
+		return await M(() => this.categoryRepo.findById(e), "Categoría", e);
 	}
 	async createCategory(e, t) {
 		if (await this.categoryRepo.findByName(e.name)) throw new n(`La categoría "${e.name}" ya existe.`);
@@ -2308,7 +2551,7 @@ var U = class {
 		}), r;
 	}
 	async updateCategory(e, t, r) {
-		await P(() => this.categoryRepo.findById(e), "Categoría", e);
+		await M(() => this.categoryRepo.findById(e), "Categoría", e);
 		let i = await this.categoryRepo.findByName(t.name);
 		if (i && i.id !== e) throw new n(`La categoría "${t.name}" ya existe.`);
 		let a = await this.categoryRepo.update(e, t);
@@ -2320,7 +2563,7 @@ var U = class {
 		}), a;
 	}
 	async deleteCategory(e, t) {
-		await P(() => this.categoryRepo.findById(e), "Categoría", e);
+		await M(() => this.categoryRepo.findById(e), "Categoría", e);
 		let n = await this.categoryRepo.getProductCount(e);
 		if (n > 0) throw new i(`No se puede eliminar la categoría porque tiene ${n} producto(s) asociado(s).`);
 		return await this.categoryRepo.delete(e), await this.auditLogRepo.create({
@@ -2330,7 +2573,7 @@ var U = class {
 			entity_id: e
 		}), { success: !0 };
 	}
-}, be = class {
+}, Ke = class {
 	constructor(e) {
 		this.adapter = e;
 	}
@@ -2352,12 +2595,12 @@ var U = class {
 	async cleanupOldBackups(e) {
 		return this.adapter.cleanupOldBackups(e);
 	}
-}, xe = "dashboard:stats", Se = class {
+}, qe = "dashboard:stats", Je = class {
 	constructor(e, t) {
 		this.repo = e, this.cache = t;
 	}
 	async getStats(e, t) {
-		return e || t ? this.repo.getStats(e, t) : this.cache.getOrSet(xe, () => this.repo.getStats());
+		return e || t ? this.repo.getStats(e, t) : this.cache.getOrSet(qe, () => this.repo.getStats());
 	}
 	async getWeeklySales(e) {
 		return this.repo.getWeeklySales(e);
@@ -2386,7 +2629,7 @@ var U = class {
 	invalidateCache() {
 		this.cache.invalidate();
 	}
-}, Ce = class {
+}, Ye = class {
 	cache = /* @__PURE__ */ new Map();
 	defaultTTL;
 	constructor(e = 3e4) {
@@ -2410,7 +2653,7 @@ var U = class {
 	get size() {
 		return this.cache.size;
 	}
-}, we = class {
+}, Xe = class {
 	constructor(e, t, n, r, i, a, o) {
 		this.pdfGenerator = e, this.excelGenerator = t, this.dashboardService = n, this.saleService = r, this.productService = i, this.cashRegisterService = a, this.settingsService = o;
 	}
@@ -2554,31 +2797,31 @@ var U = class {
 			cash_close: "Reporte de Cierre de Caja"
 		}[e] ?? "Reporte";
 	}
-}, W = "scheduler_", Te = class {
+}, Ze = "scheduler_", Qe = class {
 	dailyTimer = null;
 	weeklyTimer = null;
 	statePath;
 	constructor(e, t) {
-		this.reportService = e, this.backupService = t, this.statePath = D(process.cwd(), "scheduler-state.json");
+		this.reportService = e, this.backupService = t, this.statePath = te(process.cwd(), "scheduler-state.json");
 	}
 	start() {
-		console.log("[Scheduler] Starting scheduled tasks..."), this.scheduleDailyReport(), this.scheduleWeeklyReport(), this.scheduleDailyBackup();
+		k.info("Starting scheduled tasks"), this.scheduleDailyReport(), this.scheduleWeeklyReport(), this.scheduleDailyBackup();
 	}
 	stop() {
-		this.dailyTimer && clearInterval(this.dailyTimer), this.weeklyTimer && clearInterval(this.weeklyTimer), console.log("[Scheduler] Stopped scheduled tasks");
+		this.dailyTimer && clearInterval(this.dailyTimer), this.weeklyTimer && clearInterval(this.weeklyTimer), k.info("Stopped scheduled tasks");
 	}
 	scheduleDailyReport() {
 		let e = async () => {
 			try {
 				let e = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
 				if (this.getLastRun("daily_report") === e) return;
-				console.log("[Scheduler] Generating daily report..."), await this.reportService.generateReport({
+				k.info("Generating daily report"), await this.reportService.generateReport({
 					type: "daily_sales",
 					format: "pdf",
 					title: `Reporte Diario - ${(/* @__PURE__ */ new Date()).toLocaleDateString("es-PE")}`
-				}), this.setLastRun("daily_report", e), console.log("[Scheduler] Daily report saved");
+				}), this.setLastRun("daily_report", e), k.info("Daily report saved");
 			} catch (e) {
-				console.error("[Scheduler] Error generating daily report:", e);
+				k.error({ err: e }, "Error generating daily report");
 			}
 		};
 		e(), this.dailyTimer = setInterval(e, 3600 * 1e3);
@@ -2589,15 +2832,15 @@ var U = class {
 				let e = /* @__PURE__ */ new Date(), t = this.getWeekNumber(e);
 				if (this.getLastRun("weekly_report") === String(t)) return;
 				let n = new Date(e);
-				n.setDate(e.getDate() - e.getDay()), n.setHours(0, 0, 0, 0), console.log("[Scheduler] Generating weekly report..."), await this.reportService.generateReport({
+				n.setDate(e.getDate() - e.getDay()), n.setHours(0, 0, 0, 0), k.info("Generating weekly report"), await this.reportService.generateReport({
 					type: "sales_summary",
 					format: "pdf",
 					startDate: n,
 					endDate: e,
 					title: `Reporte Semanal - Semana ${t}`
-				}), this.setLastRun("weekly_report", String(t)), console.log("[Scheduler] Weekly report saved");
+				}), this.setLastRun("weekly_report", String(t)), k.info("Weekly report saved");
 			} catch (e) {
-				console.error("[Scheduler] Error generating weekly report:", e);
+				k.error({ err: e }, "Error generating weekly report");
 			}
 		};
 		e(), this.weeklyTimer = setInterval(e, 360 * 60 * 1e3);
@@ -2607,16 +2850,16 @@ var U = class {
 			try {
 				let e = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
 				if (this.getLastRun("daily_backup") === e) return;
-				console.log("[Scheduler] Creating daily backup..."), await this.backupService.createBackup(`auto-${e}`), this.setLastRun("daily_backup", e), console.log("[Scheduler] Daily backup created");
+				k.info("Creating daily backup"), await this.backupService.createBackup(`auto-${e}`), this.setLastRun("daily_backup", e), k.info("Daily backup created");
 			} catch (e) {
-				console.error("[Scheduler] Error creating daily backup:", e);
+				k.error({ err: e }, "Error creating daily backup");
 			}
 		};
 		e(), setInterval(e, 3600 * 1e3);
 	}
 	getLastRun(e) {
 		try {
-			return w(this.statePath) ? JSON.parse(T(this.statePath, "utf-8"))[W + e] ?? "" : "";
+			return T(this.statePath) ? JSON.parse(E(this.statePath, "utf-8"))[Ze + e] ?? "" : "";
 		} catch {
 			return "";
 		}
@@ -2624,7 +2867,7 @@ var U = class {
 	setLastRun(e, t) {
 		try {
 			let n = {};
-			w(this.statePath) && (n = JSON.parse(T(this.statePath, "utf-8"))), n[W + e] = t, E(this.statePath, JSON.stringify(n, null, 2));
+			T(this.statePath) && (n = JSON.parse(E(this.statePath, "utf-8"))), n[Ze + e] = t, D(this.statePath, JSON.stringify(n, null, 2));
 		} catch {}
 	}
 	getWeekNumber(e) {
@@ -2634,42 +2877,42 @@ var U = class {
 };
 //#endregion
 //#region src/main/di/container.ts
-function Ee(e) {
-	let t = new ee(e), n = new M(e), r = new F(e), i = new te(e), a = new ne(e), o = new re(e), s = new ie(e), c = new ae(e), l = new oe(e), u = new se(e), d = new ce(e), f = new Ce(), p = new le(), m = new ue(), h = new L(), g = new Se(d, f), _ = new U(t, l, u), v = new de(n, u), y = new pe(i, u), b = new ge(s), x = new _e(c, u), S = new ve(c), C = new me(a, u), w = new he(o, a, t, u), T = new fe(r, t, n, i, s, u, g), E = new be(p), D = new ye(l, u), O = new we(m, h, g, T, _, y, b);
+function $e(e) {
+	let t = new ie(e), n = new ae(e), r = new oe(e), i = new se(e), a = new ce(e), o = new le(e), s = new ue(e), c = new de(e), l = new fe(e), u = new pe(e), d = new me(e), f = new Ye(), p = new _e(), m = new ve(), h = new ye(), g = new Je(d, f), _ = new Te(t, l, u), v = new Ee(n, u), y = new Oe(i, u), b = new je(s), x = new Re(c, u), ee = new We(c), S = new ke(a, u), C = new Ae(o, a, t, u), w = new De(r, t, n, i, s, u, g), T = new Ke(p), E = new Ge(l, u), D = new Xe(m, h, g, w, _, y, b);
 	return {
 		prisma: e,
 		userRepo: c,
 		productService: _,
 		clientService: v,
-		saleService: T,
+		saleService: w,
 		cashRegisterService: y,
 		settingsService: b,
 		userService: x,
-		authService: S,
-		supplierService: C,
-		purchaseService: w,
-		categoryService: D,
+		authService: ee,
+		supplierService: S,
+		purchaseService: C,
+		categoryService: E,
 		dashboardService: g,
-		backupService: E,
-		reportService: O,
-		schedulerService: new Te(O, E),
+		backupService: T,
+		reportService: D,
+		schedulerService: new Qe(D, T),
 		cacheService: f
 	};
 }
 //#endregion
 //#region src/main/di/registry.ts
-var G = null;
-function De() {
-	if (!G) throw Error("Container not initialized");
-	return G;
+var U = null;
+function et() {
+	if (!U) throw Error("Container not initialized");
+	return U;
 }
-function Oe(e) {
-	G = e;
+function tt(e) {
+	U = e;
 }
 //#endregion
 //#region src/main/utils/ipcWrapper.ts
-function ke(t) {
-	return t instanceof x ? {
+function nt(t) {
+	return t instanceof ee ? {
 		success: !1,
 		message: "Error de validación: " + t.issues.map((e) => e.message).join(", "),
 		errors: t.issues.map((e) => `${e.path.join(".")}: ${e.message}`),
@@ -2679,13 +2922,19 @@ function ke(t) {
 		message: t.message,
 		code: t.code,
 		errors: t instanceof e ? t.errors : void 0
-	} : (console.error("Unhandled IPC Error:", t), {
+	} : (k.error({ err: t }, "Unhandled IPC Error"), {
 		success: !1,
-		message: t.message || "Ocurrió un error inesperado en el sistema",
+		message: "Ocurrió un error inesperado en el sistema",
 		code: "INTERNAL"
 	});
 }
-function K(e, t) {
+function W(e, t = "Error interno") {
+	return k.error({ err: e }, `[SafeHandler] Error: ${t}`), {
+		success: !1,
+		message: t
+	};
+}
+function G(e, t) {
 	return async (n, ...r) => {
 		try {
 			if (t && r.length > 0) {
@@ -2704,16 +2953,51 @@ function K(e, t) {
 				data: n
 			};
 		} catch (e) {
-			return ke(e);
+			return nt(e);
 		}
 	};
 }
 //#endregion
+//#region src/main/auth/session.ts
+var K = null;
+function rt(e) {
+	K = e;
+}
+function q() {
+	return K;
+}
+function it() {
+	K = null;
+}
+//#endregion
+//#region src/main/auth/authorize.ts
+var J = class extends r {
+	code = "UNAUTHORIZED";
+	constructor() {
+		super("No autenticado");
+	}
+}, Y = class extends r {
+	code = "FORBIDDEN";
+	constructor(e) {
+		super(`Acceso denegado. Se requiere rol: ${e.join(" o ")}`);
+	}
+};
+function X(...e) {
+	return function(t) {
+		return (async (...n) => {
+			let r = q();
+			if (!r) throw new J();
+			if (!e.includes(r.role)) throw new Y(e);
+			return t(...n);
+		});
+	};
+}
+//#endregion
 //#region src/main/ipc.ts
-var q = new Proxy({}, { get(e, t) {
-	return De()[t];
+var Z = new Proxy({}, { get(e, t) {
+	return et()[t];
 } });
-function J() {
+function at() {
 	c.handle("dialog:showConfirm", async (e, t) => (await s.showMessageBox({
 		type: "question",
 		buttons: ["Sí", "No"],
@@ -2723,391 +3007,352 @@ function J() {
 		message: t.message
 	})).response === 0), c.handle("health:check", async () => {
 		try {
-			return await q.prisma.$queryRaw`SELECT 1`, {
+			return await Z.prisma.$queryRaw`SELECT 1`, {
 				success: !0,
 				database: "connected",
 				timestamp: (/* @__PURE__ */ new Date()).toISOString()
 			};
 		} catch (e) {
-			return {
+			return k.error("[Health] Database check failed:", e), {
 				success: !1,
 				database: "disconnected",
-				error: e.message,
 				timestamp: (/* @__PURE__ */ new Date()).toISOString()
 			};
 		}
 	}), c.handle("dashboard:getStats", async (e, t, n) => {
 		try {
-			return await q.dashboardService.getStats(t, n);
+			return await Z.dashboardService.getStats(t, n);
 		} catch (e) {
-			return {
-				success: !1,
-				message: e.message
-			};
+			return k.error("[Dashboard] getStats error:", e), W(e, "Error al obtener estadísticas del dashboard");
 		}
 	}), c.handle("dashboard:getWeeklySales", async (e, t) => {
 		try {
-			return await q.dashboardService.getWeeklySales(t);
-		} catch {
-			return [];
+			return await Z.dashboardService.getWeeklySales(t);
+		} catch (e) {
+			return k.error("[Dashboard] getWeeklySales error:", e), [];
 		}
 	}), c.handle("dashboard:getLowStock", async (e, t) => {
 		try {
-			return await q.dashboardService.getLowStockProducts(t || 50);
+			return await Z.dashboardService.getLowStockProducts(t || 50);
 		} catch (e) {
-			return console.error("[IPC] Error getting low stock:", e), [];
+			return k.error("[Dashboard] getLowStock error:", e), [];
 		}
 	}), c.handle("dashboard:getSalesByPayment", async (e, t, n) => {
 		try {
-			return await q.dashboardService.getSalesByPaymentMethod(t, n);
-		} catch {
-			return [];
+			return await Z.dashboardService.getSalesByPaymentMethod(t, n);
+		} catch (e) {
+			return k.error("[Dashboard] getSalesByPayment error:", e), [];
 		}
 	}), c.handle("dashboard:getTopProducts", async (e, t, n, r) => {
 		try {
-			return await q.dashboardService.getTopProducts(t, n, r);
-		} catch {
-			return [];
+			return await Z.dashboardService.getTopProducts(t, n, r);
+		} catch (e) {
+			return k.error("[Dashboard] getTopProducts error:", e), [];
 		}
 	}), c.handle("dashboard:getTopClients", async (e, t, n, r) => {
 		try {
-			return await q.dashboardService.getTopClients(t, n, r);
-		} catch {
-			return [];
+			return await Z.dashboardService.getTopClients(t, n, r);
+		} catch (e) {
+			return k.error("[Dashboard] getTopClients error:", e), [];
 		}
 	}), c.handle("dashboard:getSalesByHour", async (e, t, n) => {
 		try {
-			return await q.dashboardService.getSalesByHour(t, n);
-		} catch {
-			return [];
+			return await Z.dashboardService.getSalesByHour(t, n);
+		} catch (e) {
+			return k.error("[Dashboard] getSalesByHour error:", e), [];
 		}
 	}), c.handle("dashboard:getCashSummary", async (e, t, n) => {
 		try {
-			return await q.dashboardService.getCashRegisterSummary(t, n);
+			return await Z.dashboardService.getCashRegisterSummary(t, n);
 		} catch (e) {
-			return {
-				success: !1,
-				message: e.message
-			};
+			return k.error("[Dashboard] getCashSummary error:", e), W(e, "Error al obtener resumen de caja");
 		}
 	}), c.handle("dashboard:getInventoryMetrics", async () => {
 		try {
-			return await q.dashboardService.getInventoryMetrics();
+			return await Z.dashboardService.getInventoryMetrics();
 		} catch (e) {
-			return {
-				success: !1,
-				message: e.message
-			};
+			return k.error("[Dashboard] getInventoryMetrics error:", e), W(e, "Error al obtener métricas de inventario");
 		}
 	}), c.handle("dashboard:invalidateCache", async () => {
 		try {
-			return q.dashboardService.invalidateCache(), { success: !0 };
+			return Z.dashboardService.invalidateCache(), { success: !0 };
 		} catch (e) {
-			return {
-				success: !1,
-				message: e.message
-			};
+			return k.error("[Dashboard] invalidateCache error:", e), W(e, "Error al limpiar caché");
 		}
 	}), c.handle("settings:getAll", async () => {
 		try {
-			return await q.settingsService.getSettings();
-		} catch {
-			return {};
+			let e = q();
+			if (!e) throw new J();
+			if (e.role !== "ADMIN") throw new Y(["ADMIN"]);
+			return await Z.settingsService.getSettings();
+		} catch (e) {
+			return k.error("[Settings] getAll error:", e), W(e, "Error al obtener configuración");
 		}
 	}), c.handle("settings:update", async (e, t) => {
 		try {
-			return await q.settingsService.updateSettings(t);
-		} catch (e) {
-			return {
+			let e = q();
+			if (!e) throw new J();
+			if (e.role !== "ADMIN") throw new Y(["ADMIN"]);
+			let n = we.safeParse(t);
+			return n.success ? (await Z.settingsService.updateSettings(n.data), k.info("Settings saved successfully"), { success: !0 }) : {
 				success: !1,
-				message: e.message
+				message: "Error de validación: " + n.error.issues.map((e) => e.message).join(", ")
 			};
+		} catch (e) {
+			return k.error({
+				err: e,
+				settings: Object.keys(t)
+			}, "[Settings] update error"), W(e, "Error al guardar configuración");
 		}
 	}), c.handle("cash:getOpen", async () => {
 		try {
-			return await q.cashRegisterService.getOpenRegister();
+			return await Z.cashRegisterService.getOpenRegister();
 		} catch {
 			return null;
 		}
 	}), c.handle("cash:getAll", async (e, t, n) => {
 		try {
-			return await q.cashRegisterService.getAllRegisters(t, n);
+			let e = q();
+			if (!e) throw new J();
+			if (e.role !== "ADMIN") throw new Y(["ADMIN"]);
+			return await Z.cashRegisterService.getAllRegisters(t, n);
 		} catch (e) {
-			return {
-				success: !1,
-				message: e.message || "Error al obtener cajas"
-			};
+			return k.error("[Cash] getAll error:", e), W(e, "Error al obtener cajas");
 		}
 	}), c.handle("cash:getDetails", async (e, t) => {
 		try {
-			return await q.cashRegisterService.getRegisterDetails(t);
+			let e = q();
+			if (!e) throw new J();
+			if (e.role !== "ADMIN") throw new Y(["ADMIN"]);
+			return await Z.cashRegisterService.getRegisterDetails(t);
 		} catch (e) {
-			return {
-				success: !1,
-				message: e.message || "Error al obtener detalles de caja"
-			};
+			return k.error("[Cash] getDetails error:", e), W(e, "Error al obtener detalles de caja");
 		}
 	}), c.handle("cash:getDailySummary", async (e, t) => {
 		try {
-			return await q.cashRegisterService.getDailySummary(t);
+			let e = q();
+			if (!e) throw new J();
+			if (e.role !== "ADMIN") throw new Y(["ADMIN"]);
+			return await Z.cashRegisterService.getDailySummary(t);
 		} catch (e) {
-			return {
-				success: !1,
-				message: e.message || "Error al obtener resumen del día"
-			};
+			return k.error("[Cash] getDailySummary error:", e), W(e, "Error al obtener resumen del día");
 		}
-	}), c.handle("cash:open", K((e, t) => q.cashRegisterService.openRegister(e, t))), c.handle("cash:close", K((e, t, n) => q.cashRegisterService.closeRegister(e, t, n))), c.handle("auth:login", async (e, t, n) => {
+	}), c.handle("cash:open", G(X("ADMIN")((e, t) => Z.cashRegisterService.openRegister(e, t)))), c.handle("cash:close", G(X("ADMIN")((e, t, n) => Z.cashRegisterService.closeRegister(e, t, n)))), c.handle("auth:login", async (e, t, n) => {
 		try {
-			return await q.authService.login(t, n);
+			let e = await Z.authService.login(t, n);
+			return e.success && e.user && rt({
+				id: e.user.id,
+				username: e.user.username,
+				role: e.user.role
+			}), e;
 		} catch (e) {
-			return {
-				success: !1,
-				message: e.message || "Error de autenticación"
-			};
+			return k.error("[Auth] Login error:", e), W(e, "Error de autenticación");
 		}
-	}), c.handle("setup:status", async () => {
+	}), c.handle("auth:logout", async () => (it(), { success: !0 })), c.handle("auth:checkSession", async () => {
+		let e = q();
+		return {
+			authenticated: !!e,
+			user: e
+		};
+	}), c.handle("auth:getSecurityQuestion", async (e, t) => {
 		try {
-			return { needsSetup: await q.userRepo.count() === 0 };
+			return await Z.authService.getSecurityQuestion(t);
 		} catch (e) {
-			return {
-				needsSetup: !0,
-				error: e.message
-			};
+			return W(e, "Error al obtener pregunta de seguridad");
+		}
+	}), c.handle("auth:verifySecurityAnswer", async (e, t, n) => {
+		try {
+			return await Z.authService.verifySecurityAnswer(t, n);
+		} catch (e) {
+			return W(e, "Error al verificar respuesta");
+		}
+	}), c.handle("auth:resetPassword", async (e, t, n) => {
+		try {
+			return await Z.authService.resetPassword(t, n);
+		} catch (e) {
+			return W(e, "Error al restablecer contraseña");
+		}
+	}), c.handle("auth:setSecurityQuestion", G(X("ADMIN")(async (e, t, n, r) => await Z.authService.setSecurityQuestion(t, n, r)))), c.handle("setup:status", async () => {
+		try {
+			return { needsSetup: await Z.userRepo.count() === 0 };
+		} catch (e) {
+			return k.error("[Setup] Status error:", e), { needsSetup: !0 };
 		}
 	}), c.handle("setup:complete", async (e, t) => {
 		try {
-			let e = await q.authService.register({
+			let e = await Z.authService.register({
 				username: t.user.username,
 				password: t.user.password,
 				role: "ADMIN",
-				password_hash: ""
-			});
-			return e.success ? (await q.settingsService.updateSettings(t.settings), {
-				success: !0,
-				user: e.user
-			}) : {
+				password_hash: "",
+				security_question: t.user.security_question,
+				security_answer: t.user.security_answer
+			}), n;
+			if (e.success && e.user) n = e.user, k.info({ userId: n.id }, "User created during setup");
+			else if (e.error?.includes("ya existe")) {
+				let e = await Z.userRepo.findByUsername(t.user.username);
+				if (!e) return {
+					success: !1,
+					message: "Error al verificar el usuario existente"
+				};
+				n = {
+					id: e.id,
+					username: e.username,
+					role: e.role
+				}, k.info({ userId: n.id }, "User already exists, reusing");
+			} else return {
 				success: !1,
 				message: e.error || "Error al crear el usuario"
 			};
-		} catch (e) {
+			rt({
+				id: n.id,
+				username: n.username,
+				role: n.role
+			});
+			try {
+				await Z.settingsService.updateSettings(t.settings), k.info({ settings: Object.keys(t.settings) }, "Settings saved during setup");
+			} catch (e) {
+				return k.error({
+					err: e,
+					settings: Object.keys(t.settings)
+				}, "[Setup] Settings save error"), {
+					success: !1,
+					message: "Error al guardar la configuración del negocio: " + (e?.message || String(e))
+				};
+			}
 			return {
-				success: !1,
-				message: e.message || "Error durante la configuración inicial"
+				success: !0,
+				user: n
 			};
+		} catch (e) {
+			return k.error({ err: e }, "[Setup] Complete error"), W(e, "Error durante la configuración inicial");
 		}
 	}), c.handle("clients:getAll", async (e, t) => {
 		try {
-			return await q.clientService.getAllClients(t);
+			return await Z.clientService.getAllClients(t);
 		} catch (e) {
-			return {
-				success: !1,
-				message: e.message || "Error al obtener clientes"
-			};
+			return k.error("[Clients] getAll error:", e), W(e, "Error al obtener clientes");
 		}
 	}), c.handle("clients:getById", async (e, t) => {
 		try {
-			return await q.clientService.getClientById(t);
+			return await Z.clientService.getClientById(t);
 		} catch (e) {
-			return {
-				success: !1,
-				message: e.message || "Error al obtener cliente"
-			};
+			return k.error("[Clients] getById error:", e), W(e, "Error al obtener cliente");
 		}
-	}), c.handle("clients:create", K((e, t) => q.clientService.createClient(e, t), V)), c.handle("clients:update", K((e, t, n) => q.clientService.updateClient(e, t, n))), c.handle("clients:delete", async (e, t, n) => {
+	}), c.handle("clients:create", G((e, t) => Z.clientService.createClient(e, t), I)), c.handle("clients:update", G((e, t, n) => Z.clientService.updateClient(e, t, n))), c.handle("clients:delete", async (e, t, n) => {
 		try {
-			return await q.clientService.deleteClient(t, n);
+			return await Z.clientService.deleteClient(t, n);
 		} catch (e) {
-			return {
-				success: !1,
-				message: e.message || "Error al eliminar cliente"
-			};
+			return k.error("[Clients] delete error:", e), W(e, "Error al eliminar cliente");
 		}
 	}), c.handle("products:getAll", async (e, t, n) => {
 		try {
-			return await q.productService.getAllProducts(t, n);
+			return await Z.productService.getAllProducts(t, n);
 		} catch (e) {
-			return {
-				success: !1,
-				message: e.message || "Error al obtener productos"
-			};
+			return k.error("[Products] getAll error:", e), W(e, "Error al obtener productos");
 		}
 	}), c.handle("products:getById", async (e, t) => {
 		try {
-			return await q.productService.getProductById(t);
+			return await Z.productService.getProductById(t);
 		} catch (e) {
-			return {
-				success: !1,
-				message: e.message || "Error al obtener producto"
-			};
+			return k.error("[Products] getById error:", e), W(e, "Error al obtener producto");
 		}
 	}), c.handle("products:getLowStock", async () => {
 		try {
-			return await q.dashboardService.getLowStockProducts(50);
+			return await Z.dashboardService.getLowStockProducts(50);
 		} catch (e) {
-			return console.error("Get low stock products error:", e), [];
+			return k.error("Get low stock products error:", e), [];
 		}
-	}), c.handle("products:create", K((e, t) => q.productService.createProduct(e, t), R)), c.handle("products:update", K((e, t, n) => q.productService.updateProduct(e, t, n))), c.handle("products:delete", async (e, t, n) => {
+	}), c.handle("products:create", G((e, t) => Z.productService.createProduct(e, t), P)), c.handle("products:update", G((e, t, n) => Z.productService.updateProduct(e, t, n))), c.handle("products:delete", async (e, t, n) => {
 		try {
-			return await q.productService.deleteProduct(t, n);
+			return await Z.productService.deleteProduct(t, n);
 		} catch (e) {
-			return {
-				success: !1,
-				message: e.message || "Error al eliminar producto"
-			};
+			return k.error("[Products] delete error:", e), W(e, "Error al eliminar producto");
 		}
 	}), c.handle("products:addStock", async (e, t, n, r, i) => {
 		try {
-			return await q.productService.addStock(t, n, r, i);
+			return await Z.productService.addStock(t, n, r, i);
 		} catch (e) {
-			return {
-				success: !1,
-				message: e.message || "Error al añadir stock"
-			};
+			return k.error("[Products] addStock error:", e), W(e, "Error al añadir stock");
 		}
 	}), c.handle("products:removeStock", async (e, t, n, r, i) => {
 		try {
-			return await q.productService.removeStock(t, n, r, i);
+			return await Z.productService.removeStock(t, n, r, i);
 		} catch (e) {
-			return {
-				success: !1,
-				message: e.message || "Error al reducir stock"
-			};
+			return k.error("[Products] removeStock error:", e), W(e, "Error al reducir stock");
 		}
 	}), c.handle("products:getMovements", async (e, t, n) => {
 		try {
-			return await q.productService.getInventoryMovements(t, n);
+			return await Z.productService.getInventoryMovements(t, n);
 		} catch (e) {
-			return {
-				success: !1,
-				message: e.message || "Error al obtener movimientos"
-			};
+			return k.error("[Products] getMovements error:", e), W(e, "Error al obtener movimientos");
 		}
 	}), c.handle("sales:getAll", async (e, t, n, r, i) => {
 		try {
-			return await q.saleService.getAllSales(t, n, r, i);
+			return await Z.saleService.getAllSales(t, n, r, i);
 		} catch (e) {
-			return {
-				success: !1,
-				message: e.message || "Error al obtener ventas"
-			};
+			return k.error("[Sales] getAll error:", e), W(e, "Error al obtener ventas");
 		}
 	}), c.handle("sales:getToday", async () => {
 		try {
-			return await q.saleService.getTodaySales();
+			return await Z.saleService.getTodaySales();
 		} catch (e) {
-			return {
-				success: !1,
-				message: e.message || "Error al obtener ventas del día"
-			};
+			return k.error("[Sales] getToday error:", e), W(e, "Error al obtener ventas del día");
 		}
 	}), c.handle("sales:getLast", async () => {
 		try {
-			return await q.saleService.getLastSale();
-		} catch {
-			return null;
+			return await Z.saleService.getLastSale();
+		} catch (e) {
+			return k.error("[Sales] getLast error:", e), null;
 		}
 	}), c.handle("sales:getStats", async (e, t, n) => {
 		try {
-			return await q.saleService.getSalesStats(t, n);
+			return await Z.saleService.getSalesStats(t, n);
 		} catch (e) {
-			return {
-				success: !1,
-				message: e.message || "Error al obtener estadísticas"
-			};
+			return k.error("[Sales] getStats error:", e), W(e, "Error al obtener estadísticas");
 		}
 	}), c.handle("sales:getDetails", async (e, t) => {
 		try {
-			return await q.saleService.getSaleDetails(t);
+			return await Z.saleService.getSaleDetails(t);
 		} catch (e) {
-			return {
-				success: !1,
-				message: e.message || "Error al obtener detalles de venta"
-			};
+			return k.error("[Sales] getDetails error:", e), W(e, "Error al obtener detalles de venta");
 		}
-	}), c.handle("sales:register", K(async (e, t, n) => q.saleService.registerSale(e, t, n), B.omit({ items: !0 }))), c.handle("sales:cancel", async (e, t, n) => {
+	}), c.handle("sales:register", G(async (e, t, n) => Z.saleService.registerSale(e, t, n), F.omit({ items: !0 }))), c.handle("sales:cancel", async (e, t, n) => {
 		try {
-			return await q.saleService.cancelSale(t, n);
+			return await Z.saleService.cancelSale(t, n);
 		} catch (e) {
-			return {
-				success: !1,
-				message: e.message || "Error al cancelar venta"
-			};
+			return k.error("[Sales] cancel error:", e), W(e, "Error al cancelar venta");
 		}
-	}), c.handle("categories:getAll", async (e, t) => await q.categoryService.getAllCategories(t)), c.handle("categories:getById", async (e, t) => {
+	}), c.handle("categories:getAll", async (e, t) => await Z.categoryService.getAllCategories(t)), c.handle("categories:getById", async (e, t) => {
 		try {
-			return await q.categoryService.getCategoryById(t);
+			return await Z.categoryService.getCategoryById(t);
 		} catch (e) {
-			return {
-				success: !1,
-				message: e.message || "Error al obtener categoría"
-			};
+			return k.error("[Categories] getById error:", e), W(e, "Error al obtener categoría");
 		}
-	}), c.handle("categories:create", K(async (e, t) => await q.categoryService.createCategory(e, t), H)), c.handle("categories:update", K(async (e, t, n) => {
-		let r = H.parse(t);
-		return await q.categoryService.updateCategory(e, r, n);
-	})), c.handle("categories:delete", K(async (e, t) => await q.categoryService.deleteCategory(e, t))), c.handle("users:getAll", async () => {
+	}), c.handle("categories:create", G(X("ADMIN")(async (e, t) => await Z.categoryService.createCategory(e, t)), L)), c.handle("categories:update", G(X("ADMIN")(async (e, t, n) => {
+		let r = L.parse(t);
+		return await Z.categoryService.updateCategory(e, r, n);
+	}))), c.handle("categories:delete", G(X("ADMIN")(async (e, t) => await Z.categoryService.deleteCategory(e, t)))), c.handle("users:getAll", async () => {
 		try {
-			return await q.userService.getAllUsers();
+			return await X("ADMIN")(async () => await Z.userService.getAllUsers())();
 		} catch (e) {
-			return {
-				success: !1,
-				message: e.message || "Error al obtener usuarios"
-			};
+			return k.error("[Users] getAll error:", e), W(e, "Error al obtener usuarios");
 		}
 	}), c.handle("users:getById", async (e, t) => {
 		try {
-			return await q.userService.getUserById(t);
+			return await X("ADMIN")(async () => await Z.userService.getUserById(t))();
 		} catch (e) {
-			return {
-				success: !1,
-				message: e.message || "Error al obtener usuario"
-			};
+			return k.error("[Users] getById error:", e), W(e, "Error al obtener usuario");
 		}
-	}), c.handle("users:create", async (e, t, n) => {
+	}), c.handle("users:create", G(X("ADMIN")((e, t) => Z.userService.createUser(e, t)), Ce)), c.handle("users:update", G(X("ADMIN")(async (e, t, n) => {
+		let r = Ce.partial().parse(t);
+		return await Z.userService.updateUser(e, r, n);
+	}))), c.handle("users:delete", G(X("ADMIN")((e, t) => Z.userService.deleteUser(e, t)))), c.handle("users:changePassword", G(X("ADMIN")((e, t, n) => Z.userService.changePassword(e, t, n)))), c.handle("movements:getAll", async () => {
 		try {
-			return {
-				success: !0,
-				user: await q.userService.createUser(t, n)
-			};
-		} catch (e) {
-			return {
-				success: !1,
-				message: e.message || "Error al crear usuario"
-			};
-		}
-	}), c.handle("users:update", async (e, t, n, r) => {
-		try {
-			return {
-				success: !0,
-				user: await q.userService.updateUser(t, n, r)
-			};
-		} catch (e) {
-			return {
-				success: !1,
-				message: e.message || "Error al actualizar usuario"
-			};
-		}
-	}), c.handle("users:delete", async (e, t, n) => {
-		try {
-			return await q.userService.deleteUser(t, n);
-		} catch (e) {
-			return {
-				success: !1,
-				message: e.message || "Error al eliminar usuario"
-			};
-		}
-	}), c.handle("users:changePassword", async (e, t, n, r) => {
-		try {
-			return await q.userService.changePassword(t, n, r);
-		} catch (e) {
-			return {
-				success: !1,
-				message: e.message || "Error al cambiar contraseña"
-			};
-		}
-	}), c.handle("movements:getAll", async () => {
-		try {
-			return await q.prisma.inventoryMovement.findMany({
+			let e = q();
+			if (!e) throw new J();
+			if (e.role !== "ADMIN") throw new Y(["ADMIN"]);
+			return await Z.prisma.inventoryMovement.findMany({
 				include: { product: { select: {
 					id: !0,
 					name: !0,
@@ -3121,240 +3366,122 @@ function J() {
 		}
 	}), c.handle("suppliers:getAll", async (e, t) => {
 		try {
-			return await q.supplierService.getAllSuppliers(t);
+			return await Z.supplierService.getAllSuppliers(t);
 		} catch {
 			return [];
 		}
 	}), c.handle("suppliers:getById", async (e, t) => {
 		try {
-			return await q.supplierService.getSupplierById(t);
+			return await Z.supplierService.getSupplierById(t);
 		} catch {
 			return null;
 		}
-	}), c.handle("suppliers:create", async (e, t, n) => {
+	}), c.handle("suppliers:create", G(X("ADMIN")((e, t) => Z.supplierService.createSupplier(e, t)), R)), c.handle("suppliers:update", G(X("ADMIN")(async (e, t, n) => {
+		let r = R.partial().parse(t);
+		return await Z.supplierService.updateSupplier(e, r, n);
+	}))), c.handle("suppliers:delete", G(X("ADMIN")((e, t) => Z.supplierService.deleteSupplier(e, t)))), c.handle("purchases:getAll", async (e, t, n) => {
 		try {
-			return {
-				success: !0,
-				supplier: await q.supplierService.createSupplier(t, n)
-			};
-		} catch (e) {
-			return {
-				success: !1,
-				message: e.message || "Error al crear proveedor"
-			};
-		}
-	}), c.handle("suppliers:update", async (e, t, n, r) => {
-		try {
-			return {
-				success: !0,
-				supplier: await q.supplierService.updateSupplier(t, n, r)
-			};
-		} catch (e) {
-			return {
-				success: !1,
-				message: e.message || "Error al actualizar proveedor"
-			};
-		}
-	}), c.handle("suppliers:delete", async (e, t, n) => {
-		try {
-			return await q.supplierService.deleteSupplier(t, n);
-		} catch (e) {
-			return {
-				success: !1,
-				message: e.message || "Error al eliminar proveedor"
-			};
-		}
-	}), c.handle("purchases:getAll", async (e, t, n) => {
-		try {
-			return await q.purchaseService.getAllPurchases(t, n);
+			return await Z.purchaseService.getAllPurchases(t, n);
 		} catch {
 			return [];
 		}
 	}), c.handle("purchases:getById", async (e, t) => {
 		try {
-			return await q.purchaseService.getPurchaseById(t);
+			return await Z.purchaseService.getPurchaseById(t);
 		} catch {
 			return null;
 		}
-	}), c.handle("purchases:create", async (e, t, n) => {
+	}), c.handle("purchases:create", G(X("ADMIN")((e, t) => Z.purchaseService.createPurchase(e, t)), Se)), c.handle("purchases:receive", G(X("ADMIN")((e, t) => Z.purchaseService.receivePurchase(e, t)))), c.handle("purchases:cancel", G(X("ADMIN")((e, t) => Z.purchaseService.cancelPurchase(e, t)))), c.handle("purchases:updatePaymentStatus", G(X("ADMIN")((e, t) => Z.purchaseService.updatePaymentStatus(e, t)))), c.handle("backup:create", G(X("ADMIN")((e) => Z.backupService.createBackup(e)))), c.handle("backup:list", async () => {
 		try {
-			return {
-				success: !0,
-				purchase: await q.purchaseService.createPurchase(t, n)
-			};
+			return await Z.backupService.listBackups();
 		} catch (e) {
-			return {
-				success: !1,
-				message: e.message || "Error al crear orden de compra"
-			};
+			return k.error("[IPC] Error listing backups:", e), [];
 		}
-	}), c.handle("purchases:receive", async (e, t, n) => {
+	}), c.handle("backup:restore", G(X("ADMIN")((e) => Z.backupService.restoreBackup(e)))), c.handle("backup:delete", G(X("ADMIN")((e) => Z.backupService.deleteBackup(e)))), c.handle("settings:getTax", async () => {
 		try {
-			return await q.purchaseService.receivePurchase(t, n);
+			let e = q();
+			if (!e) throw new J();
+			if (e.role !== "ADMIN") throw new Y(["ADMIN"]);
+			return await Z.settingsService.getTaxSettings();
 		} catch (e) {
-			return {
-				success: !1,
-				message: e.message || "Error al recibir compra"
-			};
-		}
-	}), c.handle("purchases:cancel", async (e, t, n) => {
-		try {
-			return await q.purchaseService.cancelPurchase(t, n);
-		} catch (e) {
-			return {
-				success: !1,
-				message: e.message || "Error al cancelar compra"
-			};
-		}
-	}), c.handle("purchases:updatePaymentStatus", async (e, t, n) => {
-		try {
-			return await q.purchaseService.updatePaymentStatus(t, n);
-		} catch (e) {
-			return {
-				success: !1,
-				message: e.message || "Error al actualizar estado de pago"
-			};
-		}
-	}), c.handle("backup:create", async (e, t) => {
-		try {
-			return await q.backupService.createBackup(t);
-		} catch (e) {
-			return console.error("[IPC] Error creating backup:", e), {
-				success: !1,
-				message: e.message
-			};
-		}
-	}), c.handle("backup:list", async () => {
-		try {
-			return await q.backupService.listBackups();
-		} catch (e) {
-			return console.error("[IPC] Error listing backups:", e), [];
-		}
-	}), c.handle("backup:restore", async (e, t) => {
-		try {
-			return await q.backupService.restoreBackup(t);
-		} catch (e) {
-			return console.error("[IPC] Error restoring backup:", e), {
-				success: !1,
-				message: e.message
-			};
-		}
-	}), c.handle("backup:delete", async (e, t) => {
-		try {
-			return await q.backupService.deleteBackup(t);
-		} catch (e) {
-			return console.error("[IPC] Error deleting backup:", e), {
-				success: !1,
-				message: e.message
-			};
-		}
-	}), c.handle("settings:getTax", async () => {
-		try {
-			return await q.settingsService.getTaxSettings();
-		} catch (e) {
-			return console.error("[IPC] Error getting tax settings:", e), {
-				taxRate: 0,
-				taxType: "none",
-				taxIncluded: !1
-			};
+			return k.error("[Settings] getTax error:", e), W(e, "Error al obtener configuración de impuestos");
 		}
 	}), c.handle("settings:updateTax", async (e, t, n, r) => {
 		try {
-			return await q.settingsService.updateTaxSettings(t, n, r);
+			let e = q();
+			if (!e) throw new J();
+			if (e.role !== "ADMIN") throw new Y(["ADMIN"]);
+			return await Z.settingsService.updateTaxSettings(t, n, r);
 		} catch (e) {
-			return console.error("[IPC] Error updating tax settings:", e), {
-				success: !1,
-				message: e.message
-			};
+			return k.error({ err: e }, "[Settings] updateTax error"), W(e, "Error al guardar configuración de impuestos");
 		}
-	}), c.handle("reports:generate", async (e, t) => {
-		try {
-			let e = t.startDate ? new Date(t.startDate) : void 0, n;
-			t.endDate ? (n = new Date(t.endDate), n.setHours(23, 59, 59, 999)) : e && (n = new Date(e), n.setHours(23, 59, 59, 999));
-			let r = {
-				...t,
-				startDate: e,
-				endDate: n
-			}, i = await q.reportService.generateReport(r), a = r.format === "pdf" ? "pdf" : "xlsx", { filePath: o, canceled: c } = await s.showSaveDialog({
-				defaultPath: `${r.type}-${Date.now()}.${a}`,
-				filters: r.format === "pdf" ? [{
-					name: "PDF",
-					extensions: ["pdf"]
-				}] : [{
-					name: "Excel",
-					extensions: ["xlsx"]
-				}]
-			});
-			return c || !o ? {
-				success: !1,
-				message: "Cancelado por el usuario"
-			} : (await O.writeFile(o, i), {
-				success: !0,
-				path: o
-			});
-		} catch (e) {
-			return console.error("[IPC] Error generating report:", e), {
-				success: !1,
-				message: e.message
-			};
-		}
-	}), c.handle("reports:generateReceipt", async (e, t) => {
-		try {
-			let e = {
-				type: "sale_receipt",
-				format: "pdf",
-				saleId: t
-			}, n = await q.reportService.generateReport(e), { filePath: r, canceled: i } = await s.showSaveDialog({
-				defaultPath: `comprobante-${t}-${Date.now()}.pdf`,
-				filters: [{
-					name: "PDF",
-					extensions: ["pdf"]
-				}]
-			});
-			return i || !r ? {
-				success: !1,
-				message: "Cancelado por el usuario"
-			} : (await O.writeFile(r, n), {
-				success: !0,
-				path: r
-			});
-		} catch (e) {
-			return console.error("[IPC] Error generating receipt:", e), {
-				success: !1,
-				message: e.message
-			};
-		}
-	}), c.handle("reports:generateCashClose", async (e, t) => {
-		try {
-			let e = {
-				type: "cash_close",
-				format: "pdf",
-				registerId: t
-			}, n = await q.reportService.generateReport(e), { filePath: r, canceled: i } = await s.showSaveDialog({
-				defaultPath: `cierre-caja-${t}-${Date.now()}.pdf`,
-				filters: [{
-					name: "PDF",
-					extensions: ["pdf"]
-				}]
-			});
-			return i || !r ? {
-				success: !1,
-				message: "Cancelado por el usuario"
-			} : (await O.writeFile(r, n), {
-				success: !0,
-				path: r
-			});
-		} catch (e) {
-			return console.error("[IPC] Error generating cash close report:", e), {
-				success: !1,
-				message: e.message
-			};
-		}
-	});
+	}), c.handle("reports:generate", G(X("ADMIN")(async (e) => {
+		let t = e.startDate ? new Date(e.startDate) : void 0, n;
+		e.endDate ? (n = new Date(e.endDate), n.setHours(23, 59, 59, 999)) : t && (n = new Date(t), n.setHours(23, 59, 59, 999));
+		let r = {
+			...e,
+			startDate: t,
+			endDate: n
+		}, i = await Z.reportService.generateReport(r), a = r.format === "pdf" ? "pdf" : "xlsx", { filePath: o, canceled: c } = await s.showSaveDialog({
+			defaultPath: `${r.type}-${Date.now()}.${a}`,
+			filters: r.format === "pdf" ? [{
+				name: "PDF",
+				extensions: ["pdf"]
+			}] : [{
+				name: "Excel",
+				extensions: ["xlsx"]
+			}]
+		});
+		return c || !o ? {
+			success: !1,
+			message: "Cancelado por el usuario"
+		} : (await O.writeFile(o, i), {
+			success: !0,
+			path: o
+		});
+	}))), c.handle("reports:generateReceipt", G(X("ADMIN")(async (e) => {
+		let t = {
+			type: "sale_receipt",
+			format: "pdf",
+			saleId: e
+		}, n = await Z.reportService.generateReport(t), { filePath: r, canceled: i } = await s.showSaveDialog({
+			defaultPath: `comprobante-${e}-${Date.now()}.pdf`,
+			filters: [{
+				name: "PDF",
+				extensions: ["pdf"]
+			}]
+		});
+		return i || !r ? {
+			success: !1,
+			message: "Cancelado por el usuario"
+		} : (await O.writeFile(r, n), {
+			success: !0,
+			path: r
+		});
+	}))), c.handle("reports:generateCashClose", G(X("ADMIN")(async (e) => {
+		let t = {
+			type: "cash_close",
+			format: "pdf",
+			registerId: e
+		}, n = await Z.reportService.generateReport(t), { filePath: r, canceled: i } = await s.showSaveDialog({
+			defaultPath: `cierre-caja-${e}-${Date.now()}.pdf`,
+			filters: [{
+				name: "PDF",
+				extensions: ["pdf"]
+			}]
+		});
+		return i || !r ? {
+			success: !1,
+			message: "Cancelado por el usuario"
+		} : (await O.writeFile(r, n), {
+			success: !0,
+			path: r
+		});
+	})));
 }
 //#endregion
 //#region src/main/utils/migrationRunner.ts
-function Ae(e) {
+function ot(e) {
 	let t = [], n = "", r = !1, i = "";
 	for (let a = 0; a < e.length; a++) {
 		let o = e[a], s = e[a + 1] || "";
@@ -3385,17 +3512,17 @@ function Ae(e) {
 	let a = n.trim();
 	return a && t.push(a), t;
 }
-function je() {
+function st() {
 	let e = [];
-	o.isPackaged && (e.push(l.join(process.resourcesPath, "prisma", "schema.sql")), e.push(l.join(process.resourcesPath, "schema.sql")));
+	o.isPackaged && (e.push(u.join(process.resourcesPath, "prisma", "schema.sql")), e.push(u.join(process.resourcesPath, "schema.sql")));
 	try {
-		let t = l.dirname(d(import.meta.url));
-		e.push(l.join(t, "..", "prisma", "schema.sql"));
+		let t = u.dirname(ne(import.meta.url));
+		e.push(u.join(t, "..", "..", "..", "prisma", "schema.sql")), e.push(u.join(process.cwd(), "prisma", "schema.sql"));
 	} catch {}
-	for (let t of e) if (u.existsSync(t)) return t;
+	for (let t of e) if (d.existsSync(t)) return t;
 	return null;
 }
-async function Me(e) {
+async function ct(e) {
 	try {
 		let t = await e.$queryRawUnsafe("SELECT name FROM sqlite_master WHERE type='table' AND name='users'");
 		return Array.isArray(t) && t.length > 0;
@@ -3403,110 +3530,122 @@ async function Me(e) {
 		return !1;
 	}
 }
-async function Ne(e) {
-	if (await Me(e)) return console.log("[Migration] Database already initialized, skipping."), { applied: !1 };
-	let t = je();
+async function lt(e) {
+	if (await ct(e)) return k.info("Database already initialized, skipping."), { applied: !1 };
+	let t = st();
 	if (!t) {
 		let e = "schema.sql not found in any expected location";
-		return console.error("[Migration] " + e), {
+		return k.error(e), {
 			applied: !1,
 			error: e
 		};
 	}
-	console.log(`[Migration] Loading schema from ${t}`);
-	let n = Ae(u.readFileSync(t, "utf-8"));
-	console.log(`[Migration] Found ${n.length} SQL statements to execute`);
+	k.info(`Loading schema from ${t}`);
+	let n = ot(d.readFileSync(t, "utf-8"));
+	k.info(`Found ${n.length} SQL statements to execute`);
 	for (let t = 0; t < n.length; t++) {
 		let r = n[t];
 		try {
 			await e.$executeRawUnsafe(r);
 		} catch (e) {
 			if (e.message && e.message.includes("already exists")) {
-				console.log(`[Migration] Skipping statement ${t + 1} (already exists): ${r.slice(0, 60)}...`);
+				k.info(`Skipping statement ${t + 1} (already exists): ${r.slice(0, 60)}...`);
 				continue;
 			}
 			let n = `Migration failed at statement ${t + 1}: ${e.message || e}`;
-			return console.error("[Migration] " + n), console.error("[Migration] SQL: " + r.slice(0, 200)), {
+			return k.error(n), k.error(`SQL: ${r.slice(0, 200)}`), {
 				applied: !1,
 				error: n
 			};
 		}
 	}
-	return console.log("[Migration] Schema applied successfully!"), { applied: !0 };
+	k.info("Schema applied successfully!");
+	try {
+		await e.$disconnect(), await e.$connect(), k.info("Prisma connection refreshed");
+	} catch (e) {
+		return k.error({ err: e }, "Failed to refresh Prisma connection"), {
+			applied: !0,
+			error: "Migrations applied but failed to refresh connection"
+		};
+	}
+	return { applied: !0 };
 }
 //#endregion
 //#region src/main/index.ts
-var { PrismaClient: Pe } = p;
-j();
-var Y = Ee(new Pe({ datasources: { db: { url: process.env.DATABASE_URL } } }));
-Oe(Y);
-var X = l.dirname(d(import.meta.url));
-process.env.DIST = l.join(X, "../dist"), process.env.VITE_PUBLIC = o.isPackaged ? process.env.DIST : l.join(process.env.DIST, "../public");
-var Z = null, Q = process.env.VITE_DEV_SERVER_URL;
-async function $() {
-	Z = new a({
+re();
+var Q = $e(new p({ adapter: new m({ url: process.env.DATABASE_URL }) }));
+tt(Q);
+var ut = u.dirname(ne(import.meta.url));
+process.env.DIST = u.join(ut, "../dist"), process.env.VITE_PUBLIC = o.isPackaged ? process.env.DIST : u.join(process.env.DIST, "../public");
+var $ = null, dt = process.env.VITE_DEV_SERVER_URL;
+async function ft() {
+	$ = new a({
 		width: 1200,
 		height: 800,
 		minWidth: 900,
 		minHeight: 600,
-		icon: l.join(process.env.VITE_PUBLIC, "favicon.ico"),
+		icon: u.join(process.env.VITE_PUBLIC, "favicon.ico"),
 		webPreferences: {
-			preload: l.join(X, "index.mjs"),
+			preload: u.join(ut, "index.mjs"),
 			contextIsolation: !0,
 			nodeIntegration: !1
 		},
 		autoHideMenuBar: !0
-	}), Q ? (Z.loadURL(Q), Z.webContents.openDevTools()) : Z.loadFile(l.join(process.env.DIST, "index.html")), Z.on("blur", () => {
+	}), o.isPackaged && l.defaultSession.webRequest.onHeadersReceived((e, t) => {
+		t({ responseHeaders: {
+			...e.responseHeaders,
+			"Content-Security-Policy": ["default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'"]
+		} });
+	}), dt ? ($.loadURL(dt), $.webContents.openDevTools()) : $.loadFile(u.join(process.env.DIST, "index.html")), $.on("blur", () => {
 		setTimeout(() => {
-			if (Z && !Z.isDestroyed() && !Z.isFocused()) {
+			if ($ && !$.isDestroyed() && !$.isFocused()) {
 				let e = a.getFocusedWindow();
-				(!e || e === Z) && Z.focus();
+				(!e || e === $) && $.focus();
 			}
 		}, 100);
-	}), Z.on("focus", () => {
-		Z && Z.webContents && Z.webContents.focus();
-	}), Z.on("closed", () => {
-		Z = null;
+	}), $.on("focus", () => {
+		$ && $.webContents && $.webContents.focus();
+	}), $.on("closed", () => {
+		$ = null;
 	});
 }
-c.handle("window:focus", () => Z && !Z.isDestroyed() ? (Z.focus(), Z.webContents.focus(), !0) : !1), c.handle("window:is-ready", () => Z && !Z.isDestroyed()), c.handle("dialog:showMessageBox", (e, t) => {
-	let n = a.getFocusedWindow() || Z;
+c.handle("window:focus", () => $ && !$.isDestroyed() ? ($.focus(), $.webContents.focus(), !0) : !1), c.handle("window:is-ready", () => $ && !$.isDestroyed()), c.handle("dialog:showMessageBox", (e, t) => {
+	let n = a.getFocusedWindow() || $;
 	return s.showMessageBox(n, t);
 }), c.handle("dialog:showOpenDialog", (e, t) => {
-	let n = a.getFocusedWindow() || Z;
+	let n = a.getFocusedWindow() || $;
 	return s.showOpenDialog(n, t);
 }), c.handle("dialog:showSaveDialog", (e, t) => {
-	let n = a.getFocusedWindow() || Z;
+	let n = a.getFocusedWindow() || $;
 	return s.showSaveDialog(n, t);
 }), o.on("window-all-closed", () => {
-	process.platform !== "darwin" && (o.quit(), Z = null);
+	process.platform !== "darwin" && (o.quit(), $ = null);
 }), o.whenReady().then(async () => {
 	let e = !1;
 	try {
-		await Y.prisma.$connect(), await Y.prisma.$queryRaw`PRAGMA journal_mode=WAL`, await Y.prisma.$queryRaw`PRAGMA synchronous=NORMAL`, await Y.prisma.$queryRaw`PRAGMA cache_size=10000`, await Y.prisma.$queryRaw`PRAGMA temp_store=MEMORY`, console.log("✅ Prisma connected to SQLite successfully."), e = !0;
+		await Q.prisma.$connect(), await Q.prisma.$queryRaw`PRAGMA journal_mode=WAL`, await Q.prisma.$queryRaw`PRAGMA synchronous=NORMAL`, await Q.prisma.$queryRaw`PRAGMA cache_size=10000`, await Q.prisma.$queryRaw`PRAGMA temp_store=MEMORY`, k.info("Prisma connected to SQLite successfully"), e = !0;
 	} catch (e) {
 		let t = [
 			`Error: ${e.message || String(e)}`,
 			e.code ? `Code: ${e.code}` : "",
 			`DATABASE_URL: ${process.env.DATABASE_URL || "(not set)"}`,
-			`PRISMA_QUERY_ENGINE_LIBRARY: ${process.env.PRISMA_QUERY_ENGINE_LIBRARY || "(not set)"}`,
 			`resourcesPath: ${process.resourcesPath || "(not set)"}`,
 			`appPath: ${o.getAppPath()}`
 		].filter(Boolean).join("\n");
-		console.error("❌ Failed to connect to SQLite:\n" + t);
+		k.error({ err: e }, `Failed to connect to SQLite:\n${t}`);
 		try {
 			await s.showMessageBox({
 				type: "error",
 				title: "Error de Base de Datos",
 				message: "No se pudo conectar a la base de datos SQLite.",
-				detail: `El motor de Prisma no pudo cargarse.\n\n${t}\n\nVerifica que el empaquetado incluya los archivos nativos correctamente.`
+				detail: "Revisa que la instalación sea correcta o contacta al administrador.\n\nSi el problema persiste, revisa los logs de la aplicación."
 			});
 		} catch {}
 	}
 	if (e) {
-		let e = await Ne(Y.prisma);
+		let e = await lt(Q.prisma);
 		if (e.error) {
-			console.error("❌ Migration error:", e.error);
+			k.error({ err: e.error }, "Migration error");
 			try {
 				await s.showMessageBox({
 					type: "error",
@@ -3517,8 +3656,8 @@ c.handle("window:focus", () => Z && !Z.isDestroyed() ? (Z.focus(), Z.webContents
 			} catch {}
 		}
 	}
-	J(), Y.schedulerService.start(), $(), o.on("activate", () => {
-		a.getAllWindows().length === 0 && $();
+	at(), Q.schedulerService.start(), ft(), o.on("activate", () => {
+		a.getAllWindows().length === 0 && ft();
 	});
 });
 //#endregion

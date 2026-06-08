@@ -2,24 +2,24 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-  provider      = "prisma-client-js"
-  binaryTargets = ["native", "windows", "debian-openssl-3.0.x"]
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "sqlite"
-  url      = "file:./dev.sqlite3"
 }
 
 model User {
-  id             Int        @id @default(autoincrement())
-  username       String     @unique
-  password_hash  String
-  role           String
-  created_at     DateTime   @default(now()) @map("created_at")
-  updated_at     DateTime   @updatedAt @map("updated_at")
+  id                   Int        @id @default(autoincrement())
+  username             String     @unique
+  password_hash        String
+  role                 String
+  security_question    String?
+  security_answer_hash String?
+  created_at           DateTime   @default(now()) @map("created_at")
+  updated_at           DateTime   @updatedAt @map("updated_at")
 
-  audit_logs     AuditLog[]
+  audit_logs           AuditLog[]
 
   @@map("users")
 }

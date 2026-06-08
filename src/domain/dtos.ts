@@ -87,12 +87,16 @@ export interface CreateUserDTO {
   username: string;
   password_hash: string;
   role: string;
+  security_question?: string | null;
+  security_answer_hash?: string | null;
 }
 
 export interface UpdateUserDTO {
   username?: string;
   password_hash?: string;
   role?: string;
+  security_question?: string | null;
+  security_answer_hash?: string | null;
 }
 
 export interface LoginDTO {

@@ -51,9 +51,22 @@ function PageLoader() {
 }
 
 export default function App() {
-  const { isAuthenticated, login } = useAuthStore();
+  const { isAuthenticated, login, logout } = useAuthStore();
   const { toasts, removeToast } = useToast();
   const [setupNeeded, setSetupNeeded] = useState<boolean | null>(null);
+
+  // On mount and whenever auth state changes, verify the main process session
+  useEffect(() => {
+    async function verifySession() {
+      if (isAuthenticated && window.api?.checkSession) {
+        const result = await window.api.checkSession();
+        if (!result.authenticated) {
+          logout();
+        }
+      }
+    }
+    verifySession();
+  }, [isAuthenticated, logout]);
 
   useEffect(() => {
     if (window.api?.checkSetupStatus) {
@@ -91,7 +104,7 @@ export default function App() {
                 <Route
                   path="/setup"
                   element={
-                    setupNeeded ? <Setup onComplete={() => setSetupNeeded(false)} /> : <Navigate to="/login" replace />
+                    setupNeeded ? <Setup onComplete={(user) => { if (user) login(user); setSetupNeeded(false); }} /> : <Navigate to="/login" replace />
                   }
                 />
                 <Route

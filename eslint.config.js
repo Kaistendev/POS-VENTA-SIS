@@ -4,6 +4,7 @@ import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
 import tsPlugin from '@typescript-eslint/eslint-plugin'
 import tsParser from '@typescript-eslint/parser'
+import securityPlugin from 'eslint-plugin-security'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
@@ -30,7 +31,7 @@ export default defineConfig([
   },
   {
     files: ['**/*.{ts,tsx}'],
-    plugins: { '@typescript-eslint': tsPlugin },
+    plugins: { '@typescript-eslint': tsPlugin, 'security': securityPlugin },
     languageOptions: {
       parser: tsParser,
       parserOptions: {
@@ -43,6 +44,7 @@ export default defineConfig([
     rules: {
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+      ...securityPlugin.configs.recommended.rules,
     },
   },
 ])

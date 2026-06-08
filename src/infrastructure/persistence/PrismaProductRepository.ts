@@ -2,6 +2,7 @@ import type { PrismaClient } from '@prisma/client';
 import { IProductRepository } from '../../domain/ports/IProductRepository.js';
 import { Product, ProductWithRelations } from '../../domain/models.js';
 import { CreateProductDTO, UpdateProductDTO, StockMovementDTO } from '../../domain/dtos.js';
+import { BusinessRuleError } from '../../shared/errors.js';
 
 export class PrismaProductRepository implements IProductRepository {
   constructor(private prisma: PrismaClient) {}
@@ -87,10 +88,20 @@ export class PrismaProductRepository implements IProductRepository {
   }
 
   async updateStock(id: number, delta: number): Promise<void> {
-    await this.prisma.product.update({
-      where: { id },
-      data: { stock: { increment: delta } },
-    });
+    if (delta < 0) {
+      const result = await this.prisma.product.updateMany({
+        where: { id, stock: { gte: Math.abs(delta) } },
+        data: { stock: { increment: delta } },
+      });
+      if (result.count === 0) {
+        throw new BusinessRuleError('Stock insuficiente');
+      }
+    } else {
+      await this.prisma.product.update({
+        where: { id },
+        data: { stock: { increment: delta } },
+      });
+    }
   }
 
   async createMovement(data: StockMovementDTO): Promise<void> {

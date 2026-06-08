@@ -53,6 +53,14 @@ export class PrismaUserRepository implements IUserRepository {
     return !!user;
   }
 
+  async updateByUsername(username: string, data: UpdateUserDTO): Promise<User> {
+    return this.prisma.user.update({
+      where: { username },
+      data,
+      select: { id: true, username: true, role: true, security_question: true, created_at: true, updated_at: true },
+    }) as unknown as User;
+  }
+
   async count(): Promise<number> {
     return this.prisma.user.count();
   }

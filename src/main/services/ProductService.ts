@@ -142,6 +142,11 @@ export class ProductService {
 
     await this.productRepo.updateStock(productId, -quantity);
 
+    const updated = await this.productRepo.findById(productId);
+    if (updated && updated.stock < 0) {
+      throw new BusinessRuleError('Error interno: el stock no puede ser negativo');
+    }
+
     await this.productRepo.createMovement({
       product_id: productId,
       type: 'SALIDA',

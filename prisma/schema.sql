@@ -4,6 +4,8 @@ CREATE TABLE "users" (
     "username" TEXT NOT NULL,
     "password_hash" TEXT NOT NULL,
     "role" TEXT NOT NULL,
+    "security_question" TEXT,
+    "security_answer_hash" TEXT,
     "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" DATETIME NOT NULL
 );

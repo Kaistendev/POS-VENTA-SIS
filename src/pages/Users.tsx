@@ -1,15 +1,27 @@
 import { useState, useEffect } from 'react';
 import DataTable from '../components/ui/DataTable.tsx';
-import { UserPlus, RefreshCw, Pencil, Trash2, Key, Shield } from 'lucide-react';
+import { UserPlus, RefreshCw, Pencil, Trash2, Key, Shield, ShieldQuestion } from 'lucide-react';
 import { useToast } from '../hooks/useToast.ts';
 import { useAuthStore } from '../store/useStore.ts';
 import Modal from '../components/ui/Modal.tsx';
+import { validatePassword } from '../common/validation.js';
+
+const SECURITY_QUESTIONS = [
+  '¿Cuál es el nombre de tu primera mascota?',
+  '¿Cuál es el nombre de tu ciudad natal?',
+  '¿Cuál es el nombre de tu mejor amigo de la infancia?',
+  '¿Cuál es tu comida favorita?',
+  '¿Cuál es el nombre de tu profesor favorito?',
+  '¿Cuál es tu película favorita?',
+  '¿Cuál es el modelo de tu primer auto?',
+];
 
 export default function Users() {
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+  const [isSecurityModalOpen, setIsSecurityModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const { success, error: toastError } = useToast();
@@ -19,11 +31,18 @@ export default function Users() {
   const [formData, setFormData] = useState({
     username: '',
     password: '',
-    role: 'VENDEDOR'
+    role: 'VENDEDOR',
+    question: '',
+    answer: '',
   });
   const [passwordData, setPasswordData] = useState({
     newPassword: '',
     confirmPassword: ''
+  });
+  const [securityData, setSecurityData] = useState({
+    question: '',
+    answer: '',
+    customQuestion: '',
   });
   const [deleteTarget, setDeleteTarget] = useState<{id: number, name: string} | null>(null);
 
@@ -36,8 +55,14 @@ export default function Users() {
     setLoading(true);
     try {
       if (window.api) {
-        const data = await window.api.getAllUsers();
-        setUsers(data || []);
+        const result = await window.api.getAllUsers();
+        if (Array.isArray(result)) {
+          setUsers(result);
+        } else if (result?.data && Array.isArray(result.data)) {
+          setUsers(result.data);
+        } else {
+          setUsers([]);
+        }
       }
     } catch (error) {
       console.error(error);
@@ -51,13 +76,13 @@ export default function Users() {
 
   const handleOpenCreateModal = () => {
     setSelectedUser(null);
-    setFormData({ username: '', password: '', role: 'VENDEDOR' });
+    setFormData({ username: '', password: '', role: 'VENDEDOR', question: '', answer: '' });
     setIsModalOpen(true);
   };
 
   const handleOpenEditModal = (user: any) => {
     setSelectedUser(user);
-    setFormData({ username: user.username, password: '', role: user.role });
+    setFormData({ username: user.username, password: '', role: user.role, question: '', answer: '' });
     setIsModalOpen(true);
   };
 
@@ -65,6 +90,33 @@ export default function Users() {
     setSelectedUser(user);
     setPasswordData({ newPassword: '', confirmPassword: '' });
     setIsPasswordModalOpen(true);
+  };
+
+  const handleOpenSecurityModal = (user: any) => {
+    setSelectedUser(user);
+    setSecurityData({ question: '', answer: '', customQuestion: '' });
+    setIsSecurityModalOpen(true);
+  };
+
+  const handleSetSecurityQuestion = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedUser) return;
+    const question = securityData.question === '__other__' ? securityData.customQuestion : securityData.question;
+    if (!question || !securityData.answer) {
+      toastError('Debes seleccionar una pregunta y proporcionar una respuesta');
+      return;
+    }
+    try {
+      const result = await window.api.setSecurityQuestion(selectedUser.id, question, securityData.answer);
+      if (result.success) {
+        success('Pregunta de seguridad configurada');
+        setIsSecurityModalOpen(false);
+      } else {
+        toastError(result.message || 'Error al configurar pregunta de seguridad');
+      }
+    } catch (err) {
+      toastError('Error de comunicación');
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -76,8 +128,8 @@ export default function Users() {
         return;
       }
 
-      if (formData.password && formData.password.length < 6) {
-        toastError('La contraseña debe tener al menos 6 caracteres');
+      if (formData.password && !validatePassword(formData.password).valid) {
+        toastError(validatePassword(formData.password).error);
         return;
       }
 
@@ -113,6 +165,12 @@ export default function Users() {
 
     if (passwordData.newPassword !== passwordData.confirmPassword) {
       toastError('Las contraseñas no coinciden');
+      return;
+    }
+
+    const pwCheck = validatePassword(passwordData.newPassword);
+    if (!pwCheck.valid) {
+      toastError(pwCheck.error);
       return;
     }
 
@@ -194,6 +252,9 @@ export default function Users() {
           { header: 'Creado', render: (u) => <span className="text-gray-400">{new Date(u.created_at).toLocaleDateString('es-ES')}</span> },
           { header: 'Acciones', headerClassName: 'text-right', className: 'text-right', render: (u) => (
             <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button onClick={() => handleOpenSecurityModal(u)} className="p-2 text-cyan-400 hover:bg-cyan-400/10 rounded-lg" title="Pregunta de Seguridad">
+                <ShieldQuestion className="w-4 h-4" />
+              </button>
               <button onClick={() => handleOpenPasswordModal(u)} className="p-2 text-yellow-400 hover:bg-yellow-400/10 rounded-lg" title="Cambiar Contraseña">
                 <Key className="w-4 h-4" />
               </button>
@@ -251,7 +312,7 @@ export default function Users() {
               onChange={(e) => setFormData({ ...formData, password: e.target.value })}
               className="w-full px-4 py-2 bg-[#1f2028] border border-[#2e303a] rounded-lg text-white focus:outline-none focus:border-primary"
               required={!selectedUser}
-              minLength={6}
+              minLength={8}
             />
           </div>
 
@@ -268,6 +329,41 @@ export default function Users() {
               <option value="ADMIN">Administrador</option>
             </select>
           </div>
+
+          {!selectedUser && (
+            <>
+              <hr className="border-[#2e303a]" />
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Pregunta de Seguridad (opcional)
+                </label>
+                <select
+                  value={formData.question || ''}
+                  onChange={(e) => setFormData({ ...formData, question: e.target.value })}
+                  className="w-full px-4 py-2 bg-[#1f2028] border border-[#2e303a] rounded-lg text-white focus:outline-none focus:border-primary"
+                >
+                  <option value="">Sin pregunta de seguridad</option>
+                  {SECURITY_QUESTIONS.map((q) => (
+                    <option key={q} value={q}>{q}</option>
+                  ))}
+                </select>
+              </div>
+              {formData.question && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">
+                    Respuesta *
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.answer || ''}
+                    onChange={(e) => setFormData({ ...formData, answer: e.target.value })}
+                    className="w-full px-4 py-2 bg-[#1f2028] border border-[#2e303a] rounded-lg text-white focus:outline-none focus:border-primary"
+                    required={!!formData.question}
+                  />
+                </div>
+              )}
+            </>
+          )}
 
           <div className="flex justify-end space-x-3 pt-4">
             <button
@@ -305,7 +401,7 @@ export default function Users() {
               onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
               className="w-full px-4 py-2 bg-[#1f2028] border border-[#2e303a] rounded-lg text-white focus:outline-none focus:border-primary"
               required
-              minLength={6}
+              minLength={8}
               autoFocus
             />
           </div>
@@ -320,7 +416,7 @@ export default function Users() {
               onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
               className="w-full px-4 py-2 bg-[#1f2028] border border-[#2e303a] rounded-lg text-white focus:outline-none focus:border-primary"
               required
-              minLength={6}
+              minLength={8}
             />
           </div>
 
@@ -337,6 +433,81 @@ export default function Users() {
               className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
             >
               Cambiar
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Modal para Pregunta de Seguridad */}
+      <Modal
+        isOpen={isSecurityModalOpen}
+        onClose={() => setIsSecurityModalOpen(false)}
+        title="Configurar Pregunta de Seguridad"
+        width="500px"
+      >
+        <form onSubmit={handleSetSecurityQuestion} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">
+              Pregunta de Seguridad *
+            </label>
+            <select
+              value={securityData.question}
+              onChange={(e) => setSecurityData({ ...securityData, question: e.target.value })}
+              className="w-full px-4 py-2 bg-[#1f2028] border border-[#2e303a] rounded-lg text-white focus:outline-none focus:border-primary"
+              required
+            >
+              <option value="">Selecciona una pregunta</option>
+              {SECURITY_QUESTIONS.map((q) => (
+                <option key={q} value={q}>{q}</option>
+              ))}
+              <option value="__other__">Otra (escribe tu propia pregunta)</option>
+            </select>
+          </div>
+
+          {securityData.question === '__other__' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-1">
+                Tu pregunta personalizada *
+              </label>
+              <input
+                type="text"
+                value={securityData.customQuestion}
+                onChange={(e) => setSecurityData({ ...securityData, customQuestion: e.target.value })}
+                className="w-full px-4 py-2 bg-[#1f2028] border border-[#2e303a] rounded-lg text-white focus:outline-none focus:border-primary"
+                required
+                autoFocus
+              />
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">
+              Respuesta *
+            </label>
+            <input
+              type="text"
+              value={securityData.answer}
+              onChange={(e) => setSecurityData({ ...securityData, answer: e.target.value })}
+              placeholder="tu respuesta"
+              className="w-full px-4 py-2 bg-[#1f2028] border border-[#2e303a] rounded-lg text-white focus:outline-none focus:border-primary"
+              required
+            />
+            <p className="text-xs text-gray-500 mt-1">La respuesta se guardará cifrada. No distingue mayúsculas/minúsculas.</p>
+          </div>
+
+          <div className="flex justify-end space-x-3 pt-4">
+            <button
+              type="button"
+              onClick={() => setIsSecurityModalOpen(false)}
+              className="px-4 py-2 bg-[#2e303a] text-gray-300 rounded-lg hover:bg-[#3e404a] transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
+            >
+              Guardar
             </button>
           </div>
         </form>

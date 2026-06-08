@@ -73,12 +73,14 @@ export interface User {
   id: number;
   username: string;
   role: string;
+  security_question?: string | null;
   created_at: Date;
   updated_at: Date;
 }
 
 export interface UserWithPassword extends User {
   password_hash: string;
+  security_answer_hash?: string | null;
 }
 
 // ─── CashRegister ───

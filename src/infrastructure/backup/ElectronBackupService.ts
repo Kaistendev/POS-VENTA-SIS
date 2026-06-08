@@ -6,6 +6,8 @@ import { promisify } from 'util';
 import { createGzip, createGunzip } from 'zlib';
 import { IBackupService } from '../../domain/ports/IBackupService.js';
 import { BackupEntry, BackupResult } from '../../domain/models.js';
+import { assertPathWithin } from '../../main/utils/pathValidation.js';
+import { logger } from '../../shared/logger.js';
 
 const pipelineAsync = promisify(pipeline);
 
@@ -55,10 +57,10 @@ export class ElectronBackupService implements IBackupService {
 
       await pipelineAsync(readStream, gzipStream, writeStream);
 
-      return { success: true, path: backupPath };
+      return { success: true, path: backupFileName };
     } catch (error: any) {
-      console.error('[ElectronBackupService] Error creating backup:', error);
-      return { success: false, message: error.message };
+      logger.error({ err: error }, 'Error creating backup');
+      return { success: false, message: 'Error al crear respaldo' };
     }
   }
 
@@ -76,50 +78,64 @@ export class ElectronBackupService implements IBackupService {
         const stats = fs.statSync(filePath);
         return {
           filename,
-          path: filePath,
+          path: filename,
           size: stats.size,
           created: stats.mtime,
         };
       }).sort((a, b) => b.created.getTime() - a.created.getTime());
     } catch (error: any) {
-      console.error('[ElectronBackupService] Error listing backups:', error);
+      logger.error({ err: error }, 'Error listing backups');
       return [];
     }
   }
 
   async restoreBackup(backupPath: string): Promise<BackupResult> {
     try {
-      if (!fs.existsSync(backupPath)) {
-        return { success: false, message: 'Backup file not found' };
+      const backupDir = this.getBackupDir();
+      if (path.isAbsolute(backupPath)) {
+        return { success: false, message: 'Ruta absoluta no permitida. Use solo el nombre del archivo.' };
+      }
+      const resolvedPath = path.join(backupDir, backupPath);
+      assertPathWithin(backupDir, resolvedPath, 'Archivo de backup');
+
+      if (!fs.existsSync(resolvedPath)) {
+        return { success: false, message: 'Archivo de backup no encontrado' };
       }
 
       const dbPath = this.getDbPath();
 
       await this.createBackup('before-restore');
 
-      const readStream = fs.createReadStream(backupPath);
+      const readStream = fs.createReadStream(resolvedPath);
       const gunzipStream = createGunzip();
       const writeStream = fs.createWriteStream(dbPath);
 
       await pipelineAsync(readStream, gunzipStream, writeStream);
 
-      return { success: true, message: 'Backup restored successfully. Restart the app to see changes.' };
+      return { success: true, message: 'Backup restaurado correctamente. Reinicia la aplicación.' };
     } catch (error: any) {
-      console.error('[ElectronBackupService] Error restoring backup:', error);
-      return { success: false, message: error.message };
+      logger.error({ err: error }, 'Error restoring backup');
+      return { success: false, message: 'Error al restaurar respaldo' };
     }
   }
 
   async deleteBackup(backupPath: string): Promise<BackupResult> {
     try {
-      if (!fs.existsSync(backupPath)) {
-        return { success: false, message: 'Backup file not found' };
+      const backupDir = this.getBackupDir();
+      if (path.isAbsolute(backupPath)) {
+        return { success: false, message: 'Ruta absoluta no permitida. Use solo el nombre del archivo.' };
       }
-      fs.unlinkSync(backupPath);
+      const resolvedPath = path.join(backupDir, backupPath);
+      assertPathWithin(backupDir, resolvedPath, 'Archivo de backup');
+
+      if (!fs.existsSync(resolvedPath)) {
+        return { success: false, message: 'Archivo de backup no encontrado' };
+      }
+      fs.unlinkSync(resolvedPath);
       return { success: true };
     } catch (error: any) {
-      console.error('[ElectronBackupService] Error deleting backup:', error);
-      return { success: false, message: error.message };
+      logger.error({ err: error }, 'Error deleting backup');
+      return { success: false, message: 'Error al eliminar respaldo' };
     }
   }
 
@@ -136,22 +152,24 @@ export class ElectronBackupService implements IBackupService {
 
     if (!todayBackup) {
       await this.createBackup('auto');
-      console.log('[ElectronBackupService] Automatic backup created');
+      logger.info('Automatic backup created');
     }
   }
 
   async cleanupOldBackups(keep: number = 10): Promise<void> {
     try {
+      const backupDir = this.getBackupDir();
       const backups = await this.listBackups();
       if (backups.length > keep) {
         const toDelete = backups.slice(keep);
         for (const backup of toDelete) {
-          fs.unlinkSync(backup.path);
+          const fullPath = path.join(backupDir, backup.path);
+          fs.unlinkSync(fullPath);
         }
-        console.log(`[ElectronBackupService] Cleaned up ${toDelete.length} old backups`);
+        logger.info(`Cleaned up ${toDelete.length} old backups`);
       }
     } catch (error: any) {
-      console.error('[ElectronBackupService] Error cleaning up backups:', error);
+      logger.error({ err: error }, 'Error cleaning up backups');
     }
   }
 }

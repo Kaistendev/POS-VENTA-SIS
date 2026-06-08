@@ -1,23 +1,20 @@
 import { setupProductionEnv } from "./env.js";
-import pkg from '@prisma/client';
-const { PrismaClient } = pkg;
+import { PrismaClient } from '@prisma/client';
+import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3';
 import { buildContainer } from "./di/container.js";
 import { setContainer } from "./di/registry.js";
+import { logger } from "../shared/logger.js";
 
 // ⚠️ Must run before PrismaClient is created — sets DATABASE_URL for production
 setupProductionEnv();
 
 const prisma = new PrismaClient({
-  datasources: {
-    db: {
-      url: process.env.DATABASE_URL
-    }
-  }
+  adapter: new PrismaBetterSqlite3({ url: process.env.DATABASE_URL! })
 });
 const container = buildContainer(prisma);
 setContainer(container);
 
-import { app, BrowserWindow, ipcMain, dialog } from "electron";
+import { app, BrowserWindow, ipcMain, dialog, session } from "electron";
 import path from "path";
 import { fileURLToPath } from "url";
 import { setupIpcHandlers } from "./ipc.js";
@@ -50,6 +47,19 @@ async function createWindow() {
     // Optional: Hide menu bar for a cleaner look
     autoHideMenuBar: true,
   });
+
+  if (app.isPackaged) {
+    session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+      callback({
+        responseHeaders: {
+          ...details.responseHeaders,
+          'Content-Security-Policy': [
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'"
+          ]
+        }
+      });
+    });
+  }
 
   if (VITE_DEV_SERVER_URL) {
     win.loadURL(VITE_DEV_SERVER_URL);
@@ -128,24 +138,23 @@ app.whenReady().then(async () => {
     await container.prisma.$queryRaw`PRAGMA synchronous=NORMAL`;
     await container.prisma.$queryRaw`PRAGMA cache_size=10000`;
     await container.prisma.$queryRaw`PRAGMA temp_store=MEMORY`;
-    console.log("✅ Prisma connected to SQLite successfully.");
+    logger.info('Prisma connected to SQLite successfully');
     prismaOk = true;
   } catch (err: any) {
     const detail = [
       `Error: ${err.message || String(err)}`,
       err.code ? `Code: ${err.code}` : '',
       `DATABASE_URL: ${process.env.DATABASE_URL || '(not set)'}`,
-      `PRISMA_QUERY_ENGINE_LIBRARY: ${process.env.PRISMA_QUERY_ENGINE_LIBRARY || '(not set)'}`,
       `resourcesPath: ${process.resourcesPath || '(not set)'}`,
       `appPath: ${app.getAppPath()}`,
     ].filter(Boolean).join('\n');
-    console.error("❌ Failed to connect to SQLite:\n" + detail);
+    logger.error({ err }, `Failed to connect to SQLite:\n${detail}`);
     try {
       await dialog.showMessageBox({
         type: 'error',
         title: 'Error de Base de Datos',
         message: 'No se pudo conectar a la base de datos SQLite.',
-        detail: `El motor de Prisma no pudo cargarse.\n\n${detail}\n\nVerifica que el empaquetado incluya los archivos nativos correctamente.`,
+        detail: `Revisa que la instalación sea correcta o contacta al administrador.\n\nSi el problema persiste, revisa los logs de la aplicación.`,
       });
     } catch { /* ignore dialog errors */ }
   }
@@ -154,7 +163,7 @@ app.whenReady().then(async () => {
   if (prismaOk) {
     const migrationResult = await runMigrations(container.prisma);
     if (migrationResult.error) {
-      console.error("❌ Migration error:", migrationResult.error);
+      logger.error({ err: migrationResult.error }, 'Migration error');
       try {
         await dialog.showMessageBox({
           type: 'error',

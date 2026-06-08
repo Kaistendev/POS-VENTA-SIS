@@ -6,6 +6,7 @@ import {
   ConflictError,
   BusinessRuleError,
 } from "../../shared/errors.js";
+import { logger } from "../../shared/logger.js";
 
 export interface IpcResponse<T = unknown> {
   success: boolean;
@@ -34,12 +35,17 @@ function formatError(error: Error): IpcResponse<never> {
     };
   }
 
-  console.error("Unhandled IPC Error:", error);
+  logger.error({ err: error }, 'Unhandled IPC Error');
   return {
     success: false,
-    message: error.message || "Ocurrió un error inesperado en el sistema",
+    message: "Ocurrió un error inesperado en el sistema",
     code: "INTERNAL",
   };
+}
+
+export function sanitizedCatch(error: unknown, genericMessage: string = 'Error interno'): { success: false; message: string } {
+  logger.error({ err: error }, `[SafeHandler] Error: ${genericMessage}`);
+  return { success: false, message: genericMessage };
 }
 
 export function wrapIpc<T = unknown>(

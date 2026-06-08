@@ -3,6 +3,7 @@ import { ISaleRepository } from '../../domain/ports/ISaleRepository.js';
 import { Sale, SaleWithItems } from '../../domain/models.js';
 import { RegisterSaleDTO, SaleFilterDTO, SalesStatsDTO } from '../../domain/dtos.js';
 import { buildDateFilter } from '../../shared/helpers.js';
+import { BusinessRuleError } from '../../shared/errors.js';
 
 export class PrismaSaleRepository implements ISaleRepository {
   constructor(private prisma: PrismaClient) {}
@@ -102,10 +103,13 @@ export class PrismaSaleRepository implements ISaleRepository {
           },
         });
 
-        await tx.product.update({
-          where: { id: item.product_id },
+        const result = await tx.product.updateMany({
+          where: { id: item.product_id, stock: { gte: item.quantity } },
           data: { stock: { decrement: item.quantity } },
         });
+        if (result.count === 0) {
+          throw new BusinessRuleError(`Stock insuficiente para el producto ${item.product_id}`);
+        }
 
         await tx.inventoryMovement.create({
           data: {

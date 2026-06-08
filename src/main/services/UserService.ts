@@ -3,6 +3,8 @@ import { IUserRepository } from '../../domain/ports/IUserRepository.js';
 import { IAuditLogRepository } from '../../domain/ports/IAuditLogRepository.js';
 import { CreateUserDTO, UpdateUserDTO } from '../../domain/dtos.js';
 import { NotFoundError, ConflictError, BusinessRuleError, ValidationError } from '../../shared/errors.js';
+import { validatePassword } from '../../common/validation.js';
+import { logger } from '../../shared/logger.js';
 
 export class UserService {
   constructor(
@@ -14,7 +16,7 @@ export class UserService {
     try {
       return await this.userRepo.findAll();
     } catch (error: any) {
-      console.error('Get all users error:', error);
+      logger.error('Get all users error:', error);
       throw new Error('Error al obtener usuarios');
     }
   }
@@ -25,26 +27,35 @@ export class UserService {
       if (!user) throw new NotFoundError('Usuario');
       return user;
     } catch (error: any) {
-      console.error('Get user by ID error:', error);
+      logger.error('Get user by ID error:', error);
       if (error.code === 'P2025') throw new NotFoundError('Usuario');
       throw error;
     }
   }
 
-  async createUser(data: CreateUserDTO & { password: string }, createdBy: number) {
+  async createUser(data: CreateUserDTO & { password: string; question?: string; answer?: string }, createdBy: number) {
     try {
       const exists = await this.userRepo.exists(data.username);
       if (exists) throw new ConflictError(`El usuario '${data.username}' ya existe`);
 
-      if (data.password.length < 6) throw new ValidationError('La contraseña debe tener al menos 6 caracteres');
+      const pwCheck = validatePassword(data.password);
+      if (!pwCheck.valid) throw new ValidationError(pwCheck.error);
 
       const salt = await bcrypt.genSalt(10);
       const hashedPassword = await bcrypt.hash(data.password, salt);
+
+      let security_answer_hash: string | undefined;
+      if (data.question && data.answer) {
+        const answerSalt = await bcrypt.genSalt(10);
+        security_answer_hash = await bcrypt.hash(data.answer.toLowerCase().trim(), answerSalt);
+      }
 
       const user = await this.userRepo.create({
         username: data.username,
         password_hash: hashedPassword,
         role: data.role,
+        security_question: data.question || null,
+        security_answer_hash: security_answer_hash || null,
       });
 
       await this.auditLogRepo.create({
@@ -56,7 +67,7 @@ export class UserService {
 
       return user;
     } catch (error: any) {
-      console.error('Create user error:', error);
+      logger.error('Create user error:', error);
       if (error.code === 'P2002') throw new ConflictError('El nombre de usuario ya está en uso');
       throw error;
     }
@@ -80,7 +91,7 @@ export class UserService {
 
       return user;
     } catch (error: any) {
-      console.error('Update user error:', error);
+      logger.error('Update user error:', error);
       if (error.code === 'P2025') throw new NotFoundError('Usuario');
       throw error;
     }
@@ -104,7 +115,7 @@ export class UserService {
 
       return { success: true };
     } catch (error: any) {
-      console.error('Delete user error:', error);
+      logger.error('Delete user error:', error);
       if (error.code === 'P2025') throw new NotFoundError('Usuario');
       throw error;
     }
@@ -112,7 +123,8 @@ export class UserService {
 
   async changePassword(userId: number, newPassword: string, changedBy: number) {
     try {
-      if (newPassword.length < 6) throw new ValidationError('La contraseña debe tener al menos 6 caracteres');
+      const pwCheck = validatePassword(newPassword);
+      if (!pwCheck.valid) throw new ValidationError(pwCheck.error);
 
       const salt = await bcrypt.genSalt(10);
       const hashedPassword = await bcrypt.hash(newPassword, salt);
@@ -128,7 +140,7 @@ export class UserService {
 
       return { success: true };
     } catch (error: any) {
-      console.error('Change password error:', error);
+      logger.error('Change password error:', error);
       if (error.code === 'P2025') throw new NotFoundError('Usuario');
       throw error;
     }

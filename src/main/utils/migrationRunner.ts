@@ -2,6 +2,7 @@ import { app } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { logger } from '../../shared/logger.js';
 
 /**
  * Split a SQL script into individual statements.
@@ -75,10 +76,13 @@ function findSchemaSql(): string | null {
     candidates.push(path.join(process.resourcesPath, 'schema.sql'));
   }
 
-  // Dev path: relative to dist-electron/ (go up to project root)
+  // Dev / fallback paths
   try {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
-    candidates.push(path.join(currentDir, '..', 'prisma', 'schema.sql'));
+    // dist-electron/main/utils/ -> ../../.. -> project root -> prisma/schema.sql
+    candidates.push(path.join(currentDir, '..', '..', '..', 'prisma', 'schema.sql'));
+    // Also check relative to cwd (e.g. when running via tsx directly)
+    candidates.push(path.join(process.cwd(), 'prisma', 'schema.sql'));
   } catch { /* ignore */ }
 
   for (const candidate of candidates) {
@@ -111,21 +115,21 @@ async function isDatabaseInitialized(prisma: any): Promise<boolean> {
 export async function runMigrations(prisma: any): Promise<{ applied: boolean; error?: string }> {
   const alreadyInitialized = await isDatabaseInitialized(prisma);
   if (alreadyInitialized) {
-    console.log('[Migration] Database already initialized, skipping.');
+    logger.info('Database already initialized, skipping.');
     return { applied: false };
   }
 
   const schemaPath = findSchemaSql();
   if (!schemaPath) {
     const msg = 'schema.sql not found in any expected location';
-    console.error('[Migration] ' + msg);
+    logger.error(msg);
     return { applied: false, error: msg };
   }
 
-  console.log(`[Migration] Loading schema from ${schemaPath}`);
+  logger.info(`Loading schema from ${schemaPath}`);
   const sqlContent = fs.readFileSync(schemaPath, 'utf-8');
   const statements = splitSqlStatements(sqlContent);
-  console.log(`[Migration] Found ${statements.length} SQL statements to execute`);
+  logger.info(`Found ${statements.length} SQL statements to execute`);
 
   for (let i = 0; i < statements.length; i++) {
     const stmt = statements[i];
@@ -133,16 +137,27 @@ export async function runMigrations(prisma: any): Promise<{ applied: boolean; er
       await prisma.$executeRawUnsafe(stmt);
     } catch (err: any) {
       if (err.message && err.message.includes('already exists')) {
-        console.log(`[Migration] Skipping statement ${i + 1} (already exists): ${stmt.slice(0, 60)}...`);
+        logger.info(`Skipping statement ${i + 1} (already exists): ${stmt.slice(0, 60)}...`);
         continue;
       }
       const msg = `Migration failed at statement ${i + 1}: ${err.message || err}`;
-      console.error('[Migration] ' + msg);
-      console.error('[Migration] SQL: ' + stmt.slice(0, 200));
+      logger.error(msg);
+      logger.error(`SQL: ${stmt.slice(0, 200)}`);
       return { applied: false, error: msg };
     }
   }
 
-  console.log('[Migration] Schema applied successfully!');
+  logger.info('Schema applied successfully!');
+
+  // Refresh Prisma's schema cache by cycling the connection
+  try {
+    await prisma.$disconnect();
+    await prisma.$connect();
+    logger.info('Prisma connection refreshed');
+  } catch (e) {
+    logger.error({ err: e }, 'Failed to refresh Prisma connection');
+    return { applied: true, error: 'Migrations applied but failed to refresh connection' };
+  }
+
   return { applied: true };
 }
