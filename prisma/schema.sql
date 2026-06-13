@@ -70,6 +70,7 @@ CREATE TABLE "sales" (
     "total" REAL NOT NULL,
     "subtotal" REAL NOT NULL DEFAULT 0,
     "tax_amount" REAL NOT NULL DEFAULT 0,
+    "discount_total" REAL DEFAULT 0,
     "payment_method" TEXT DEFAULT 'CASH',
     "exchange_rate" REAL NOT NULL DEFAULT 0,
     "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -86,6 +87,11 @@ CREATE TABLE "sale_items" (
     "quantity" INTEGER NOT NULL,
     "unit_price" REAL NOT NULL,
     "purchase_price" REAL NOT NULL,
+    "discount_name" TEXT,
+    "discount_type" TEXT,
+    "discount_value" REAL,
+    "discount_amount" REAL DEFAULT 0,
+    "final_unit_price" REAL,
     "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" DATETIME NOT NULL,
     CONSTRAINT "sale_items_sale_id_fkey" FOREIGN KEY ("sale_id") REFERENCES "sales" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
@@ -156,6 +162,31 @@ CREATE TABLE "settings" (
     "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     "key" TEXT NOT NULL,
     "value" TEXT NOT NULL
+);
+
+-- CreateTable
+CREATE TABLE "discounts" (
+    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    "name" TEXT NOT NULL,
+    "type" TEXT NOT NULL,
+    "value" REAL NOT NULL,
+    "is_active" BOOLEAN NOT NULL DEFAULT true,
+    "applicable_to" TEXT NOT NULL DEFAULT 'ALL',
+    "category_id" INTEGER,
+    "min_purchase_amount" REAL,
+    "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" DATETIME NOT NULL,
+    CONSTRAINT "discounts_category_id_fkey" FOREIGN KEY ("category_id") REFERENCES "categories" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "product_discounts" (
+    "product_id" INTEGER NOT NULL,
+    "discount_id" INTEGER NOT NULL,
+
+    PRIMARY KEY ("product_id", "discount_id"),
+    CONSTRAINT "product_discounts_product_id_fkey" FOREIGN KEY ("product_id") REFERENCES "products" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT "product_discounts_discount_id_fkey" FOREIGN KEY ("discount_id") REFERENCES "discounts" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 -- CreateIndex

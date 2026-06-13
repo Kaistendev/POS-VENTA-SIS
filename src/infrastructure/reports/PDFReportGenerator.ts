@@ -156,6 +156,12 @@ export class PDFReportGenerator implements IReportGenerator {
       doc.text(`${item.quantity} x ${item.productName}`, 5, y);
       doc.text(`$ ${item.totalPrice.toFixed(2)}`, 75, y, { align: 'right' });
       y += 5;
+      if (item.discountName && item.discountAmount && item.discountAmount > 0) {
+        doc.setFontSize(6);
+        doc.text(`  Desc. ${item.discountName}: -$${item.discountAmount.toFixed(2)}`, 8, y);
+        y += 4;
+        doc.setFontSize(8);
+      }
     });
 
     doc.text('-'.repeat(32), 5, y + 2);
@@ -164,6 +170,11 @@ export class PDFReportGenerator implements IReportGenerator {
     doc.text(`Subtotal:`, 5, y);
     doc.text(`$ ${data.subtotal.toFixed(2)}`, 75, y, { align: 'right' });
     y += 5;
+    if (data.discountTotal && data.discountTotal > 0) {
+      doc.text(`Descuento:`, 5, y);
+      doc.text(`-$${data.discountTotal.toFixed(2)}`, 75, y, { align: 'right' });
+      y += 5;
+    }
     if (data.taxAmount > 0) {
       doc.text(`${data.taxType.toUpperCase()} (${(data.taxRate * 100).toFixed(1)}%):`, 5, y);
       doc.text(`$ ${data.taxAmount.toFixed(2)}`, 75, y, { align: 'right' });

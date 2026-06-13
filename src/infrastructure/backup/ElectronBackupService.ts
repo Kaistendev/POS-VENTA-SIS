@@ -6,7 +6,7 @@ import { promisify } from 'util';
 import { createGzip, createGunzip } from 'zlib';
 import { IBackupService } from '../../domain/ports/IBackupService.js';
 import { BackupEntry, BackupResult } from '../../domain/models.js';
-import { assertPathWithin } from '../../main/utils/pathValidation.js';
+import { assertPathWithin } from '../../backend/utils/pathValidation.js';
 import { logger } from '../../shared/logger.js';
 
 const pipelineAsync = promisify(pipeline);

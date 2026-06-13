@@ -14,10 +14,10 @@ import b from "jspdf-autotable";
 import x from "exceljs";
 import { ZodError as ee, z as S } from "zod";
 import C from "bcryptjs";
-import w from "node:crypto";
-import { existsSync as T, readFileSync as E, writeFileSync as D } from "node:fs";
-import { join as te } from "node:path";
-import { fileURLToPath as ne } from "url";
+import te from "node:crypto";
+import { existsSync as w, readFileSync as T, writeFileSync as E } from "node:fs";
+import { join as ne } from "node:path";
+import { fileURLToPath as D } from "url";
 import O from "node:fs/promises";
 //#region src/shared/logger.ts
 var k = f({
@@ -152,6 +152,13 @@ var ie = class {
 			orderBy: { created_at: "desc" },
 			take: t
 		});
+	}
+	async bulkUpdatePrice(e, t) {
+		let n = {};
+		return t !== void 0 && (n.category_id = t), (await this.prisma.product.updateMany({
+			where: n,
+			data: { price_sale: { multiply: 1 + e / 100 } }
+		})).count;
 	}
 }, ae = class {
 	constructor(e) {
@@ -320,6 +327,7 @@ var oe = class {
 				subtotal: e.subtotal,
 				tax_amount: e.tax_amount,
 				total: e.total,
+				discount_total: e.discount_total || 0,
 				payment_method: e.payment_method,
 				exchange_rate: e.exchange_rate || 0
 			} });
@@ -329,7 +337,12 @@ var oe = class {
 					product_id: r.product_id,
 					quantity: r.quantity,
 					unit_price: r.unit_price,
-					purchase_price: r.purchase_price
+					purchase_price: r.purchase_price,
+					discount_name: r.discount_name ?? null,
+					discount_type: r.discount_type ?? null,
+					discount_value: r.discount_value ?? null,
+					discount_amount: r.discount_amount ?? 0,
+					final_unit_price: r.final_unit_price ?? null
 				} }), (await t.product.updateMany({
 					where: {
 						id: r.product_id,
@@ -1059,19 +1072,122 @@ var oe = class {
 			recentMovements: o
 		};
 	}
+}, he = class {
+	constructor(e) {
+		this.prisma = e;
+	}
+	async findAll(e) {
+		let t = {};
+		return e && (t.is_active = !0), this.prisma.discount.findMany({
+			where: t,
+			include: { category: { select: {
+				id: !0,
+				name: !0
+			} } },
+			orderBy: { created_at: "desc" }
+		});
+	}
+	async findById(e) {
+		return await this.prisma.discount.findUnique({
+			where: { id: e },
+			include: {
+				category: { select: {
+					id: !0,
+					name: !0
+				} },
+				products: { include: { product: { select: {
+					id: !0,
+					name: !0,
+					sku: !0
+				} } } }
+			}
+		});
+	}
+	async findApplicableToProduct(e, t) {
+		let n = await this.prisma.product.findUnique({
+			where: { id: e },
+			select: { category_id: !0 }
+		});
+		if (!n) return [];
+		let r = await this.prisma.discount.findMany({ where: {
+			is_active: !0,
+			OR: [
+				{ applicable_to: "ALL" },
+				{
+					applicable_to: "CATEGORY",
+					category_id: n.category_id
+				},
+				{
+					applicable_to: "SPECIFIC",
+					products: { some: { product_id: e } }
+				}
+			]
+		} });
+		return t === void 0 ? r : r.filter((e) => e.min_purchase_amount === null || e.min_purchase_amount <= t);
+	}
+	async create(e) {
+		let { product_ids: t, ...n } = e;
+		return this.prisma.$transaction(async (e) => {
+			let r = await e.discount.create({ data: {
+				name: n.name,
+				type: n.type,
+				value: n.value,
+				is_active: n.is_active ?? !0,
+				applicable_to: n.applicable_to ?? "ALL",
+				category_id: n.category_id ?? null,
+				min_purchase_amount: n.min_purchase_amount ?? null
+			} });
+			return t && t.length > 0 && await e.productDiscount.createMany({ data: t.map((e) => ({
+				product_id: e,
+				discount_id: r.id
+			})) }), r;
+		});
+	}
+	async update(e, t) {
+		let { product_ids: n, ...r } = t;
+		return this.prisma.$transaction(async (t) => {
+			let i = await t.discount.update({
+				where: { id: e },
+				data: {
+					...r,
+					category_id: r.category_id ?? null,
+					min_purchase_amount: r.min_purchase_amount ?? null
+				}
+			});
+			return n !== void 0 && (await t.productDiscount.deleteMany({ where: { discount_id: e } }), n.length > 0 && await t.productDiscount.createMany({ data: n.map((t) => ({
+				product_id: t,
+				discount_id: e
+			})) })), i;
+		});
+	}
+	async delete(e) {
+		await this.prisma.discount.delete({ where: { id: e } });
+	}
+	async addProducts(e, t) {
+		await this.prisma.productDiscount.createMany({ data: t.map((t) => ({
+			product_id: t,
+			discount_id: e
+		})) });
+	}
+	async removeProducts(e, t) {
+		await this.prisma.productDiscount.deleteMany({ where: {
+			discount_id: e,
+			product_id: { in: t }
+		} });
+	}
 };
 //#endregion
-//#region src/main/utils/pathValidation.ts
-function he(e, t) {
+//#region src/backend/utils/pathValidation.ts
+function ge(e, t) {
 	let n = u.resolve(e), r = u.resolve(t);
 	return r === n || r.startsWith(n + u.sep);
 }
-function ge(e, t, n) {
-	if (!he(e, t)) throw Error(`${n || "Ruta"} no válida: debe estar dentro del directorio permitido`);
+function _e(e, t, n) {
+	if (!ge(e, t)) throw Error(`${n || "Ruta"} no válida: debe estar dentro del directorio permitido`);
 }
 //#endregion
 //#region src/infrastructure/backup/ElectronBackupService.ts
-var N = g(h), _e = class {
+var ve = g(h), ye = class {
 	getDbPath() {
 		if (!o.isPackaged) return u.resolve(process.cwd(), "prisma", "dev.sqlite3");
 		let e = o.getPath("userData");
@@ -1091,7 +1207,7 @@ var N = g(h), _e = class {
 				message: "Database file not found"
 			};
 			let n = this.getBackupDir(), r = `backup-${(/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-").split("T")[0]}${e ? `-${e}` : ""}.sqlite.gz`, i = u.join(n, r);
-			return await N(d.createReadStream(t), v(), d.createWriteStream(i)), {
+			return await ve(d.createReadStream(t), v(), d.createWriteStream(i)), {
 				success: !0,
 				path: r
 			};
@@ -1126,12 +1242,12 @@ var N = g(h), _e = class {
 				message: "Ruta absoluta no permitida. Use solo el nombre del archivo."
 			};
 			let n = u.join(t, e);
-			if (ge(t, n, "Archivo de backup"), !d.existsSync(n)) return {
+			if (_e(t, n, "Archivo de backup"), !d.existsSync(n)) return {
 				success: !1,
 				message: "Archivo de backup no encontrado"
 			};
 			let r = this.getDbPath();
-			return await this.createBackup("before-restore"), await N(d.createReadStream(n), _(), d.createWriteStream(r)), {
+			return await this.createBackup("before-restore"), await ve(d.createReadStream(n), _(), d.createWriteStream(r)), {
 				success: !0,
 				message: "Backup restaurado correctamente. Reinicia la aplicación."
 			};
@@ -1150,7 +1266,7 @@ var N = g(h), _e = class {
 				message: "Ruta absoluta no permitida. Use solo el nombre del archivo."
 			};
 			let n = u.join(t, e);
-			return ge(t, n, "Archivo de backup"), d.existsSync(n) ? (d.unlinkSync(n), { success: !0 }) : {
+			return _e(t, n, "Archivo de backup"), d.existsSync(n) ? (d.unlinkSync(n), { success: !0 }) : {
 				success: !1,
 				message: "Archivo de backup no encontrado"
 			};
@@ -1183,7 +1299,7 @@ var N = g(h), _e = class {
 			k.error({ err: e }, "Error cleaning up backups");
 		}
 	}
-}, ve = class {
+}, be = class {
 	async generateSalesReport(e, t, n = "Reporte de Ventas", r = !0) {
 		let i = new y({
 			unit: "mm",
@@ -1287,8 +1403,8 @@ var N = g(h), _e = class {
 			t.addImage(e.logoBase64, "PNG", 30, n, 20, 20), n += 22;
 		} catch {}
 		return t.setFontSize(10), t.text(e.businessName, 40, n, { align: "center" }), n += 5, t.setFontSize(7), e.businessAddress && (t.text(e.businessAddress, 40, n, { align: "center" }), n += 4), e.businessPhone && (t.text(`Tel: ${e.businessPhone}`, 40, n, { align: "center" }), n += 4), e.businessTaxId && (t.text(`RUC: ${e.businessTaxId}`, 40, n, { align: "center" }), n += 4), n += 3, t.setFontSize(8), t.text("=".repeat(32), 5, n), n += 4, t.text(`Ticket: #${e.saleId}`, 5, n), n += 4, t.text(`Fecha: ${e.createdAt.toLocaleString("es-PE")}`, 5, n), n += 4, t.text(`Cliente: ${e.clientName}`, 5, n), n += 4, e.clientDni && (t.text(`DNI: ${e.clientDni}`, 5, n), n += 4), e.clientTaxId && (t.text(`RUC: ${e.clientTaxId}`, 5, n), n += 4), t.text(`Pago: ${e.paymentMethod === "CASH" ? "EFECTIVO" : "TARJETA"}`, 5, n), n += 4, t.text("-".repeat(32), 5, n), n += 5, e.items.forEach((e) => {
-			t.text(`${e.quantity} x ${e.productName}`, 5, n), t.text(`$ ${e.totalPrice.toFixed(2)}`, 75, n, { align: "right" }), n += 5;
-		}), t.text("-".repeat(32), 5, n + 2), n += 6, t.setFontSize(8), t.text("Subtotal:", 5, n), t.text(`$ ${e.subtotal.toFixed(2)}`, 75, n, { align: "right" }), n += 5, e.taxAmount > 0 && (t.text(`${e.taxType.toUpperCase()} (${(e.taxRate * 100).toFixed(1)}%):`, 5, n), t.text(`$ ${e.taxAmount.toFixed(2)}`, 75, n, { align: "right" }), n += 5), t.setFontSize(10), t.text("TOTAL:", 5, n + 2), t.text(`$ ${e.total.toFixed(2)}`, 75, n + 2, { align: "right" }), n += 8, t.setFontSize(7), t.text(e.ticketFooter || "Gracias por su compra", 40, n, { align: "center" }), new Uint8Array(t.output("arraybuffer"));
+			t.text(`${e.quantity} x ${e.productName}`, 5, n), t.text(`$ ${e.totalPrice.toFixed(2)}`, 75, n, { align: "right" }), n += 5, e.discountName && e.discountAmount && e.discountAmount > 0 && (t.setFontSize(6), t.text(`  Desc. ${e.discountName}: -$${e.discountAmount.toFixed(2)}`, 8, n), n += 4, t.setFontSize(8));
+		}), t.text("-".repeat(32), 5, n + 2), n += 6, t.setFontSize(8), t.text("Subtotal:", 5, n), t.text(`$ ${e.subtotal.toFixed(2)}`, 75, n, { align: "right" }), n += 5, e.discountTotal && e.discountTotal > 0 && (t.text("Descuento:", 5, n), t.text(`-$${e.discountTotal.toFixed(2)}`, 75, n, { align: "right" }), n += 5), e.taxAmount > 0 && (t.text(`${e.taxType.toUpperCase()} (${(e.taxRate * 100).toFixed(1)}%):`, 5, n), t.text(`$ ${e.taxAmount.toFixed(2)}`, 75, n, { align: "right" }), n += 5), t.setFontSize(10), t.text("TOTAL:", 5, n + 2), t.text(`$ ${e.total.toFixed(2)}`, 75, n + 2, { align: "right" }), n += 8, t.setFontSize(7), t.text(e.ticketFooter || "Gracias por su compra", 40, n, { align: "center" }), new Uint8Array(t.output("arraybuffer"));
 	}
 	async generateCashCloseReport(e) {
 		let t = new y({
@@ -1320,7 +1436,7 @@ var N = g(h), _e = class {
 		];
 		return t.setTextColor(...i), t.setFontSize(12), t.text(`${r}: $ ${Math.abs(e.difference).toFixed(2)}`, 14, n), t.setTextColor(0, 0, 0), n += 8, t.setFontSize(8), t.setTextColor(100, 100, 100), t.text(`Estado: ${e.status === "PERFECT" ? "Cuadra Perfectamente" : e.status === "SURPLUS" ? "Sobrante detectado" : "Faltante detectado"}`, 14, n), n += 6, t.text("Firma del responsable: _______________________________", 14, n), new Uint8Array(t.output("arraybuffer"));
 	}
-}, ye = class {
+}, xe = class {
 	async generateSalesReport(e, t, n = "Reporte de Ventas", r = !0) {
 		let i = new x.Workbook();
 		i.creator = "POS Venta SIS", i.created = /* @__PURE__ */ new Date();
@@ -1664,7 +1780,7 @@ var N = g(h), _e = class {
 		let o = await t.xlsx.writeBuffer();
 		return new Uint8Array(o);
 	}
-}, P = S.object({
+}, N = S.object({
 	sku: S.string().min(1, "El SKU es obligatorio."),
 	name: S.string().min(1, "El nombre es obligatorio."),
 	description: S.string().optional(),
@@ -1674,35 +1790,36 @@ var N = g(h), _e = class {
 	price_sale: S.coerce.number().min(0, "El precio de venta no puede ser negativo."),
 	stock: S.coerce.number().int().optional(),
 	min_stock: S.coerce.number().int().min(0).optional().default(10)
-}), be = S.object({
+}), Se = S.object({
 	product_id: S.coerce.number().int().positive("El ID del producto es obligatorio."),
 	quantity: S.coerce.number().int().positive("La cantidad debe ser mayor a 0."),
-	unit_price: S.coerce.number().min(0, "El precio unitario no puede ser negativo.")
-}), F = S.object({
+	unit_price: S.coerce.number().min(0, "El precio unitario no puede ser negativo."),
+	discount_id: S.coerce.number().int().positive().optional()
+}), Ce = S.object({
 	cash_register_id: S.coerce.number().int().positive("El ID de la caja es obligatorio."),
 	client_id: S.coerce.number().int().optional(),
 	client_dni: S.string().optional(),
 	client_name: S.string().optional(),
 	payment_method: S.enum(["CASH", "CARD"]).default("CASH"),
-	items: S.array(be).min(1, "La venta debe tener al menos un producto.")
+	items: S.array(Se).min(1, "La venta debe tener al menos un producto.")
 });
 S.object({ opening_amount: S.coerce.number().min(0, "El monto de apertura no puede ser negativo.") }), S.object({
 	register_id: S.coerce.number().int().positive("El ID de la caja es obligatorio."),
 	closing_amount: S.coerce.number().min(0, "El monto de cierre no puede ser negativo.")
 });
-var I = S.object({
+var P = S.object({
 	dni: S.string().min(1, "El DNI/Documento es obligatorio."),
 	name: S.string().min(1, "El nombre es obligatorio."),
 	phone: S.string().optional().nullable(),
 	code: S.string().min(1, "El código de cliente es obligatorio."),
 	tax_id: S.string().optional().nullable()
-}), L = S.object({ name: S.string().min(1, "El nombre de la categoría es obligatorio.").max(255) });
+}), F = S.object({ name: S.string().min(1, "El nombre de la categoría es obligatorio.").max(255) });
 S.object({
 	product_id: S.coerce.number().int().positive("El ID del producto es obligatorio."),
 	type: S.enum(["ENTRADA", "SALIDA"], { errorMap: () => ({ message: "El tipo debe ser ENTRADA o SALIDA." }) }),
 	quantity: S.coerce.number().int().positive("La cantidad debe ser mayor a 0.")
 });
-var R = S.object({
+var I = S.object({
 	name: S.string().min(1, "El nombre del proveedor es obligatorio."),
 	ruc: S.string().optional().nullable(),
 	phone: S.string().optional().nullable(),
@@ -1716,19 +1833,19 @@ S.object({
 	email: S.string().email("Email inválido").optional().nullable().or(S.literal("")),
 	address: S.string().optional().nullable()
 });
-var xe = S.object({
+var we = S.object({
 	product_id: S.coerce.number().int().positive("El ID del producto es obligatorio."),
 	quantity: S.coerce.number().int().positive("La cantidad debe ser mayor a 0."),
 	unit_cost: S.coerce.number().min(0, "El costo unitario no puede ser negativo.")
-}), Se = S.object({
+}), Te = S.object({
 	supplier_id: S.coerce.number().int().positive("El ID del proveedor es obligatorio."),
-	items: S.array(xe).min(1, "La orden debe tener al menos un producto."),
+	items: S.array(we).min(1, "La orden debe tener al menos un producto."),
 	payment_status: S.enum([
 		"PENDING",
 		"PAID",
 		"CANCELED"
 	]).optional().default("PENDING")
-}), Ce = S.object({
+}), Ee = S.object({
 	username: S.string().min(1, "El nombre de usuario es obligatorio.").max(50),
 	password: S.string().min(8, "La contraseña debe tener al menos 8 caracteres, una mayúscula, un número y un carácter especial").regex(/[A-Z]/, "Debe contener al menos una mayúscula").regex(/[a-z]/, "Debe contener al menos una minúscula").regex(/[0-9]/, "Debe contener al menos un número").regex(/[!@#$%^&*()_\-+=<>?/{}~|]/, "Debe contener al menos un carácter especial"),
 	role: S.enum(["ADMIN", "VENDEDOR"], { errorMap: () => ({ message: "El rol debe ser ADMIN o VENDEDOR." }) }),
@@ -1739,7 +1856,23 @@ S.object({
 	username: S.string().min(1, "El nombre de usuario es obligatorio.").max(50).optional(),
 	role: S.enum(["ADMIN", "VENDEDOR"]).optional()
 });
-var we = S.record(S.enum([
+var De = S.object({
+	name: S.string().min(1, "El nombre del descuento es obligatorio."),
+	type: S.enum(["PERCENTAGE", "FIXED_AMOUNT"], { errorMap: () => ({ message: "El tipo debe ser PERCENTAGE o FIXED_AMOUNT." }) }),
+	value: S.coerce.number().min(0, "El valor no puede ser negativo."),
+	is_active: S.boolean().optional(),
+	applicable_to: S.enum([
+		"ALL",
+		"CATEGORY",
+		"SPECIFIC"
+	]).optional(),
+	category_id: S.coerce.number().int().positive().optional().nullable(),
+	product_ids: S.array(S.coerce.number().int().positive()).optional(),
+	min_purchase_amount: S.coerce.number().min(0).optional().nullable()
+}), Oe = S.object({
+	percentage: S.coerce.number().int("Debe ser un número entero.").min(-100, "Mínimo -100%.").max(1e3, "Máximo 1000%."),
+	category_id: S.coerce.number().int().positive().optional()
+}), ke = S.record(S.enum([
 	"business_name",
 	"business_phone",
 	"business_address",
@@ -1750,7 +1883,7 @@ var we = S.record(S.enum([
 	"tax_rate",
 	"tax_type",
 	"tax_included"
-]), S.string()).refine((e) => Object.keys(e).length > 0, { message: "Debe enviar al menos una configuración." }), Te = class {
+]), S.string()).refine((e) => Object.keys(e).length > 0, { message: "Debe enviar al menos una configuración." }), Ae = class {
 	constructor(e, t, n) {
 		this.productRepo = e, this.categoryRepo = t, this.auditLogRepo = n;
 	}
@@ -1766,7 +1899,7 @@ var we = S.record(S.enum([
 		return this.productRepo.findLowStock();
 	}
 	async createProduct(e, r = 1) {
-		let i = P.parse(e);
+		let i = N.parse(e);
 		if (await this.productRepo.findBySku(i.sku)) throw new n(`El SKU ${i.sku} ya se encuentra registrado.`);
 		if (i.category_id && !await this.categoryRepo.findById(i.category_id)) throw new t("Categoría");
 		let a = i.stock || 0, o = await this.productRepo.create(i);
@@ -1788,7 +1921,7 @@ var we = S.record(S.enum([
 	async updateProduct(e, r, i = 1) {
 		let a = await this.productRepo.findById(e);
 		if (!a) throw new t("Producto");
-		let o = P.parse(r);
+		let o = N.parse(r);
 		if (o.sku !== a.sku && await this.productRepo.findBySku(o.sku)) throw new n(`El SKU ${o.sku} ya se encuentra registrado.`);
 		if (o.category_id && !await this.categoryRepo.findById(o.category_id)) throw new t("Categoría");
 		let s = await this.productRepo.update(e, o);
@@ -1852,7 +1985,22 @@ var we = S.record(S.enum([
 		if (!await this.productRepo.findById(e)) throw new t("Producto");
 		return this.productRepo.getMovements(e, n);
 	}
-}, Ee = class {
+	async bulkUpdatePrice(n, r = 1) {
+		let i = n.percentage;
+		if (!Number.isInteger(i) || i < -100 || i > 1e3) throw new e("El porcentaje debe ser un entero entre -100 y 1000.");
+		if (n.category_id && !await this.categoryRepo.findById(n.category_id)) throw new t("Categoría");
+		let a = await this.productRepo.bulkUpdatePrice(i, n.category_id);
+		return await this.auditLogRepo.create({
+			userId: r,
+			action: "BULK_UPDATE_PRICE",
+			entity: "products",
+			entity_id: 0
+		}), {
+			success: !0,
+			updatedCount: a
+		};
+	}
+}, je = class {
 	constructor(e, t) {
 		this.clientRepo = e, this.auditLogRepo = t;
 	}
@@ -1863,7 +2011,7 @@ var we = S.record(S.enum([
 		return await M(() => this.clientRepo.findById(e), "Cliente", e);
 	}
 	async createClient(e, t = 1) {
-		let r = I.parse(e);
+		let r = P.parse(e);
 		if (await this.clientRepo.findByDni(r.dni)) throw new n(`El DNI ${r.dni} ya se encuentra registrado.`);
 		if (await this.clientRepo.findByCode(r.code)) throw new n(`El código ${r.code} ya se encuentra registrado.`);
 		if (r.tax_id && await this.clientRepo.findByTaxId(r.tax_id)) throw new n(`El RUC ${r.tax_id} ya se encuentra registrado.`);
@@ -1880,7 +2028,7 @@ var we = S.record(S.enum([
 	}
 	async updateClient(e, t, r = 1) {
 		await M(() => this.clientRepo.findById(e), "Cliente", e);
-		let i = I.parse(t), a = await this.clientRepo.findByDni(i.dni);
+		let i = P.parse(t), a = await this.clientRepo.findByDni(i.dni);
 		if (a && a.id !== e) throw new n(`El DNI ${i.dni} ya se encuentra registrado.`);
 		let o = await this.clientRepo.findByCode(i.code);
 		if (o && o.id !== e) throw new n(`El código ${i.code} ya se encuentra registrado.`);
@@ -1910,9 +2058,9 @@ var we = S.record(S.enum([
 			entity_id: e
 		}), { success: !0 };
 	}
-}, De = class {
-	constructor(e, t, n, r, i, a, o) {
-		this.saleRepo = e, this.productRepo = t, this.clientRepo = n, this.cashRegisterRepo = r, this.settingsRepo = i, this.auditLogRepo = a, this.dashboardService = o;
+}, Me = class {
+	constructor(e, t, n, r, i, a, o, s) {
+		this.saleRepo = e, this.productRepo = t, this.clientRepo = n, this.cashRegisterRepo = r, this.settingsRepo = i, this.auditLogRepo = a, this.discountRepo = o, this.dashboardService = s;
 	}
 	async getAllSales(e, t, n, r) {
 		let i = {};
@@ -1933,7 +2081,7 @@ var we = S.record(S.enum([
 		return this.saleRepo.findLast();
 	}
 	async registerSale(e, n, r = 1) {
-		let a = F.parse({
+		let a = Ce.parse({
 			...e,
 			items: n
 		});
@@ -1954,34 +2102,50 @@ var we = S.record(S.enum([
 			if (!n) throw new t("Producto", e.product_id);
 			if (n.stock < e.quantity) throw new i(`Stock insuficiente para "${n.name}". Stock actual: ${n.stock}, Cantidad solicitada: ${e.quantity}`);
 		}
-		let u = a.items.map((e) => {
-			let t = l.get(e.product_id);
+		let u = await Promise.all(a.items.map(async (e) => {
+			let t = l.get(e.product_id), n = 0, r = e.unit_price, i = null, a = null, o = null;
+			if (e.discount_id) {
+				let t = await this.discountRepo.findById(e.discount_id);
+				if (t && t.is_active) {
+					i = t.name, a = t.type, o = t.value;
+					let s = e.unit_price * e.quantity;
+					n = t.type === "PERCENTAGE" ? s * (t.value / 100) : Math.min(t.value, s), n = parseFloat(n.toFixed(2)), r = parseFloat(((s - n) / e.quantity).toFixed(2));
+				}
+			}
 			return {
 				product_id: e.product_id,
 				quantity: e.quantity,
 				unit_price: e.unit_price,
-				purchase_price: t?.price_purchase || 0
+				purchase_price: t?.price_purchase || 0,
+				discount_name: i,
+				discount_type: a,
+				discount_value: o,
+				discount_amount: n,
+				final_unit_price: r
 			};
-		}), d = u.reduce((e, t) => e + t.unit_price * t.quantity, 0), f = await this.settingsRepo.getTaxSettings(), p = d, m = 0, h = d;
-		f.taxType !== "none" && f.taxRate > 0 && (m = parseFloat((d * f.taxRate).toFixed(2)), h = parseFloat((p + m).toFixed(2)));
-		let g = {
+		})), d = u.reduce((e, t) => e + t.unit_price * t.quantity, 0), f = u.reduce((e, t) => e + (t.discount_amount || 0), 0), p = await this.settingsRepo.getTaxSettings(), m = d - f;
+		m = parseFloat(m.toFixed(2));
+		let h = 0, g = m;
+		p.taxType !== "none" && p.taxRate > 0 && (h = parseFloat((m * p.taxRate).toFixed(2)), g = parseFloat((m + h).toFixed(2)));
+		let _ = {
 			cash_register_id: a.cash_register_id,
 			client_id: o || 1,
-			subtotal: p,
-			tax_amount: m,
-			total: h,
+			subtotal: m,
+			tax_amount: h,
+			total: g,
+			discount_total: f,
 			items: u,
 			payment_method: a.payment_method,
 			exchange_rate: e.exchange_rate || 0
-		}, _ = await this.saleRepo.registerSale(g);
+		}, v = await this.saleRepo.registerSale(_);
 		return this.dashboardService.invalidateCache(), await this.auditLogRepo.create({
 			userId: r,
 			action: "CREATE_SALE",
 			entity: "sales",
-			entity_id: _
+			entity_id: v
 		}), {
 			success: !0,
-			id: _
+			id: v
 		};
 	}
 	async cancelSale(e, n = 1) {
@@ -1993,7 +2157,7 @@ var we = S.record(S.enum([
 			entity_id: e
 		}), { success: !0 };
 	}
-}, Oe = class {
+}, Ne = class {
 	constructor(e, t) {
 		this.cashRegisterRepo = e, this.auditLogRepo = t;
 	}
@@ -2047,7 +2211,7 @@ var we = S.record(S.enum([
 	async getDailySummary(e) {
 		return this.cashRegisterRepo.getDailySummary(e);
 	}
-}, ke = class {
+}, Pe = class {
 	constructor(e, t) {
 		this.supplierRepo = e, this.auditLogRepo = t;
 	}
@@ -2112,7 +2276,7 @@ var we = S.record(S.enum([
 			throw k.error("Delete supplier error:", e), e.code === "P2025" ? new t("Proveedor") : e;
 		}
 	}
-}, Ae = class {
+}, Fe = class {
 	constructor(e, t, n, r) {
 		this.purchaseRepo = e, this.supplierRepo = t, this.productRepo = n, this.auditLogRepo = r;
 	}
@@ -2179,7 +2343,7 @@ var we = S.record(S.enum([
 			throw k.error("Cancel purchase error:", e), e.code === "P2025" ? new t("Compra") : e;
 		}
 	}
-}, je = class {
+}, Ie = class {
 	constructor(e) {
 		this.settingsRepo = e;
 	}
@@ -2198,19 +2362,19 @@ var we = S.record(S.enum([
 	async updateTaxSettings(e, t, n) {
 		return await this.settingsRepo.updateTaxSettings(e, t, n), { success: !0 };
 	}
-}, Me = 8, Ne = /[A-Z]/, Pe = /[a-z]/, Fe = /[0-9]/, Ie = /[!@#$%^&*()_\-+=<>?/{}~|]/, Le = `La contraseña debe tener al menos ${Me} caracteres, una mayúscula, un número y un carácter especial`;
-function z(e) {
-	return e.length < Me || !Ne.test(e) || !Pe.test(e) || !Fe.test(e) || !Ie.test(e) ? {
+}, Le = 8, Re = /[A-Z]/, ze = /[a-z]/, Be = /[0-9]/, Ve = /[!@#$%^&*()_\-+=<>?/{}~|]/, He = `La contraseña debe tener al menos ${Le} caracteres, una mayúscula, un número y un carácter especial`;
+function L(e) {
+	return e.length < Le || !Re.test(e) || !ze.test(e) || !Be.test(e) || !Ve.test(e) ? {
 		valid: !1,
-		error: Le
+		error: He
 	} : {
 		valid: !0,
 		error: ""
 	};
 }
 //#endregion
-//#region src/main/services/UserService.ts
-var Re = class {
+//#region src/backend/services/UserService.ts
+var Ue = class {
 	constructor(e, t) {
 		this.userRepo = e, this.auditLogRepo = t;
 	}
@@ -2233,7 +2397,7 @@ var Re = class {
 	async createUser(t, r) {
 		try {
 			if (await this.userRepo.exists(t.username)) throw new n(`El usuario '${t.username}' ya existe`);
-			let i = z(t.password);
+			let i = L(t.password);
 			if (!i.valid) throw new e(i.error);
 			let a = await C.genSalt(10), o = await C.hash(t.password, a), s;
 			if (t.question && t.answer) {
@@ -2287,7 +2451,7 @@ var Re = class {
 	}
 	async changePassword(n, r, i) {
 		try {
-			let t = z(r);
+			let t = L(r);
 			if (!t.valid) throw new e(t.error);
 			let a = await C.genSalt(10), o = await C.hash(r, a);
 			return await this.userRepo.update(n, { password_hash: o }), await this.auditLogRepo.create({
@@ -2300,42 +2464,42 @@ var Re = class {
 			throw k.error("Change password error:", e), e.code === "P2025" ? new t("Usuario") : e;
 		}
 	}
-}, ze = 5, Be = 900 * 1e3, B = /* @__PURE__ */ new Map();
-function Ve(e) {
-	let t = B.get(e);
+}, We = 5, R = 900 * 1e3, z = /* @__PURE__ */ new Map();
+function Ge(e) {
+	let t = z.get(e);
 	return t || (t = {
 		count: 0,
 		firstAttempt: Date.now()
-	}, B.set(e, t)), t;
+	}, z.set(e, t)), t;
 }
-function He(e) {
-	let t = Ve(e), n = Date.now() - t.firstAttempt;
-	if (t.count >= ze) {
-		if (n < Be) return {
+function Ke(e) {
+	let t = Ge(e), n = Date.now() - t.firstAttempt;
+	if (t.count >= We) {
+		if (n < R) return {
 			allowed: !1,
 			remainingAttempts: 0,
 			locked: !0,
-			lockoutRemainingMs: Be - n
+			lockoutRemainingMs: R - n
 		};
 		t.count = 0, t.firstAttempt = Date.now();
 	}
 	return {
 		allowed: !0,
-		remainingAttempts: ze - t.count,
+		remainingAttempts: We - t.count,
 		locked: !1,
 		lockoutRemainingMs: 0
 	};
 }
-function V(e) {
-	let t = Ve(e);
+function B(e) {
+	let t = Ge(e);
 	t.count += 1, t.count === 1 && (t.firstAttempt = Date.now());
 }
-function Ue(e) {
-	B.delete(e);
+function qe(e) {
+	z.delete(e);
 }
 //#endregion
-//#region src/main/services/AuthService.ts
-var H = /* @__PURE__ */ new Map(), We = class {
+//#region src/backend/services/AuthService.ts
+var V = /* @__PURE__ */ new Map(), Je = class {
 	constructor(e) {
 		this.userRepo = e;
 	}
@@ -2367,8 +2531,8 @@ var H = /* @__PURE__ */ new Map(), We = class {
 				success: !1,
 				error: "Respuesta incorrecta"
 			};
-			let r = w.randomUUID();
-			return H.set(r, {
+			let r = te.randomUUID();
+			return V.set(r, {
 				username: e,
 				expiresAt: Date.now() + 600 * 1e3
 			}), {
@@ -2383,19 +2547,19 @@ var H = /* @__PURE__ */ new Map(), We = class {
 		}
 	}
 	async resetPassword(e, t) {
-		let n = H.get(e);
-		if (!n || n.expiresAt < Date.now()) return H.delete(e), {
+		let n = V.get(e);
+		if (!n || n.expiresAt < Date.now()) return V.delete(e), {
 			success: !1,
 			error: "Token inválido o expirado"
 		};
-		let r = z(t);
+		let r = L(t);
 		if (!r.valid) return {
 			success: !1,
 			error: r.error
 		};
 		try {
 			let r = await C.genSalt(10), i = await C.hash(t, r);
-			return await this.userRepo.updateByUsername(n.username, { password_hash: i }), H.delete(e), { success: !0 };
+			return await this.userRepo.updateByUsername(n.username, { password_hash: i }), V.delete(e), { success: !0 };
 		} catch (e) {
 			return k.error({ err: e }, "Reset password error"), {
 				success: !1,
@@ -2418,7 +2582,7 @@ var H = /* @__PURE__ */ new Map(), We = class {
 		}
 	}
 	async login(e, t) {
-		let n = He(e);
+		let n = Ke(e);
 		if (!n.allowed) {
 			let e = Math.ceil(n.lockoutRemainingMs / 6e4);
 			return {
@@ -2431,13 +2595,13 @@ var H = /* @__PURE__ */ new Map(), We = class {
 		}
 		try {
 			let r = await this.userRepo.findByUsername(e);
-			if (!r) return V(e), {
+			if (!r) return B(e), {
 				success: !1,
 				error: "Usuario no encontrado",
 				remainingAttempts: n.remainingAttempts - 1
 			};
 			if (!await C.compare(t, r.password_hash)) {
-				V(e);
+				B(e);
 				let t = n.remainingAttempts - 1;
 				return {
 					success: !1,
@@ -2445,14 +2609,14 @@ var H = /* @__PURE__ */ new Map(), We = class {
 					remainingAttempts: t
 				};
 			}
-			Ue(e);
+			qe(e);
 			let { password_hash: i, ...a } = r;
 			return {
 				success: !0,
 				user: a
 			};
 		} catch (t) {
-			return k.error({ err: t }, "Login error"), t.code === "P2025" ? (V(e), {
+			return k.error({ err: t }, "Login error"), t.code === "P2025" ? (B(e), {
 				success: !1,
 				error: "Usuario no encontrado",
 				remainingAttempts: 0
@@ -2468,7 +2632,7 @@ var H = /* @__PURE__ */ new Map(), We = class {
 				success: !1,
 				error: `El usuario '${e.username}' ya existe`
 			};
-			let t = z(e.password);
+			let t = L(e.password);
 			if (!t.valid) return {
 				success: !1,
 				error: t.error
@@ -2516,7 +2680,7 @@ var H = /* @__PURE__ */ new Map(), We = class {
 				success: !1,
 				error: "Contraseña actual incorrecta"
 			};
-			let i = z(n);
+			let i = L(n);
 			if (!i.valid) return {
 				success: !1,
 				error: i.error
@@ -2530,7 +2694,7 @@ var H = /* @__PURE__ */ new Map(), We = class {
 			};
 		}
 	}
-}, Ge = class {
+}, Ye = class {
 	constructor(e, t) {
 		this.categoryRepo = e, this.auditLogRepo = t;
 	}
@@ -2573,7 +2737,7 @@ var H = /* @__PURE__ */ new Map(), We = class {
 			entity_id: e
 		}), { success: !0 };
 	}
-}, Ke = class {
+}, Xe = class {
 	constructor(e) {
 		this.adapter = e;
 	}
@@ -2595,12 +2759,12 @@ var H = /* @__PURE__ */ new Map(), We = class {
 	async cleanupOldBackups(e) {
 		return this.adapter.cleanupOldBackups(e);
 	}
-}, qe = "dashboard:stats", Je = class {
+}, Ze = "dashboard:stats", Qe = class {
 	constructor(e, t) {
 		this.repo = e, this.cache = t;
 	}
 	async getStats(e, t) {
-		return e || t ? this.repo.getStats(e, t) : this.cache.getOrSet(qe, () => this.repo.getStats());
+		return e || t ? this.repo.getStats(e, t) : this.cache.getOrSet(Ze, () => this.repo.getStats());
 	}
 	async getWeeklySales(e) {
 		return this.repo.getWeeklySales(e);
@@ -2629,7 +2793,7 @@ var H = /* @__PURE__ */ new Map(), We = class {
 	invalidateCache() {
 		this.cache.invalidate();
 	}
-}, Ye = class {
+}, $e = class {
 	cache = /* @__PURE__ */ new Map();
 	defaultTTL;
 	constructor(e = 3e4) {
@@ -2653,7 +2817,7 @@ var H = /* @__PURE__ */ new Map(), We = class {
 	get size() {
 		return this.cache.size;
 	}
-}, Xe = class {
+}, et = class {
 	constructor(e, t, n, r, i, a, o) {
 		this.pdfGenerator = e, this.excelGenerator = t, this.dashboardService = n, this.saleService = r, this.productService = i, this.cashRegisterService = a, this.settingsService = o;
 	}
@@ -2743,7 +2907,10 @@ var H = /* @__PURE__ */ new Map(), We = class {
 			quantity: e.quantity,
 			productName: e.product?.name ?? "Producto",
 			unitPrice: Number(e.unit_price),
-			totalPrice: Number(e.unit_price) * e.quantity
+			totalPrice: Number(e.unit_price) * e.quantity,
+			discountName: e.discount_name ?? null,
+			discountAmount: e.discount_amount == null ? null : Number(e.discount_amount),
+			finalPrice: e.final_unit_price == null ? null : Number(e.final_unit_price) * e.quantity
 		})), i = await this.settingsService.getTaxSettings(), a = {
 			saleId: t.id,
 			businessName: n.business_name || "INVENTARIO-POS",
@@ -2759,6 +2926,7 @@ var H = /* @__PURE__ */ new Map(), We = class {
 			paymentMethod: t.payment_method ?? "CASH",
 			items: r,
 			subtotal: Number(t.subtotal),
+			discountTotal: t.discount_total == null ? void 0 : Number(t.discount_total),
 			taxAmount: Number(t.tax_amount),
 			taxType: i.taxType || "iva",
 			taxRate: i.taxRate || 0,
@@ -2797,12 +2965,12 @@ var H = /* @__PURE__ */ new Map(), We = class {
 			cash_close: "Reporte de Cierre de Caja"
 		}[e] ?? "Reporte";
 	}
-}, Ze = "scheduler_", Qe = class {
+}, H = "scheduler_", tt = class {
 	dailyTimer = null;
 	weeklyTimer = null;
 	statePath;
 	constructor(e, t) {
-		this.reportService = e, this.backupService = t, this.statePath = te(process.cwd(), "scheduler-state.json");
+		this.reportService = e, this.backupService = t, this.statePath = ne(process.cwd(), "scheduler-state.json");
 	}
 	start() {
 		k.info("Starting scheduled tasks"), this.scheduleDailyReport(), this.scheduleWeeklyReport(), this.scheduleDailyBackup();
@@ -2859,7 +3027,7 @@ var H = /* @__PURE__ */ new Map(), We = class {
 	}
 	getLastRun(e) {
 		try {
-			return T(this.statePath) ? JSON.parse(E(this.statePath, "utf-8"))[Ze + e] ?? "" : "";
+			return w(this.statePath) ? JSON.parse(T(this.statePath, "utf-8"))[H + e] ?? "" : "";
 		} catch {
 			return "";
 		}
@@ -2867,51 +3035,91 @@ var H = /* @__PURE__ */ new Map(), We = class {
 	setLastRun(e, t) {
 		try {
 			let n = {};
-			T(this.statePath) && (n = JSON.parse(E(this.statePath, "utf-8"))), n[Ze + e] = t, D(this.statePath, JSON.stringify(n, null, 2));
+			w(this.statePath) && (n = JSON.parse(T(this.statePath, "utf-8"))), n[H + e] = t, E(this.statePath, JSON.stringify(n, null, 2));
 		} catch {}
 	}
 	getWeekNumber(e) {
 		let t = new Date(e.getFullYear(), 0, 1), n = e.getTime() - t.getTime();
 		return Math.ceil((n / 864e5 + t.getDay() + 1) / 7);
 	}
+}, nt = class {
+	constructor(e) {
+		this.discountRepo = e;
+	}
+	async getAllDiscounts(e) {
+		return this.discountRepo.findAll(e);
+	}
+	async getDiscountById(e) {
+		let n = await this.discountRepo.findById(e);
+		if (!n) throw new t("Descuento");
+		return n;
+	}
+	async createDiscount(e, t = 1) {
+		return {
+			success: !0,
+			id: (await this.discountRepo.create(e)).id
+		};
+	}
+	async updateDiscount(e, t) {
+		return await this.getDiscountById(e), {
+			success: !0,
+			discount: await this.discountRepo.update(e, t)
+		};
+	}
+	async deleteDiscount(e) {
+		return await this.getDiscountById(e), await this.discountRepo.delete(e), { success: !0 };
+	}
+	async getApplicableDiscounts(e, t) {
+		return this.discountRepo.findApplicableToProduct(e, t);
+	}
+	calculateDiscount(e, t, n) {
+		let r = e.price_sale * n, i;
+		i = t.type === "PERCENTAGE" ? r * (t.value / 100) : Math.min(t.value, r), i = parseFloat(i.toFixed(2));
+		let a = r - i;
+		return {
+			finalUnitPrice: parseFloat((a / n).toFixed(2)),
+			discountAmount: i
+		};
+	}
 };
 //#endregion
-//#region src/main/di/container.ts
-function $e(e) {
-	let t = new ie(e), n = new ae(e), r = new oe(e), i = new se(e), a = new ce(e), o = new le(e), s = new ue(e), c = new de(e), l = new fe(e), u = new pe(e), d = new me(e), f = new Ye(), p = new _e(), m = new ve(), h = new ye(), g = new Je(d, f), _ = new Te(t, l, u), v = new Ee(n, u), y = new Oe(i, u), b = new je(s), x = new Re(c, u), ee = new We(c), S = new ke(a, u), C = new Ae(o, a, t, u), w = new De(r, t, n, i, s, u, g), T = new Ke(p), E = new Ge(l, u), D = new Xe(m, h, g, w, _, y, b);
+//#region src/backend/di/container.ts
+function rt(e) {
+	let t = new ie(e), n = new ae(e), r = new oe(e), i = new se(e), a = new ce(e), o = new le(e), s = new ue(e), c = new de(e), l = new fe(e), u = new pe(e), d = new me(e), f = new he(e), p = new $e(), m = new ye(), h = new be(), g = new xe(), _ = new Qe(d, p), v = new Ae(t, l, u), y = new je(n, u), b = new Ne(i, u), x = new Ie(s), ee = new Ue(c, u), S = new Je(c), C = new Pe(a, u), te = new Fe(o, a, t, u), w = new nt(f), T = new Me(r, t, n, i, s, u, f, _), E = new Xe(m), ne = new Ye(l, u), D = new et(h, g, _, T, v, b, x);
 	return {
 		prisma: e,
 		userRepo: c,
-		productService: _,
-		clientService: v,
-		saleService: w,
-		cashRegisterService: y,
-		settingsService: b,
-		userService: x,
-		authService: ee,
-		supplierService: S,
-		purchaseService: C,
-		categoryService: E,
-		dashboardService: g,
-		backupService: T,
+		productService: v,
+		clientService: y,
+		saleService: T,
+		cashRegisterService: b,
+		settingsService: x,
+		userService: ee,
+		authService: S,
+		supplierService: C,
+		purchaseService: te,
+		categoryService: ne,
+		dashboardService: _,
+		backupService: E,
 		reportService: D,
-		schedulerService: new Qe(D, T),
-		cacheService: f
+		schedulerService: new tt(D, E),
+		discountService: w,
+		cacheService: p
 	};
 }
 //#endregion
-//#region src/main/di/registry.ts
+//#region src/backend/di/registry.ts
 var U = null;
-function et() {
+function it() {
 	if (!U) throw Error("Container not initialized");
 	return U;
 }
-function tt(e) {
+function at(e) {
 	U = e;
 }
 //#endregion
-//#region src/main/utils/ipcWrapper.ts
-function nt(t) {
+//#region src/backend/utils/ipcWrapper.ts
+function ot(t) {
 	return t instanceof ee ? {
 		success: !1,
 		message: "Error de validación: " + t.issues.map((e) => e.message).join(", "),
@@ -2953,24 +3161,24 @@ function G(e, t) {
 				data: n
 			};
 		} catch (e) {
-			return nt(e);
+			return ot(e);
 		}
 	};
 }
 //#endregion
-//#region src/main/auth/session.ts
+//#region src/backend/auth/session.ts
 var K = null;
-function rt(e) {
+function st(e) {
 	K = e;
 }
 function q() {
 	return K;
 }
-function it() {
+function ct() {
 	K = null;
 }
 //#endregion
-//#region src/main/auth/authorize.ts
+//#region src/backend/auth/authorize.ts
 var J = class extends r {
 	code = "UNAUTHORIZED";
 	constructor() {
@@ -2993,11 +3201,11 @@ function X(...e) {
 	};
 }
 //#endregion
-//#region src/main/ipc.ts
+//#region src/backend/ipc.ts
 var Z = new Proxy({}, { get(e, t) {
-	return et()[t];
+	return it()[t];
 } });
-function at() {
+function lt() {
 	c.handle("dialog:showConfirm", async (e, t) => (await s.showMessageBox({
 		type: "question",
 		buttons: ["Sí", "No"],
@@ -3093,7 +3301,7 @@ function at() {
 			let e = q();
 			if (!e) throw new J();
 			if (e.role !== "ADMIN") throw new Y(["ADMIN"]);
-			let n = we.safeParse(t);
+			let n = ke.safeParse(t);
 			return n.success ? (await Z.settingsService.updateSettings(n.data), k.info("Settings saved successfully"), { success: !0 }) : {
 				success: !1,
 				message: "Error de validación: " + n.error.issues.map((e) => e.message).join(", ")
@@ -3140,7 +3348,7 @@ function at() {
 	}), c.handle("cash:open", G(X("ADMIN")((e, t) => Z.cashRegisterService.openRegister(e, t)))), c.handle("cash:close", G(X("ADMIN")((e, t, n) => Z.cashRegisterService.closeRegister(e, t, n)))), c.handle("auth:login", async (e, t, n) => {
 		try {
 			let e = await Z.authService.login(t, n);
-			return e.success && e.user && rt({
+			return e.success && e.user && st({
 				id: e.user.id,
 				username: e.user.username,
 				role: e.user.role
@@ -3148,7 +3356,7 @@ function at() {
 		} catch (e) {
 			return k.error("[Auth] Login error:", e), W(e, "Error de autenticación");
 		}
-	}), c.handle("auth:logout", async () => (it(), { success: !0 })), c.handle("auth:checkSession", async () => {
+	}), c.handle("auth:logout", async () => (ct(), { success: !0 })), c.handle("auth:checkSession", async () => {
 		let e = q();
 		return {
 			authenticated: !!e,
@@ -3204,7 +3412,7 @@ function at() {
 				success: !1,
 				message: e.error || "Error al crear el usuario"
 			};
-			rt({
+			st({
 				id: n.id,
 				username: n.username,
 				role: n.role
@@ -3239,7 +3447,7 @@ function at() {
 		} catch (e) {
 			return k.error("[Clients] getById error:", e), W(e, "Error al obtener cliente");
 		}
-	}), c.handle("clients:create", G((e, t) => Z.clientService.createClient(e, t), I)), c.handle("clients:update", G((e, t, n) => Z.clientService.updateClient(e, t, n))), c.handle("clients:delete", async (e, t, n) => {
+	}), c.handle("clients:create", G((e, t) => Z.clientService.createClient(e, t), P)), c.handle("clients:update", G((e, t, n) => Z.clientService.updateClient(e, t, n))), c.handle("clients:delete", async (e, t, n) => {
 		try {
 			return await Z.clientService.deleteClient(t, n);
 		} catch (e) {
@@ -3263,7 +3471,7 @@ function at() {
 		} catch (e) {
 			return k.error("Get low stock products error:", e), [];
 		}
-	}), c.handle("products:create", G((e, t) => Z.productService.createProduct(e, t), P)), c.handle("products:update", G((e, t, n) => Z.productService.updateProduct(e, t, n))), c.handle("products:delete", async (e, t, n) => {
+	}), c.handle("products:create", G((e, t) => Z.productService.createProduct(e, t), N)), c.handle("products:update", G((e, t, n) => Z.productService.updateProduct(e, t, n))), c.handle("products:delete", async (e, t, n) => {
 		try {
 			return await Z.productService.deleteProduct(t, n);
 		} catch (e) {
@@ -3287,7 +3495,37 @@ function at() {
 		} catch (e) {
 			return k.error("[Products] getMovements error:", e), W(e, "Error al obtener movimientos");
 		}
-	}), c.handle("sales:getAll", async (e, t, n, r, i) => {
+	}), c.handle("discounts:getAll", async (e, t) => {
+		try {
+			if (!q()) throw new J();
+			return await Z.discountService.getAllDiscounts(t);
+		} catch (e) {
+			return k.error("[Discounts] getAll error:", e), W(e, "Error al obtener descuentos");
+		}
+	}), c.handle("discounts:getById", async (e, t) => {
+		try {
+			if (!q()) throw new J();
+			return await Z.discountService.getDiscountById(t);
+		} catch (e) {
+			return k.error("[Discounts] getById error:", e), W(e, "Error al obtener descuento");
+		}
+	}), c.handle("discounts:create", G(X("ADMIN")(async (e) => {
+		let t = De.parse(e);
+		return await Z.discountService.createDiscount(t);
+	}))), c.handle("discounts:update", G(X("ADMIN")(async (e, t) => {
+		let n = De.partial().parse(t);
+		return await Z.discountService.updateDiscount(e, n);
+	}))), c.handle("discounts:delete", G(X("ADMIN")(async (e) => await Z.discountService.deleteDiscount(e)))), c.handle("discounts:getApplicable", async (e, t, n) => {
+		try {
+			if (!q()) throw new J();
+			return await Z.discountService.getApplicableDiscounts(t, n);
+		} catch (e) {
+			return k.error("[Discounts] getApplicable error:", e), [];
+		}
+	}), c.handle("products:bulkUpdatePrice", G(X("ADMIN")(async (e) => {
+		let t = Oe.parse(e);
+		return await Z.productService.bulkUpdatePrice(t);
+	}))), c.handle("sales:getAll", async (e, t, n, r, i) => {
 		try {
 			return await Z.saleService.getAllSales(t, n, r, i);
 		} catch (e) {
@@ -3317,7 +3555,7 @@ function at() {
 		} catch (e) {
 			return k.error("[Sales] getDetails error:", e), W(e, "Error al obtener detalles de venta");
 		}
-	}), c.handle("sales:register", G(async (e, t, n) => Z.saleService.registerSale(e, t, n), F.omit({ items: !0 }))), c.handle("sales:cancel", async (e, t, n) => {
+	}), c.handle("sales:register", G(async (e, t, n) => Z.saleService.registerSale(e, t, n), Ce.omit({ items: !0 }))), c.handle("sales:cancel", async (e, t, n) => {
 		try {
 			return await Z.saleService.cancelSale(t, n);
 		} catch (e) {
@@ -3329,8 +3567,8 @@ function at() {
 		} catch (e) {
 			return k.error("[Categories] getById error:", e), W(e, "Error al obtener categoría");
 		}
-	}), c.handle("categories:create", G(X("ADMIN")(async (e, t) => await Z.categoryService.createCategory(e, t)), L)), c.handle("categories:update", G(X("ADMIN")(async (e, t, n) => {
-		let r = L.parse(t);
+	}), c.handle("categories:create", G(X("ADMIN")(async (e, t) => await Z.categoryService.createCategory(e, t)), F)), c.handle("categories:update", G(X("ADMIN")(async (e, t, n) => {
+		let r = F.parse(t);
 		return await Z.categoryService.updateCategory(e, r, n);
 	}))), c.handle("categories:delete", G(X("ADMIN")(async (e, t) => await Z.categoryService.deleteCategory(e, t)))), c.handle("users:getAll", async () => {
 		try {
@@ -3344,8 +3582,8 @@ function at() {
 		} catch (e) {
 			return k.error("[Users] getById error:", e), W(e, "Error al obtener usuario");
 		}
-	}), c.handle("users:create", G(X("ADMIN")((e, t) => Z.userService.createUser(e, t)), Ce)), c.handle("users:update", G(X("ADMIN")(async (e, t, n) => {
-		let r = Ce.partial().parse(t);
+	}), c.handle("users:create", G(X("ADMIN")((e, t) => Z.userService.createUser(e, t)), Ee)), c.handle("users:update", G(X("ADMIN")(async (e, t, n) => {
+		let r = Ee.partial().parse(t);
 		return await Z.userService.updateUser(e, r, n);
 	}))), c.handle("users:delete", G(X("ADMIN")((e, t) => Z.userService.deleteUser(e, t)))), c.handle("users:changePassword", G(X("ADMIN")((e, t, n) => Z.userService.changePassword(e, t, n)))), c.handle("movements:getAll", async () => {
 		try {
@@ -3376,8 +3614,8 @@ function at() {
 		} catch {
 			return null;
 		}
-	}), c.handle("suppliers:create", G(X("ADMIN")((e, t) => Z.supplierService.createSupplier(e, t)), R)), c.handle("suppliers:update", G(X("ADMIN")(async (e, t, n) => {
-		let r = R.partial().parse(t);
+	}), c.handle("suppliers:create", G(X("ADMIN")((e, t) => Z.supplierService.createSupplier(e, t)), I)), c.handle("suppliers:update", G(X("ADMIN")(async (e, t, n) => {
+		let r = I.partial().parse(t);
 		return await Z.supplierService.updateSupplier(e, r, n);
 	}))), c.handle("suppliers:delete", G(X("ADMIN")((e, t) => Z.supplierService.deleteSupplier(e, t)))), c.handle("purchases:getAll", async (e, t, n) => {
 		try {
@@ -3391,7 +3629,7 @@ function at() {
 		} catch {
 			return null;
 		}
-	}), c.handle("purchases:create", G(X("ADMIN")((e, t) => Z.purchaseService.createPurchase(e, t)), Se)), c.handle("purchases:receive", G(X("ADMIN")((e, t) => Z.purchaseService.receivePurchase(e, t)))), c.handle("purchases:cancel", G(X("ADMIN")((e, t) => Z.purchaseService.cancelPurchase(e, t)))), c.handle("purchases:updatePaymentStatus", G(X("ADMIN")((e, t) => Z.purchaseService.updatePaymentStatus(e, t)))), c.handle("backup:create", G(X("ADMIN")((e) => Z.backupService.createBackup(e)))), c.handle("backup:list", async () => {
+	}), c.handle("purchases:create", G(X("ADMIN")((e, t) => Z.purchaseService.createPurchase(e, t)), Te)), c.handle("purchases:receive", G(X("ADMIN")((e, t) => Z.purchaseService.receivePurchase(e, t)))), c.handle("purchases:cancel", G(X("ADMIN")((e, t) => Z.purchaseService.cancelPurchase(e, t)))), c.handle("purchases:updatePaymentStatus", G(X("ADMIN")((e, t) => Z.purchaseService.updatePaymentStatus(e, t)))), c.handle("backup:create", G(X("ADMIN")((e) => Z.backupService.createBackup(e)))), c.handle("backup:list", async () => {
 		try {
 			return await Z.backupService.listBackups();
 		} catch (e) {
@@ -3480,8 +3718,8 @@ function at() {
 	})));
 }
 //#endregion
-//#region src/main/utils/migrationRunner.ts
-function ot(e) {
+//#region src/backend/utils/migrationRunner.ts
+function ut(e) {
 	let t = [], n = "", r = !1, i = "";
 	for (let a = 0; a < e.length; a++) {
 		let o = e[a], s = e[a + 1] || "";
@@ -3512,17 +3750,17 @@ function ot(e) {
 	let a = n.trim();
 	return a && t.push(a), t;
 }
-function st() {
+function dt() {
 	let e = [];
 	o.isPackaged && (e.push(u.join(process.resourcesPath, "prisma", "schema.sql")), e.push(u.join(process.resourcesPath, "schema.sql")));
 	try {
-		let t = u.dirname(ne(import.meta.url));
+		let t = u.dirname(D(import.meta.url));
 		e.push(u.join(t, "..", "..", "..", "prisma", "schema.sql")), e.push(u.join(process.cwd(), "prisma", "schema.sql"));
 	} catch {}
 	for (let t of e) if (d.existsSync(t)) return t;
 	return null;
 }
-async function ct(e) {
+async function ft(e) {
 	try {
 		let t = await e.$queryRawUnsafe("SELECT name FROM sqlite_master WHERE type='table' AND name='users'");
 		return Array.isArray(t) && t.length > 0;
@@ -3530,9 +3768,9 @@ async function ct(e) {
 		return !1;
 	}
 }
-async function lt(e) {
-	if (await ct(e)) return k.info("Database already initialized, skipping."), { applied: !1 };
-	let t = st();
+async function pt(e) {
+	if (await ft(e)) return k.info("Database already initialized, skipping."), { applied: !1 };
+	let t = dt();
 	if (!t) {
 		let e = "schema.sql not found in any expected location";
 		return k.error(e), {
@@ -3541,7 +3779,7 @@ async function lt(e) {
 		};
 	}
 	k.info(`Loading schema from ${t}`);
-	let n = ot(d.readFileSync(t, "utf-8"));
+	let n = ut(d.readFileSync(t, "utf-8"));
 	k.info(`Found ${n.length} SQL statements to execute`);
 	for (let t = 0; t < n.length; t++) {
 		let r = n[t];
@@ -3571,14 +3809,14 @@ async function lt(e) {
 	return { applied: !0 };
 }
 //#endregion
-//#region src/main/index.ts
+//#region src/backend/index.ts
 re();
-var Q = $e(new p({ adapter: new m({ url: process.env.DATABASE_URL }) }));
-tt(Q);
-var ut = u.dirname(ne(import.meta.url));
-process.env.DIST = u.join(ut, "../dist"), process.env.VITE_PUBLIC = o.isPackaged ? process.env.DIST : u.join(process.env.DIST, "../public");
-var $ = null, dt = process.env.VITE_DEV_SERVER_URL;
-async function ft() {
+var Q = rt(new p({ adapter: new m({ url: process.env.DATABASE_URL }) }));
+at(Q);
+var mt = u.dirname(D(import.meta.url));
+process.env.DIST = u.join(mt, "../dist"), process.env.VITE_PUBLIC = o.isPackaged ? process.env.DIST : u.join(process.env.DIST, "../public");
+var $ = null, ht = process.env.VITE_DEV_SERVER_URL;
+async function gt() {
 	$ = new a({
 		width: 1200,
 		height: 800,
@@ -3586,7 +3824,7 @@ async function ft() {
 		minHeight: 600,
 		icon: u.join(process.env.VITE_PUBLIC, "favicon.ico"),
 		webPreferences: {
-			preload: u.join(ut, "index.mjs"),
+			preload: u.join(mt, "index.mjs"),
 			contextIsolation: !0,
 			nodeIntegration: !1
 		},
@@ -3596,7 +3834,7 @@ async function ft() {
 			...e.responseHeaders,
 			"Content-Security-Policy": ["default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'"]
 		} });
-	}), dt ? ($.loadURL(dt), $.webContents.openDevTools()) : $.loadFile(u.join(process.env.DIST, "index.html")), $.on("blur", () => {
+	}), ht ? ($.loadURL(ht), $.webContents.openDevTools()) : $.loadFile(u.join(process.env.DIST, "index.html")), $.on("blur", () => {
 		setTimeout(() => {
 			if ($ && !$.isDestroyed() && !$.isFocused()) {
 				let e = a.getFocusedWindow();
@@ -3643,7 +3881,7 @@ c.handle("window:focus", () => $ && !$.isDestroyed() ? ($.focus(), $.webContents
 		} catch {}
 	}
 	if (e) {
-		let e = await lt(Q.prisma);
+		let e = await pt(Q.prisma);
 		if (e.error) {
 			k.error({ err: e.error }, "Migration error");
 			try {
@@ -3656,8 +3894,8 @@ c.handle("window:focus", () => $ && !$.isDestroyed() ? ($.focus(), $.webContents
 			} catch {}
 		}
 	}
-	at(), Q.schedulerService.start(), ft(), o.on("activate", () => {
-		a.getAllWindows().length === 0 && ft();
+	lt(), Q.schedulerService.start(), gt(), o.on("activate", () => {
+		a.getAllWindows().length === 0 && gt();
 	});
 });
 //#endregion

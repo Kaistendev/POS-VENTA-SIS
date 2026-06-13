@@ -109,6 +109,7 @@ export interface Sale {
   total: number;
   subtotal: number;
   tax_amount: number;
+  discount_total?: number | null;
   payment_method: string | null;
   exchange_rate: number;
   created_at: Date;
@@ -123,6 +124,37 @@ export interface SaleWithItems extends Sale {
   cash_register?: CashRegister | null;
 }
 
+// ─── Discount ───
+export type DiscountType = 'PERCENTAGE' | 'FIXED_AMOUNT';
+export type DiscountApplicableTo = 'ALL' | 'CATEGORY' | 'SPECIFIC';
+
+export interface Discount {
+  id: number;
+  name: string;
+  type: DiscountType;
+  value: number;
+  is_active: boolean;
+  applicable_to: DiscountApplicableTo;
+  category_id: number | null;
+  min_purchase_amount: number | null;
+  created_at: Date;
+  updated_at: Date;
+  category?: { id: number; name: string } | null;
+  products?: ProductDiscount[];
+}
+
+export interface DiscountWithRelations extends Discount {
+  category: { id: number; name: string } | null;
+  products: ProductDiscount[];
+}
+
+export interface ProductDiscount {
+  product_id: number;
+  discount_id: number;
+  product?: Product | null;
+  discount?: Discount | null;
+}
+
 // ─── SaleItem ───
 export interface SaleItem {
   id: number;
@@ -131,6 +163,11 @@ export interface SaleItem {
   quantity: number;
   unit_price: number;
   purchase_price: number;
+  discount_name?: string | null;
+  discount_type?: string | null;
+  discount_value?: number | null;
+  discount_amount?: number | null;
+  final_unit_price?: number | null;
   created_at: Date;
   updated_at: Date;
 }

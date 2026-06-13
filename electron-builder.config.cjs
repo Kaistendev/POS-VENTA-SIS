@@ -4,7 +4,7 @@ module.exports = {
   appId: "com.inventario.pos",
   productName: "InventarioPOS",
   directories: {
-    output: "release 1.0.0",
+    output: "sistemaPOS 2.0.0",
   },
   files: [
     "dist/**/*",

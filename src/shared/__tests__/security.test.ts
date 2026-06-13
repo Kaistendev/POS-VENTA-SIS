@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { validatePassword } from '../../common/validation.js';
-import { isPathWithin } from '../../main/utils/pathValidation.js';
+import { validatePassword } from '../../shared/validation.js';
+import { isPathWithin } from '../../backend/utils/pathValidation.js';
 import path from 'path';
 
 describe('Password validation', () => {
@@ -51,7 +51,7 @@ describe('Path validation', () => {
 
 describe('Rate limiter logic', () => {
   it('records failures and blocks after threshold', async () => {
-    const { checkRateLimit, recordFailure, resetRateLimit } = await import('../../main/auth/rateLimiter.js');
+    const { checkRateLimit, recordFailure, resetRateLimit } = await import('../../backend/auth/rateLimiter.js');
     const key = `test-user-${Date.now()}`;
 
     for (let i = 0; i < 5; i++) {

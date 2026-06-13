@@ -87,6 +87,7 @@ export class PrismaSaleRepository implements ISaleRepository {
           subtotal: input.subtotal,
           tax_amount: input.tax_amount,
           total: input.total,
+          discount_total: input.discount_total || 0,
           payment_method: input.payment_method,
           exchange_rate: input.exchange_rate || 0,
         },
@@ -100,6 +101,11 @@ export class PrismaSaleRepository implements ISaleRepository {
             quantity: item.quantity,
             unit_price: item.unit_price,
             purchase_price: item.purchase_price,
+            discount_name: item.discount_name ?? null,
+            discount_type: item.discount_type ?? null,
+            discount_value: item.discount_value ?? null,
+            discount_amount: item.discount_amount ?? 0,
+            final_unit_price: item.final_unit_price ?? null,
           },
         });
 

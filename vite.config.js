@@ -32,7 +32,7 @@ export default defineConfig({
     react(),
     electron({
       main: {
-        entry: 'src/main/index.ts',
+        entry: 'src/backend/index.ts',
         vite: {
           build: {
             rollupOptions: {
@@ -42,7 +42,7 @@ export default defineConfig({
         },
       },
       preload: {
-        input: 'src/preload/index.ts',
+        input: 'src/frontend/preload/index.ts',
         vite: {
           build: {
             rollupOptions: {

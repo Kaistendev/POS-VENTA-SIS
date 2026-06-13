@@ -52,6 +52,12 @@ export interface SaleItemInputDTO {
   quantity: number;
   unit_price: number;
   purchase_price: number;
+  discount_id?: number;
+  discount_name?: string | null;
+  discount_type?: string | null;
+  discount_value?: number | null;
+  discount_amount?: number | null;
+  final_unit_price?: number | null;
 }
 
 export interface RegisterSaleDTO {
@@ -63,6 +69,7 @@ export interface RegisterSaleDTO {
   items: SaleItemInputDTO[];
   payment_method?: string;
   exchange_rate?: number;
+  discount_total?: number;
 }
 
 export interface SaleFilterDTO {
@@ -158,6 +165,38 @@ export interface TaxSettingsDTO {
   taxIncluded: boolean;
 }
 
+// ─── Discount DTOs ───
+export type DiscountTypeDTO = 'PERCENTAGE' | 'FIXED_AMOUNT';
+export type DiscountApplicableToDTO = 'ALL' | 'CATEGORY' | 'SPECIFIC';
+
+export interface CreateDiscountDTO {
+  name: string;
+  type: DiscountTypeDTO;
+  value: number;
+  is_active?: boolean;
+  applicable_to?: DiscountApplicableToDTO;
+  category_id?: number | null;
+  product_ids?: number[];
+  min_purchase_amount?: number | null;
+}
+
+export interface UpdateDiscountDTO {
+  name?: string;
+  type?: DiscountTypeDTO;
+  value?: number;
+  is_active?: boolean;
+  applicable_to?: DiscountApplicableToDTO;
+  category_id?: number | null;
+  product_ids?: number[];
+  min_purchase_amount?: number | null;
+}
+
+// ─── Bulk Price Update DTO ───
+export interface BulkPriceUpdateDTO {
+  percentage: number;
+  category_id?: number;
+}
+
 // ─── Report DTOs ───
 export type ReportFormat = 'pdf' | 'xlsx';
 export type ReportType = 'daily_sales' | 'sales_summary' | 'inventory' | 'low_stock' | 'top_products' | 'profit_summary' | 'sale_receipt' | 'cash_close';
@@ -210,6 +249,7 @@ export interface SaleReceiptDTO {
   paymentMethod: string;
   items: SaleReceiptItemDTO[];
   subtotal: number;
+  discountTotal?: number;
   taxAmount: number;
   taxType: string;
   taxRate: number;
@@ -221,6 +261,9 @@ export interface SaleReceiptItemDTO {
   productName: string;
   unitPrice: number;
   totalPrice: number;
+  discountName?: string | null;
+  discountAmount?: number | null;
+  finalPrice?: number | null;
 }
 
 export interface CashCloseDTO {

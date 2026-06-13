@@ -24,9 +24,7 @@
     "noFallthroughCasesInSwitch": true
   },
   "include": [
-    "src",
-    "preload",
-    "main"
+    "src"
   ],
   "exclude": ["node_modules", "dist"]
 }
