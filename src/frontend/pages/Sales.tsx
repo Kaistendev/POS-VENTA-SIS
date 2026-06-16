@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { Search, ShoppingCart, Trash2, CreditCard, Banknote, Package, User, UserPlus, CheckCircle, Lock, X, ArrowLeft, Download, Eye, Calendar, RefreshCw, PackagePlus, Pencil, PlusCircle, MinusCircle, AlertCircle, History } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { jsPDF } from 'jspdf';
-import 'jspdf-autotable';
 import { useCashStore, useCartStore } from '../store/useStore.ts';
 import { useToast } from '../hooks/useToast.ts';
 import { Product, Client } from '../../shared/types';

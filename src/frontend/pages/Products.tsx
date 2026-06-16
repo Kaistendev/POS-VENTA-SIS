@@ -370,12 +370,11 @@ export default function Products() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">Proveedor *</label>
+              <label className="block text-sm font-medium text-gray-300 mb-1">Proveedor</label>
               <select
                 value={formData.supplier_id}
                 onChange={(e) => setFormData({ ...formData, supplier_id: e.target.value })}
                 className="w-full px-4 py-2 bg-[#1f2028] border border-[#2e303a] rounded-lg text-white focus:outline-none focus:border-primary"
-                required
               >
                 <option value="">Seleccionar proveedor...</option>
                 {suppliers.map((s: any) => (

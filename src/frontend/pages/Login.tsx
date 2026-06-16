@@ -154,6 +154,10 @@ export default function Login({ onLogin }: LoginProps) {
                 </div>
               )}
 
+              <div className="mb-6 p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-300 text-xs text-center">
+                Demo: <span className="font-semibold">admin</span> / <span className="font-semibold">Admin123!</span>
+              </div>
+
               <form onSubmit={handleLogin} className="space-y-5">
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-[#94a3b8] ml-1">Usuario</label>

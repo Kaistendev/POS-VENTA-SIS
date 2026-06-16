@@ -4,7 +4,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '../hooks/useToast.ts';
 import { Sale } from '../../shared/types';
 import { jsPDF } from 'jspdf';
-import 'jspdf-autotable';
 import DataTable from '../components/ui/DataTable.tsx';
 
 export default function SalesHistory() {

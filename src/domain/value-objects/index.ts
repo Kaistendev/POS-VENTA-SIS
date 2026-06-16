@@ -1,9 +1,0 @@
-export { Money } from './Money.js';
-export { SKU } from './SKU.js';
-export { DNI } from './DNI.js';
-export { RUC } from './RUC.js';
-export { TaxRate } from './TaxRate.js';
-export { Quantity } from './Quantity.js';
-export { Email } from './Email.js';
-export { Phone } from './Phone.js';
-export { Percentage } from './Percentage.js';
