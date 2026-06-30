@@ -1,5 +1,5 @@
 import type { User, Product, Client, Category, Supplier, CashRegister, Sale, Discount, InventoryMovement, DashboardStats, WeeklySalesEntry, SalesByPaymentEntry, TopProductEntry, TopClientEntry, SalesByHourEntry, CashRegisterSummary, InventoryMetrics, LowStockProduct } from '../../domain/models';
-import type { CreateProductDTO, UpdateProductDTO, CreateClientDTO, UpdateClientDTO, CreateCategoryDTO, UpdateCategoryDTO, CreateSupplierDTO, UpdateSupplierDTO, CreateDiscountDTO, UpdateDiscountDTO, BulkPriceUpdateDTO, CreatePurchaseDTO, TaxSettingsDTO, SalesStatsDTO, CashCloseDTO, SaleReceiptDTO, SaleReceiptItemDTO, ReportRequestDTO } from '../../domain/dtos';
+import type { CreateProductDTO, UpdateProductDTO, CreateClientDTO, UpdateClientDTO, CreateCategoryDTO, UpdateCategoryDTO, CreateSupplierDTO, UpdateSupplierDTO, CreateDiscountDTO, UpdateDiscountDTO, CreatePurchaseDTO, TaxSettingsDTO, SalesStatsDTO, CashCloseDTO, SaleReceiptDTO, SaleReceiptItemDTO, ReportRequestDTO } from '../../domain/dtos';
 import { getSeedData, type AppData } from './seed';
 import { generateDailySalesPDF, generateSalesSummaryPDF, generateInventoryPDF, generateLowStockPDF, generateTopProductsPDF, generateProfitSummaryPDF, generateSaleReceiptPDF, generateCashClosePDF } from './reportGenerator';
 
@@ -309,14 +309,6 @@ export function setupMockApi() {
       let movs = data.inventoryMovements.filter((m: any) => m.product_id === productId);
       if (limit) movs = movs.slice(-limit);
       return ok(movs.reverse().map((m: any) => ({ ...m, product: (() => { const p = data.products.find(x => x.id === productId); return p ? { name: p.name, sku: p.sku } : null; })() })));
-    },
-    bulkUpdatePrice: async (input) => {
-      let products = data.products;
-      if (input.category_id) products = products.filter(p => p.category_id === input.category_id);
-      const factor = 1 + input.percentage / 100;
-      products.forEach(p => { p.price_sale = Math.round(p.price_sale * factor * 100) / 100; p.updated_at = new Date(); });
-      saveData(data);
-      return { success: true, updatedCount: products.length };
     },
 
     // ── Categories ──

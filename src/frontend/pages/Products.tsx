@@ -35,8 +35,6 @@ export default function Products() {
     type: 'ENTRADA' 
   });
   const [deleteTarget, setDeleteTarget] = useState<{id: number, name: string} | null>(null);
-  const [isBulkPriceModal, setIsBulkPriceModal] = useState(false);
-  const [bulkPriceData, setBulkPriceData] = useState({ percentage: 10, category_id: '' });
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 8;
 
@@ -191,34 +189,6 @@ export default function Products() {
     }
   };
 
-  const handleOpenBulkModal = () => {
-    setBulkPriceData({ percentage: 10, category_id: '' });
-    setIsBulkPriceModal(true);
-  };
-
-  const handleBulkUpdate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const data: { percentage: number; category_id?: number } = {
-        percentage: bulkPriceData.percentage,
-      };
-      if (bulkPriceData.category_id) {
-        data.category_id = parseInt(bulkPriceData.category_id);
-      }
-      const result = await window.api.bulkUpdatePrice(data);
-      if (result.success) {
-        success(`Precios actualizados (${result.updatedCount || 0} productos)`);
-        setIsBulkPriceModal(false);
-        fetchData();
-      } else {
-        toastError(result.message || 'Error al actualizar precios');
-      }
-    } catch (err: any) {
-      toastError(err?.message || 'Error de comunicación');
-    }
-  };
-
-
 
   // Filter state
   const [searchTerm, setSearchTerm] = useState('');
@@ -268,13 +238,6 @@ export default function Products() {
           </select>
           <button onClick={fetchData} className="p-2 rounded-lg bg-[#1f2028] text-gray-300 hover:text-white border border-[#2e303a] transition-colors shadow-sm">
             <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
-          </button>
-          <button 
-            onClick={handleOpenBulkModal}
-            className="flex items-center px-4 py-2 bg-[#2e303a] hover:bg-[#3e404a] text-white rounded-xl font-bold transition-all"
-          >
-            <Package className="w-5 h-5 mr-2" />
-            Aumentar Precios
           </button>
           <button 
             onClick={handleOpenCreateModal}
@@ -546,76 +509,6 @@ export default function Products() {
         </div>
       </Modal>
 
-      {/* Modal de Aumento Masivo de Precios */}
-      <Modal
-        isOpen={isBulkPriceModal}
-        onClose={() => setIsBulkPriceModal(false)}
-        title="Aumentar Precios Masivamente"
-        width="500px"
-      >
-        <form onSubmit={handleBulkUpdate} className="space-y-4">
-          <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-4 flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-orange-400 mt-0.5 shrink-0" />
-            <div>
-              <p className="text-sm text-orange-300 font-medium">¿Estás seguro?</p>
-              <p className="text-xs text-gray-400 mt-1">
-                Se actualizará el precio de venta de todos los productos
-                {bulkPriceData.category_id ? ' de la categoría seleccionada' : ''}.
-                {bulkPriceData.percentage >= 0 ? ' Los precios aumentarán' : ' Los precios se reducirán'} un {Math.abs(bulkPriceData.percentage)}%.
-              </p>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">Porcentaje (%) *</label>
-            <div className="relative">
-              <input
-                type="number"
-                min="-100"
-                max="1000"
-                value={bulkPriceData.percentage}
-                onChange={(e) => setBulkPriceData({ ...bulkPriceData, percentage: parseInt(e.target.value) || 0 })}
-                className="w-full px-4 py-2 bg-[#1f2028] border border-[#2e303a] rounded-lg text-white focus:outline-none focus:border-primary"
-                required
-                autoFocus
-              />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">%</span>
-            </div>
-            <p className="text-xs text-gray-500 mt-1">Positivo para aumentar, negativo para reducir.</p>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">Categoría (opcional)</label>
-            <select
-              value={bulkPriceData.category_id}
-              onChange={(e) => setBulkPriceData({ ...bulkPriceData, category_id: e.target.value })}
-              className="w-full px-4 py-2 bg-[#1f2028] border border-[#2e303a] rounded-lg text-white focus:outline-none focus:border-primary"
-            >
-              <option value="">Todas las categorías</option>
-              {categories.map((cat) => (
-                <option key={cat.id} value={cat.id}>{cat.name}</option>
-              ))}
-            </select>
-            <p className="text-xs text-gray-500 mt-1">Si no seleccionas, se aplicará a todos los productos.</p>
-          </div>
-
-          <div className="flex justify-end space-x-3 pt-4">
-            <button
-              type="button"
-              onClick={() => setIsBulkPriceModal(false)}
-              className="px-4 py-2 bg-[#2e303a] text-gray-300 rounded-lg hover:bg-[#3e404a] transition-colors"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
-            >
-              Aplicar {bulkPriceData.percentage >= 0 ? 'Aumento' : 'Reducción'}
-            </button>
-          </div>
-        </form>
-      </Modal>
     </div>
   );
 }
