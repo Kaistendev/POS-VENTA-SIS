@@ -115,11 +115,6 @@ export const discountSchema = z.object({
   min_purchase_amount: z.coerce.number().min(0).optional().nullable(),
 });
 
-export const bulkPriceSchema = z.object({
-  percentage: z.coerce.number().int("Debe ser un número entero.").min(-100, "Mínimo -100%.").max(1000, "Máximo 1000%."),
-  category_id: z.coerce.number().int().positive().optional(),
-});
-
 // ─── Settings allowlist ───
 const SETTINGS_ALLOWLIST = [
   "business_name",

@@ -101,7 +101,7 @@
 ## 📋 Requisitos Previos
 
 - **Node.js** 18 o superior
-- **npm** o **yarn**
+- **pnpm**
 
 ---
 
@@ -115,7 +115,7 @@ cd POS-VENTA-SIS
 
 ### 2. Instalar Dependencias
 ```bash
-npm install
+pnpm install
 ```
 
 ### 3. Configurar SQLite
@@ -124,18 +124,18 @@ SQLite viene integrado con el proyecto, solo asegurate de que el archivo `dev.sq
 ### 4. Ejecutar Migraciones
 ```bash
 # Generar Prisma Client
-npm run db:generate
+pnpm run db:generate
 
 # Ejecutar migraciones
-npm run db:migrate
+pnpm run db:migrate
 
 # (Opcional) Poblar con datos de prueba
-npm run db:seed
+pnpm run db:seed
 ```
 
 ### 5. Iniciar la Aplicación
 ```bash
-npm run dev
+pnpm run dev
 ```
 
 ---
@@ -144,24 +144,24 @@ npm run dev
 
 ### Desarrollo
 ```bash
-npm run dev              # Iniciar en modo desarrollo
+pnpm run dev              # Iniciar en modo desarrollo
 ```
 
 ### Base de Datos
 ```bash
-npm run db:generate      # Generar Prisma Client
-npm run db:migrate       # Ejecutar migraciones (desarrollo)
-npm run db:migrate:deploy # Ejecutar migraciones (producción)
-npm run db:seed          # Poblar base de datos
-npm run db:studio        # Abrir Prisma Studio (GUI)
-npm run db:reset         # Resetear base de datos (⚠️ elimina datos)
-npm run db:validate      # Validar esquema Prisma
+pnpm run db:generate      # Generar Prisma Client
+pnpm run db:migrate       # Ejecutar migraciones (desarrollo)
+pnpm run db:migrate:deploy # Ejecutar migraciones (producción)
+pnpm run db:seed          # Poblar base de datos
+pnpm run db:studio        # Abrir Prisma Studio (GUI)
+pnpm run db:reset         # Resetear base de datos (⚠️ elimina datos)
+pnpm run db:validate      # Validar esquema Prisma
 ```
 
 ### Build
 ```bash
-npm run build            # Compilar para producción
-npm run lint             # Ejecutar linter
+pnpm run build            # Compilar para producción
+pnpm run lint             # Ejecutar linter
 ```
 
 ---
@@ -413,7 +413,7 @@ El proyecto ha superado la fase de "Prototipo" y se encuentra en **Desarrollo Av
 
 ### Prácticas de Desarrollo Seguro
 - **eslint-plugin-security:** Reglas de seguridad automáticas en CI.
-- **Dependencias:** Auditoría regular con `npm audit`.
+- **Dependencias:** Auditoría regular con `pnpm audit`.
 - **Secreto en entorno:** `DATABASE_URL` y credenciales solo en `.env` (excluido del repositorio via `.gitignore`).
 
 ---

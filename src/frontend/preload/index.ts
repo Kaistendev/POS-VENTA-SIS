@@ -118,9 +118,6 @@ contextBridge.exposeInMainWorld('api', {
   deleteDiscount: (id: number) => ipcRenderer.invoke('discounts:delete', id),
   getApplicableDiscounts: (productId: number, totalAmount?: number) => ipcRenderer.invoke('discounts:getApplicable', productId, totalAmount),
 
-  // Bulk Price Update
-  bulkUpdatePrice: (data: { percentage: number; category_id?: number }) => ipcRenderer.invoke('products:bulkUpdatePrice', data),
-
   // Tax Settings
   getTaxSettings: () => ipcRenderer.invoke('settings:getTax'),
   updateTaxSettings: (taxRate: number, taxType: string, taxIncluded: boolean) => 

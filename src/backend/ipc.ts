@@ -21,7 +21,6 @@ import {
   userCreateSchema,
   settingsSchema,
   discountSchema,
-  bulkPriceSchema,
 } from "../shared/schemas.js";
 
 export function setupIpcHandlers() {
@@ -514,11 +513,6 @@ export function setupIpcHandlers() {
       return [];
     }
   });
-
-  ipcMain.handle("products:bulkUpdatePrice", wrapIpc(requireRole('ADMIN')(async (data) => {
-    const parsed = bulkPriceSchema.parse(data);
-    return await $.productService.bulkUpdatePrice(parsed);
-  })));
 
   /**
    * SALES

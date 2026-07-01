@@ -114,17 +114,4 @@ export class PrismaProductRepository implements IProductRepository {
       orderBy: { created_at: 'desc' },
       take: limit,
     });
-  }
-
-  async bulkUpdatePrice(percentage: number, categoryId?: number): Promise<number> {
-    const where: any = {};
-    if (categoryId !== undefined) where.category_id = categoryId;
-
-    const result = await this.prisma.product.updateMany({
-      where,
-      data: { price_sale: { multiply: 1 + percentage / 100 } },
-    });
-
-    return result.count;
-  }
-}
+  }}

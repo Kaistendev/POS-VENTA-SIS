@@ -1,7 +1,7 @@
 import { IProductRepository } from '../../domain/ports/IProductRepository.js';
 import { IAuditLogRepository } from '../../domain/ports/IAuditLogRepository.js';
 import { ICategoryRepository } from '../../domain/ports/ICategoryRepository.js';
-import { CreateProductDTO, UpdateProductDTO, BulkPriceUpdateDTO } from '../../domain/dtos.js';
+import { CreateProductDTO, UpdateProductDTO } from '../../domain/dtos.js';
 import { NotFoundError, ConflictError, BusinessRuleError, ValidationError } from '../../shared/errors.js';
 import { productSchema } from '../../shared/schemas.js';
 
@@ -169,28 +169,4 @@ export class ProductService {
     if (!product) throw new NotFoundError('Producto');
 
     return this.productRepo.getMovements(productId, limit);
-  }
-
-  async bulkUpdatePrice(data: BulkPriceUpdateDTO, userId: number = 1) {
-    const percentage = data.percentage;
-    if (!Number.isInteger(percentage) || percentage < -100 || percentage > 1000) {
-      throw new ValidationError('El porcentaje debe ser un entero entre -100 y 1000.');
-    }
-
-    if (data.category_id) {
-      const category = await this.categoryRepo.findById(data.category_id);
-      if (!category) throw new NotFoundError('Categoría');
-    }
-
-    const updatedCount = await this.productRepo.bulkUpdatePrice(percentage, data.category_id);
-
-    await this.auditLogRepo.create({
-      userId,
-      action: 'BULK_UPDATE_PRICE',
-      entity: 'products',
-      entity_id: 0,
-    });
-
-    return { success: true, updatedCount };
-  }
-}
+  }}

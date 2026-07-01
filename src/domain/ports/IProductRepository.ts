@@ -12,7 +12,6 @@ export interface IProductRepository {
   delete(id: number): Promise<void>;
   getSalesCount(id: number): Promise<number>;
   updateStock(id: number, delta: number): Promise<void>;
-  bulkUpdatePrice(percentage: number, categoryId?: number): Promise<number>;
   createMovement(data: StockMovementDTO): Promise<void>;
   getMovements(productId: number, limit?: number): Promise<any[]>;
 }

@@ -191,12 +191,6 @@ export interface UpdateDiscountDTO {
   min_purchase_amount?: number | null;
 }
 
-// ─── Bulk Price Update DTO ───
-export interface BulkPriceUpdateDTO {
-  percentage: number;
-  category_id?: number;
-}
-
 // ─── Report DTOs ───
 export type ReportFormat = 'pdf' | 'xlsx';
 export type ReportType = 'daily_sales' | 'sales_summary' | 'inventory' | 'low_stock' | 'top_products' | 'profit_summary' | 'sale_receipt' | 'cash_close';
