@@ -21,6 +21,7 @@ import MainLayout from './components/layout/MainLayout.tsx';
 import { ErrorBoundary } from './components/ui/ErrorBoundary.tsx';
 import { useToast } from './hooks/useToast.ts';
 import { ToastContainer } from './components/ui/ToastContainer.tsx';
+import { useShallow } from 'zustand/react/shallow';
 import { useAuthStore } from './store/useStore.ts';
 import { useGlobalShortcuts } from './hooks/useKeyboardShortcut.ts';
 
@@ -52,7 +53,9 @@ function PageLoader() {
 }
 
 export default function App() {
-  const { isAuthenticated, login, logout } = useAuthStore();
+  const { isAuthenticated, login, logout } = useAuthStore(
+    useShallow(s => ({ isAuthenticated: s.isAuthenticated, login: s.login, logout: s.logout }))
+  );
   const { toasts, removeToast } = useToast();
   const [setupNeeded, setSetupNeeded] = useState<boolean | null>(null);
 

@@ -2,6 +2,7 @@ import type { User, Product, Client, Category, Supplier, CashRegister, Sale, Dis
 import type { CreateProductDTO, UpdateProductDTO, CreateClientDTO, UpdateClientDTO, CreateCategoryDTO, UpdateCategoryDTO, CreateSupplierDTO, UpdateSupplierDTO, CreateDiscountDTO, UpdateDiscountDTO, CreatePurchaseDTO, TaxSettingsDTO, SalesStatsDTO, CashCloseDTO, SaleReceiptDTO, SaleReceiptItemDTO, ReportRequestDTO } from '../../domain/dtos';
 import { getSeedData, type AppData } from './seed';
 import { generateDailySalesPDF, generateSalesSummaryPDF, generateInventoryPDF, generateLowStockPDF, generateTopProductsPDF, generateProfitSummaryPDF, generateSaleReceiptPDF, generateCashClosePDF } from './reportGenerator';
+import { kvGet, kvSet, migrateFromLocalStorage } from './db';
 
 const STORAGE_KEY = 'pos-web-data';
 const SESSION_KEY = 'pos-web-session';
@@ -9,12 +10,11 @@ const SESSION_KEY = 'pos-web-session';
 let currentUser: User | null = null;
 let currentSession: { id: number; username: string; role: string } | null = null;
 
-function loadSession() {
+function loadSession(data: AppData) {
   try {
     const raw = sessionStorage.getItem(SESSION_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      const data = loadData();
       const user = data.users.find(u => u.id === parsed.id);
       if (user) {
         currentSession = parsed;
@@ -26,14 +26,13 @@ function loadSession() {
   } catch { }
 }
 
-function loadData(): AppData {
+async function loadData(): Promise<AppData> {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = await kvGet<AppData>(STORAGE_KEY);
     if (raw) {
-      const parsed = JSON.parse(raw);
-      Object.keys(parsed).forEach(k => {
-        if (Array.isArray(parsed[k])) {
-          parsed[k] = parsed[k].map((item: any) => ({
+      Object.keys(raw).forEach(k => {
+        if (Array.isArray((raw as any)[k])) {
+          (raw as any)[k] = (raw as any)[k].map((item: any) => ({
             ...item,
             created_at: item.created_at ? new Date(item.created_at) : new Date(),
             updated_at: item.updated_at ? new Date(item.updated_at) : new Date(),
@@ -42,17 +41,39 @@ function loadData(): AppData {
           }));
         }
       });
-      if (!parsed.reportLogs) parsed.reportLogs = [];
-      return parsed;
+      if (!raw.reportLogs) (raw as any).reportLogs = [];
+      return raw;
     }
   } catch { }
   const seed = getSeedData();
-  saveData(seed);
+  await kvSet(STORAGE_KEY, seed);
   return seed;
 }
 
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingData: AppData | null = null;
+
 function saveData(data: AppData) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch { }
+  pendingData = data;
+  if (!saveTimer) {
+    saveTimer = setTimeout(() => {
+      const d = pendingData;
+      pendingData = null;
+      saveTimer = null;
+      if (d) kvSet(STORAGE_KEY, d).catch(() => {});
+    }, 400);
+  }
+}
+
+function flushSave() {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = null;
+  const d = pendingData;
+  pendingData = null;
+  if (d) {
+    kvSet(STORAGE_KEY, d).catch(() => {});
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); } catch {}
+  }
 }
 
 function ok<T>(data: T): T { return data; }
@@ -64,7 +85,6 @@ function ipcOk<T>(data?: T): { success: true; data?: T } & Record<string, any> {
 function nextId(data: AppData, key: string): number {
   const id = data.nextId[key] || 1;
   data.nextId[key] = id + 1;
-  saveData(data);
   return id;
 }
 
@@ -74,9 +94,14 @@ function paginate<T>(items: T[], search?: string, searchFields?: (keyof T)[]): T
   return items.filter(item => searchFields.some(f => String(item[f] ?? '').toLowerCase().includes(q)));
 }
 
-export function setupMockApi() {
-  const data = loadData();
-  loadSession();
+export async function setupMockApi() {
+  await migrateFromLocalStorage();
+  const data = await loadData();
+  loadSession(data);
+
+  window.addEventListener('beforeunload', flushSave);
+
+  try { localStorage.removeItem(STORAGE_KEY); } catch {}
 
   window.api = {
     // ── Dialog ──
@@ -492,7 +517,7 @@ export function setupMockApi() {
 
     // ── Reports ──
     generateReport: async (request) => {
-      const reportData = loadData();
+      const reportData = await loadData();
       let result: { success: true; path: string };
       switch (request.type) {
         case 'daily_sales':
@@ -519,14 +544,14 @@ export function setupMockApi() {
       return result;
     },
     generateReceipt: async (saleId) => {
-      const reportData = loadData();
+      const reportData = await loadData();
       const result = generateSaleReceiptPDF(saleId, reportData);
       reportData.reportLogs.push({ id: nextId(reportData, 'reportLogs'), type: 'sale_receipt', filename: result.path, generatedAt: new Date().toISOString() });
       saveData(reportData);
       return result;
     },
     generateCashClose: async (registerId) => {
-      const reportData = loadData();
+      const reportData = await loadData();
       const result = generateCashClosePDF(registerId, reportData);
       reportData.reportLogs.push({ id: nextId(reportData, 'reportLogs'), type: 'cash_close', filename: result.path, generatedAt: new Date().toISOString() });
       saveData(reportData);

@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Search, ShoppingCart, Trash2, CreditCard, Banknote, Package, User, UserPlus, CheckCircle, Lock, X, ArrowLeft, Download, Eye, Calendar, RefreshCw, PackagePlus, Pencil, PlusCircle, MinusCircle, AlertCircle, History } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { jsPDF } from 'jspdf';
 import { useCashStore, useCartStore } from '../store/useStore.ts';
+import { useShallow } from 'zustand/react/shallow';
 import { useToast } from '../hooks/useToast.ts';
 import { Product, Client } from '../../shared/types';
 import { formatCurrency } from '../lib/utils.ts';
@@ -10,8 +11,12 @@ import { formatCurrency } from '../lib/utils.ts';
 export default function Sales() {
   const [products, setProducts] = useState<Product[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
-  const { activeRegister, setActiveRegister } = useCashStore();
-  const { items: cart, addItem, removeItem, updateQty, clearCart, getTotal, suspendCart, suspendedCarts, resumeCart } = useCartStore();
+  const { activeRegister, setActiveRegister } = useCashStore(
+    useShallow(s => ({ activeRegister: s.activeRegister, setActiveRegister: s.setActiveRegister }))
+  );
+  const { items: cart, addItem, removeItem, updateQty, clearCart, getTotal, suspendCart, suspendedCarts, resumeCart } = useCartStore(
+    useShallow(s => ({ items: s.items, addItem: s.addItem, removeItem: s.removeItem, updateQty: s.updateQty, clearCart: s.clearCart, getTotal: s.getTotal, suspendCart: s.suspendCart, suspendedCarts: s.suspendedCarts, resumeCart: s.resumeCart }))
+  );
   const { success, error: toastError } = useToast();
   
   const [isCheckout, setIsCheckout] = useState(false);
@@ -280,10 +285,15 @@ export default function Sales() {
     }
   };
 
-  const filteredProducts = products.filter(p => 
-    p.sku.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    (p.name && p.name.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const filteredProducts = useMemo(() => {
+    const term = searchTerm.toLowerCase();
+    return products.filter(p =>
+      p.stock > 0 && (
+        p.sku.toLowerCase().includes(term) ||
+        (p.name && p.name.toLowerCase().includes(term))
+      )
+    );
+  }, [products, searchTerm]);
 
   // Check if product can be added to cart
   const canAddToCart = (product: any) => {
@@ -311,9 +321,12 @@ export default function Sales() {
     }
   }, [searchTerm, products, addItem, cart]);
 
-  const filteredClients = clients.filter(c => 
-    c.name.toLowerCase().includes(customerData.name.toLowerCase()) || 
-    c.dni.includes(customerData.dni)
+  const filteredClients = useMemo(() =>
+    clients.filter(c => 
+      c.name.toLowerCase().includes(customerData.name.toLowerCase()) || 
+      c.dni.includes(customerData.dni)
+    ),
+    [clients, customerData.name, customerData.dni]
   );
 
   if (!activeRegister && !isProcessing) {

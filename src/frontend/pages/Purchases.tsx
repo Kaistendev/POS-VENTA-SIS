@@ -109,6 +109,7 @@ export default function Purchases() {
       const result = await window.api.createProduct(productData);
 
       if (result.success) {
+        const newId = result.data?.id ?? result.id;
         success(`Producto creado${quickProduct.supplier_id ? ' y asociado al proveedor' : ''}`);
         setIsCreateProductModalOpen(false);
         
@@ -117,13 +118,12 @@ export default function Purchases() {
         setProducts(updatedProducts || []);
         
         // Auto-select the new product in the form
-        if (creatingForIndex >= 0) {
-          updateItem(creatingForIndex, 'product_id', result.id);
+        if (creatingForIndex >= 0 && newId) {
+          updateItem(creatingForIndex, 'product_id', newId);
           updateItem(creatingForIndex, 'unit_cost', quickProduct.price_purchase);
-          const supplierName = suppliers.find((s: any) => s.id === quickProduct.supplier_id)?.name || '';
-          setProductSearch(prev => ({ 
-            ...prev, 
-            [creatingForIndex]: `${quickProduct.name} (${quickProduct.sku})${supplierName ? ` - ${supplierName}` : ''}` 
+          setProductSearch(prev => ({
+            ...prev,
+            [creatingForIndex]: quickProduct.sku || quickProduct.name,
           }));
         }
       } else {

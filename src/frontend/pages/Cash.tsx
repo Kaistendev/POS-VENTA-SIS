@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Wallet, Lock, Unlock, Calculator, AlertCircle, CheckCircle2, TrendingUp, CreditCard, Banknote } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
 import { useCashStore } from '../store/useStore.ts';
 
 export default function Cash() {
-  const { activeRegister, setActiveRegister } = useCashStore();
+  const { activeRegister, setActiveRegister } = useCashStore(
+    useShallow(s => ({ activeRegister: s.activeRegister, setActiveRegister: s.setActiveRegister }))
+  );
   const [loading, setLoading] = useState(true);
   const [openingAmount, setOpeningAmount] = useState(0);
   const [closingAmount, setClosingAmount] = useState('');

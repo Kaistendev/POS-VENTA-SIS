@@ -1,14 +1,19 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, ShoppingCart, Package, Users, Wallet, Tags, LogOut, History, Settings as SettingsIcon, ChevronLeft, ChevronRight, Shield, RotateCcw, FolderOutput, Truck, ShoppingBag, FileText, Percent } from 'lucide-react';
 import { cn } from '../../lib/utils.ts';
+import { useShallow } from 'zustand/react/shallow';
 import { useAuthStore, useUIStore } from '../../store/useStore.ts';
 import { useEffect } from 'react';
 import logoSidebar from '../../assets/tienda.png';
 
 export default function Sidebar() {
   const navigate = useNavigate();
-  const { user, logout } = useAuthStore();
-  const { sidebarCollapsed, toggleSidebar } = useUIStore();
+  const { user, logout } = useAuthStore(
+    useShallow(s => ({ user: s.user, logout: s.logout }))
+  );
+  const { sidebarCollapsed, toggleSidebar } = useUIStore(
+    useShallow(s => ({ sidebarCollapsed: s.sidebarCollapsed, toggleSidebar: s.toggleSidebar }))
+  );
 
   const isAdmin = user?.role?.toUpperCase() === 'ADMIN';
 

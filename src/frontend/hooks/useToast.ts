@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useNotificationStore } from '../store/useStore.ts';
 
 interface UseToastReturn {
@@ -12,7 +13,9 @@ interface UseToastReturn {
 }
 
 export function useToast(): UseToastReturn {
-  const { toasts, addToast, removeToast } = useNotificationStore();
+  const { toasts, addToast, removeToast } = useNotificationStore(
+    useShallow(s => ({ toasts: s.toasts, addToast: s.addToast, removeToast: s.removeToast }))
+  );
 
   const toast = useCallback(
     (message: string, type: 'success' | 'error' | 'warning' | 'info', duration?: number) => {

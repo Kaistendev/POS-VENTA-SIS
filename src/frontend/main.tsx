@@ -4,10 +4,10 @@ import '../index.css'
 import App from './App.tsx'
 import { setupMockApi } from './mock/mockApi.ts'
 
-setupMockApi()
-
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)
+setupMockApi().then(() => {
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  )
+})

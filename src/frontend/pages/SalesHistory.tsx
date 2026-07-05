@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Search, Calendar, Eye, Trash2, ArrowLeft, Download } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '../hooks/useToast.ts';
@@ -126,9 +126,12 @@ export default function SalesHistory() {
     doc.save(`Ticket_Reimpresion_${sale.id}.pdf`);
   };
 
-  const filteredSales = sales.filter(s => 
-    s.id?.toString().includes(searchTerm) || 
-    (s.client?.name || '').toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredSales = useMemo(() =>
+    sales.filter(s => 
+      s.id?.toString().includes(searchTerm) || 
+      (s.client?.name || '').toLowerCase().includes(searchTerm.toLowerCase())
+    ),
+    [sales, searchTerm]
   );
   const totalPages = Math.max(1, Math.ceil(filteredSales.length / itemsPerPage));
   const paginatedSales = filteredSales.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);

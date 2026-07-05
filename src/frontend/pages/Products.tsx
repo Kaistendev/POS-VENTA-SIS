@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import DataTable from '../components/ui/DataTable.tsx';
 import { PackagePlus, RefreshCw, Pencil, Trash2, PlusCircle, MinusCircle, AlertCircle, Package, Search } from 'lucide-react';
 import { useToast } from '../hooks/useToast.ts';
@@ -194,16 +194,19 @@ export default function Products() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSupplier, setSelectedSupplier] = useState<string>('');
 
-  const filteredProducts = products.filter(p => {
-    if (selectedSupplier && p.supplier_id !== parseInt(selectedSupplier)) return false;
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      const matchesName = p.name?.toLowerCase().includes(term);
-      const matchesSku = p.sku?.toLowerCase().includes(term);
-      if (!matchesName && !matchesSku) return false;
-    }
-    return true;
-  });
+  const filteredProducts = useMemo(() =>
+    products.filter(p => {
+      if (selectedSupplier && p.supplier_id !== parseInt(selectedSupplier)) return false;
+      if (searchTerm) {
+        const term = searchTerm.toLowerCase();
+        const matchesName = p.name?.toLowerCase().includes(term);
+        const matchesSku = p.sku?.toLowerCase().includes(term);
+        if (!matchesName && !matchesSku) return false;
+      }
+      return true;
+    }),
+    [products, selectedSupplier, searchTerm]
+  );
 
   const totalPages = Math.max(1, Math.ceil(filteredProducts.length / itemsPerPage));
   const paginatedProducts = filteredProducts.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);

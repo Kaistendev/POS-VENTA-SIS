@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { User, CashRegister, Product } from '../../shared/types.js';
+import { zustandStorage } from '../mock/db.ts';
 
 interface AuthState {
   user: User | null;
@@ -75,7 +76,7 @@ export const useAuthStore = create<AuthState>()(
       login: (user) => set({ user, isAuthenticated: true }),
       logout: () => set({ user: null, isAuthenticated: false }),
     }),
-    { name: 'auth-storage' }
+    { name: 'auth-storage', storage: createJSONStorage(() => zustandStorage) }
   )
 );
 
@@ -163,7 +164,7 @@ export const useCartStore = create<CartState>()(
         }
       }
     }),
-    { name: 'cart-storage' }
+    { name: 'cart-storage', storage: createJSONStorage(() => zustandStorage) }
   )
 );
 
@@ -205,7 +206,7 @@ export const useCacheStore = create<CacheState>()(
     }),
     {
       name: 'cache-storage',
-      storage: createJSONStorage(() => sessionStorage),
+      storage: createJSONStorage(() => zustandStorage),
       partialize: (state) => ({
         categories: state.categories,
         settings: state.settings,
@@ -223,6 +224,6 @@ export const useUIStore = create<UIState>()(
       toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
       setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
     }),
-    { name: 'ui-storage' }
+    { name: 'ui-storage', storage: createJSONStorage(() => zustandStorage) }
   )
 );

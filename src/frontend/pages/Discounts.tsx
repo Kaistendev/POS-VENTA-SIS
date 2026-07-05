@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Percent, Plus, RefreshCw, Trash2, Pencil, Tag, Search } from 'lucide-react';
 import { useToast } from '../hooks/useToast.ts';
 import Modal from '../components/ui/Modal.tsx';
@@ -156,11 +156,14 @@ export default function Discounts() {
     }));
   };
 
-  const filteredProducts = products.filter(
-    (p) =>
-      !productSearch ||
-      p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
-      p.sku.toLowerCase().includes(productSearch.toLowerCase()),
+  const filteredProducts = useMemo(() =>
+    products.filter(
+      (p) =>
+        !productSearch ||
+        p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
+        p.sku.toLowerCase().includes(productSearch.toLowerCase()),
+    ),
+    [products, productSearch]
   );
 
   const columns = [

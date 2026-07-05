@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import DataTable from '../components/ui/DataTable.tsx';
 import { UserPlus, RefreshCw, Pencil, Trash2, Key, Shield, ShieldQuestion } from 'lucide-react';
 import { useToast } from '../hooks/useToast.ts';
+import { useShallow } from 'zustand/react/shallow';
 import { useAuthStore } from '../store/useStore.ts';
 import Modal from '../components/ui/Modal.tsx';
 import { validatePassword } from '../../shared/validation.js';
@@ -25,7 +26,9 @@ export default function Users() {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const { success, error: toastError } = useToast();
-  const { user: currentUser } = useAuthStore();
+  const { user: currentUser } = useAuthStore(
+    useShallow(s => ({ user: s.user }))
+  );
   
   // Form state
   const [formData, setFormData] = useState({
