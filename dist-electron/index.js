@@ -3,7 +3,7 @@ import { BrowserWindow, app, dialog, ipcMain, session } from "electron";
 import path from "path";
 import fs from "fs";
 import pino from "pino";
-import { PrismaClient } from "@prisma/client";
+import pkg from "@prisma/client";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import { pipeline } from "stream";
 import { promisify } from "util";
@@ -99,18 +99,9 @@ var PrismaProductRepository = class {
 	async findAll(search, categoryId) {
 		const where = {};
 		if (search) where.OR = [
-			{ name: {
-				contains: search,
-				mode: "insensitive"
-			} },
-			{ sku: {
-				contains: search,
-				mode: "insensitive"
-			} },
-			{ description: {
-				contains: search,
-				mode: "insensitive"
-			} }
+			{ name: { contains: search } },
+			{ sku: { contains: search } },
+			{ description: { contains: search } }
 		];
 		if (categoryId) where.category_id = categoryId;
 		return this.prisma.product.findMany({
@@ -226,22 +217,10 @@ var PrismaClientRepository = class {
 	}
 	async findAll(search) {
 		const where = search ? { OR: [
-			{ dni: {
-				contains: search,
-				mode: "insensitive"
-			} },
-			{ name: {
-				contains: search,
-				mode: "insensitive"
-			} },
-			{ code: {
-				contains: search,
-				mode: "insensitive"
-			} },
-			{ tax_id: {
-				contains: search,
-				mode: "insensitive"
-			} }
+			{ dni: { contains: search } },
+			{ name: { contains: search } },
+			{ code: { contains: search } },
+			{ tax_id: { contains: search } }
 		] } : {};
 		return this.prisma.client.findMany({
 			where,
@@ -577,18 +556,9 @@ var PrismaSupplierRepository = class {
 	async findAll(search) {
 		const where = {};
 		if (search) where.OR = [
-			{ name: {
-				contains: search,
-				mode: "insensitive"
-			} },
-			{ ruc: {
-				contains: search,
-				mode: "insensitive"
-			} },
-			{ email: {
-				contains: search,
-				mode: "insensitive"
-			} }
+			{ name: { contains: search } },
+			{ ruc: { contains: search } },
+			{ email: { contains: search } }
 		];
 		return this.prisma.supplier.findMany({
 			where,
@@ -897,10 +867,7 @@ var PrismaCategoryRepository = class {
 		this.prisma = prisma;
 	}
 	async findAll(search) {
-		const where = search ? { name: {
-			contains: search,
-			mode: "insensitive"
-		} } : {};
+		const where = search ? { name: { contains: search } } : {};
 		return this.prisma.category.findMany({
 			where,
 			select: {
@@ -2251,10 +2218,10 @@ var purchaseSchema = z.object({
 	supplier_id: z.coerce.number().int().positive("El ID del proveedor es obligatorio."),
 	items: z.array(purchaseItemSchema).min(1, "La orden debe tener al menos un producto."),
 	payment_status: z.enum([
-		"PENDING",
+		"UNPAID",
 		"PAID",
 		"CANCELED"
-	]).optional().default("PENDING")
+	]).optional().default("UNPAID")
 });
 var userCreateSchema = z.object({
 	username: z.string().min(1, "El nombre de usuario es obligatorio.").max(50),
@@ -2681,7 +2648,7 @@ var CashRegisterService = class {
 		const register = await this.cashRegisterRepo.findById(registerId);
 		if (!register) throw new NotFoundError("Caja");
 		const expectedCash = Number(register.opening_amount) + Number(register.total_sales);
-		const difference = Number(closingAmount) - expectedCash;
+		const difference = Math.round((Number(closingAmount) - expectedCash) * 100) / 100;
 		const salesCount = await this.cashRegisterRepo.getSalesCount(register.id, register.opened_at);
 		const status = difference === 0 ? "PERFECT" : difference > 0 ? "SURPLUS" : "MISSING";
 		await this.cashRegisterRepo.close(register.id, Number(closingAmount), difference, status);
@@ -4869,6 +4836,7 @@ async function runMigrations(prisma) {
 }
 //#endregion
 //#region src/backend/index.ts
+var { PrismaClient } = pkg;
 setupProductionEnv();
 var container = buildContainer(new PrismaClient({ adapter: new PrismaBetterSqlite3({ url: process.env.DATABASE_URL }) }));
 setContainer(container);

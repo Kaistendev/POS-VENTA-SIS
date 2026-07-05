@@ -10,10 +10,10 @@ export class PrismaClientRepository implements IClientRepository {
     const where = search
       ? {
           OR: [
-            { dni: { contains: search, mode: 'insensitive' as const } },
-            { name: { contains: search, mode: 'insensitive' as const } },
-            { code: { contains: search, mode: 'insensitive' as const } },
-            { tax_id: { contains: search, mode: 'insensitive' as const } },
+            { dni: { contains: search } },
+            { name: { contains: search } },
+            { code: { contains: search } },
+            { tax_id: { contains: search } },
           ],
         }
       : {};

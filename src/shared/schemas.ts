@@ -84,7 +84,7 @@ export const purchaseItemSchema = z.object({
 export const purchaseSchema = z.object({
   supplier_id: z.coerce.number().int().positive("El ID del proveedor es obligatorio."),
   items: z.array(purchaseItemSchema).min(1, "La orden debe tener al menos un producto."),
-  payment_status: z.enum(["PENDING", "PAID", "CANCELED"]).optional().default("PENDING"),
+  payment_status: z.enum(["UNPAID", "PAID", "CANCELED"]).optional().default("UNPAID"),
 });
 
 // ─── User ───

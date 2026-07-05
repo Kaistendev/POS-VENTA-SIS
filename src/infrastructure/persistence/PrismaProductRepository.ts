@@ -12,9 +12,9 @@ export class PrismaProductRepository implements IProductRepository {
 
     if (search) {
       where.OR = [
-        { name: { contains: search, mode: 'insensitive' as const } },
-        { sku: { contains: search, mode: 'insensitive' as const } },
-        { description: { contains: search, mode: 'insensitive' as const } },
+        { name: { contains: search } },
+        { sku: { contains: search } },
+        { description: { contains: search } },
       ];
     }
 

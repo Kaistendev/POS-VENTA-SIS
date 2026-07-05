@@ -8,7 +8,7 @@ export class PrismaCategoryRepository implements ICategoryRepository {
 
   async findAll(search?: string): Promise<Category[]> {
     const where = search
-      ? { name: { contains: search, mode: 'insensitive' as const } }
+      ? { name: { contains: search } }
       : {};
 
     return this.prisma.category.findMany({

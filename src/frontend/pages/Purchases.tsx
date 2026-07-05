@@ -120,10 +120,9 @@ export default function Purchases() {
         if (creatingForIndex >= 0) {
           updateItem(creatingForIndex, 'product_id', result.id);
           updateItem(creatingForIndex, 'unit_cost', quickProduct.price_purchase);
-          const supplierName = suppliers.find((s: any) => s.id === quickProduct.supplier_id)?.name || '';
-          setProductSearch(prev => ({ 
-            ...prev, 
-            [creatingForIndex]: `${quickProduct.name} (${quickProduct.sku})${supplierName ? ` - ${supplierName}` : ''}` 
+          setProductSearch(prev => ({
+            ...prev,
+            [creatingForIndex]: quickProduct.sku || quickProduct.name,
           }));
         }
       } else {

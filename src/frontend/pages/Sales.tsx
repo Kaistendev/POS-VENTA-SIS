@@ -281,9 +281,11 @@ export default function Sales() {
     }
   };
 
-  const filteredProducts = products.filter(p => 
-    p.sku.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    (p.name && p.name.toLowerCase().includes(searchTerm.toLowerCase()))
+  const filteredProducts = products.filter(p =>
+    p.stock > 0 && (
+      p.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (p.name && p.name.toLowerCase().includes(searchTerm.toLowerCase()))
+    )
   );
 
   // Check if product can be added to cart

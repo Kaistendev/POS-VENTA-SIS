@@ -51,7 +51,7 @@ export class CashRegisterService {
     if (!register) throw new NotFoundError('Caja');
 
     const expectedCash = Number(register.opening_amount) + Number(register.total_sales);
-    const difference = Number(closingAmount) - expectedCash;
+    const difference = Math.round((Number(closingAmount) - expectedCash) * 100) / 100;
 
     const salesCount = await this.cashRegisterRepo.getSalesCount(
       register.id,
