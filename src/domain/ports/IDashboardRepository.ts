@@ -1,5 +1,6 @@
 import {
   DashboardStats,
+  LastSaleClient,
   WeeklySalesEntry,
   LowStockProduct,
   SalesByPaymentEntry,
@@ -20,4 +21,5 @@ export interface IDashboardRepository {
   getSalesByHour(startDate?: Date, endDate?: Date): Promise<SalesByHourEntry[]>;
   getCashRegisterSummary(startDate?: Date, endDate?: Date): Promise<CashRegisterSummary>;
   getInventoryMetrics(): Promise<InventoryMetrics>;
+  getLastSaleWithClient(): Promise<LastSaleClient | null>;
 }

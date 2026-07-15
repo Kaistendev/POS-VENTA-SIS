@@ -3,6 +3,7 @@ import { IDashboardRepository } from '../../domain/ports/IDashboardRepository.js
 import { buildDateFilter } from '../../shared/helpers.js';
 import {
   DashboardStats,
+  LastSaleClient,
   WeeklySalesEntry,
   LowStockProduct,
   SalesByPaymentEntry,
@@ -238,6 +239,27 @@ export class PrismaDashboardRepository implements IDashboardRepository {
     );
 
     return { registers, summary };
+  }
+
+  async getLastSaleWithClient(): Promise<LastSaleClient | null> {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const sale = await this.prisma.sale.findFirst({
+      where: { created_at: { gte: today } },
+      orderBy: { created_at: 'desc' },
+      include: { client: { select: { name: true, dni: true } } },
+    });
+
+    if (!sale) return null;
+
+    return {
+      sale_id: sale.id,
+      client_name: sale.client?.name ?? null,
+      client_dni: sale.client?.dni ?? null,
+      total: sale.total,
+      created_at: sale.created_at,
+    };
   }
 
   async getInventoryMetrics(): Promise<InventoryMetrics> {

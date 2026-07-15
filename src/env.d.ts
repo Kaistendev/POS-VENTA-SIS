@@ -82,7 +82,7 @@ interface Window {
     deleteCategory: (id: number, userId?: number) => Promise<{ success: boolean }>;
 
     // Sales
-    getAllSales: (startDate?: Date, endDate?: Date, clientId?: number, cashRegisterId?: number) => Promise<import('./domain/models').Sale[]>;
+    getAllSales: (startDate?: Date, endDate?: Date, clientId?: number, cashRegisterId?: number, page?: number, pageSize?: number) => Promise<import('./domain/dtos').PaginatedResult<import('./domain/models').Sale>>;
     getTodaySales: () => Promise<import('./domain/models').Sale[]>;
     getLastSale: () => Promise<import('./domain/models').SaleWithItems | null>;
     getSalesStats: (startDate?: Date, endDate?: Date) => Promise<import('./domain/dtos').SalesStatsDTO>;
@@ -114,7 +114,7 @@ interface Window {
     updatePurchasePaymentStatus: (purchaseId: number, paymentStatus: string) => Promise<{ success: boolean }>;
 
     // Inventory Movements
-    getAllMovements: () => Promise<import('./domain/models').InventoryMovement[]>;
+    getAllMovements: (page?: number, pageSize?: number, productId?: number, type?: string, reason?: string, startDate?: Date, endDate?: Date) => Promise<import('./domain/dtos').PaginatedResult<import('./domain/models').InventoryMovement>>;
 
     // Tax Settings
     getTaxSettings: () => Promise<import('./domain/dtos').TaxSettingsDTO>;
@@ -136,6 +136,9 @@ interface Window {
       showOpenDialog: (options: Record<string, unknown>) => Promise<Record<string, unknown>>;
       showSaveDialog: (options: Record<string, unknown>) => Promise<Record<string, unknown>>;
     };
+
+    // AI Assistant
+    askAi: (query: string) => Promise<IpcResponse<import('./domain/dtos').AiResponseDTO>>;
 
     // Reports
     generateReport: (request: import('./domain/dtos').ReportRequestDTO) => Promise<{ success: boolean; path?: string; message?: string }>;

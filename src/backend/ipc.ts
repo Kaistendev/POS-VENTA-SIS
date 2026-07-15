@@ -21,6 +21,7 @@ import {
   userCreateSchema,
   settingsSchema,
   discountSchema,
+  aiChatSchema,
 } from "../shared/schemas.js";
 
 export function setupIpcHandlers() {
@@ -517,9 +518,9 @@ export function setupIpcHandlers() {
   /**
    * SALES
    */
-  ipcMain.handle("sales:getAll", async (_, startDate?: Date, endDate?: Date, clientId?: number, cashRegisterId?: number) => {
+  ipcMain.handle("sales:getAll", async (_, startDate?: Date, endDate?: Date, clientId?: number, cashRegisterId?: number, page?: number, pageSize?: number) => {
     try {
-      return await $.saleService.getAllSales(startDate, endDate, clientId, cashRegisterId);
+      return await $.saleService.getAllSales(startDate, endDate, clientId, cashRegisterId, page, pageSize);
     } catch (error: any) {
       logger.error('[Sales] getAll error:', error);
       return sanitizedCatch(error, 'Error al obtener ventas');
@@ -649,18 +650,12 @@ export function setupIpcHandlers() {
   /**
    * INVENTORY MOVEMENTS
    */
-  ipcMain.handle("movements:getAll", async () => {
+  ipcMain.handle("movements:getAll", async (_, page?: number, pageSize?: number, productId?: number, type?: string, reason?: string, startDate?: Date, endDate?: Date) => {
     try {
       const user = getCurrentUser();
       if (!user) throw new UnauthorizedError();
       if (user.role !== 'ADMIN') throw new ForbiddenError(['ADMIN']);
-      return await $.prisma.inventoryMovement.findMany({
-        include: {
-          product: { select: { id: true, name: true, sku: true } },
-        },
-        orderBy: { created_at: 'desc' },
-        take: 500,
-      });
+      return await $.movementRepo.findAll({ page, pageSize, productId, type, reason, startDate, endDate });
     } catch (error: any) {
       return [];
     }
@@ -846,4 +841,11 @@ export function setupIpcHandlers() {
     await fs.writeFile(filePath, buffer);
     return { success: true, path: filePath };
   })));
+
+  /**
+   * AI ASSISTANT
+   */
+  ipcMain.handle("ai:chat", wrapIpc(async (data: { query: string }) => {
+    return await $.aiService.askAssistant(data.query);
+  }, aiChatSchema));
 }

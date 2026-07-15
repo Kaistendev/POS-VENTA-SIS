@@ -3,9 +3,11 @@ import crypto from 'node:crypto';
 import { IUserRepository } from '../../domain/ports/IUserRepository.js';
 import { User } from '../../domain/models.js';
 import { CreateUserDTO } from '../../domain/dtos.js';
-import { checkRateLimit, recordFailure, resetRateLimit } from '../auth/rateLimiter.js';
 import { validatePassword } from '../../shared/validation.js';
 import { logger } from '../../shared/logger.js';
+
+const MAX_ATTEMPTS = 5;
+const LOCKOUT_MS = 15 * 60 * 1000;
 
 const recoveryTokens = new Map<string, { username: string; expiresAt: number }>();
 
@@ -96,31 +98,50 @@ export class AuthService {
   }
 
   async login(username: string, password: string): Promise<LoginResult> {
-    const rateCheck = checkRateLimit(username);
-    if (!rateCheck.allowed) {
-      const minutes = Math.ceil(rateCheck.lockoutRemainingMs / 60000);
-      return {
-        success: false,
-        error: `Demasiados intentos. Bloqueado por ${minutes} minuto${minutes > 1 ? 's' : ''}`,
-        remainingAttempts: 0,
-        locked: true,
-        lockoutRemainingMs: rateCheck.lockoutRemainingMs,
-      };
-    }
-
     try {
       const user = await this.userRepo.findByUsername(username);
 
       if (!user) {
-        recordFailure(username);
-        return { success: false, error: 'Usuario no encontrado', remainingAttempts: rateCheck.remainingAttempts - 1 };
+        return { success: false, error: 'Usuario no encontrado' };
+      }
+
+      const now = Date.now();
+
+      if (user.locked_until && new Date(user.locked_until).getTime() > now) {
+        const remainingMs = new Date(user.locked_until).getTime() - now;
+        const minutes = Math.ceil(remainingMs / 60000);
+        return {
+          success: false,
+          error: `Demasiados intentos. Bloqueado por ${minutes} minuto${minutes > 1 ? 's' : ''}`,
+          remainingAttempts: 0,
+          locked: true,
+          lockoutRemainingMs: remainingMs,
+        };
+      }
+
+      if (user.failed_attempts >= MAX_ATTEMPTS) {
+        await this.userRepo.resetLoginAttempts(username);
       }
 
       const isMatch = await bcrypt.compare(password, user.password_hash);
 
       if (!isMatch) {
-        recordFailure(username);
-        const remaining = rateCheck.remainingAttempts - 1;
+        const newAttempts = user.failed_attempts + 1;
+        const remaining = MAX_ATTEMPTS - newAttempts;
+
+        if (newAttempts >= MAX_ATTEMPTS) {
+          const lockedUntil = new Date(now + LOCKOUT_MS);
+          await this.userRepo.updateLoginAttempts(username, newAttempts, lockedUntil);
+          return {
+            success: false,
+            error: `Demasiados intentos. Bloqueado por 15 minutos`,
+            remainingAttempts: 0,
+            locked: true,
+            lockoutRemainingMs: LOCKOUT_MS,
+          };
+        }
+
+        await this.userRepo.updateLoginAttempts(username, newAttempts, null);
         return {
           success: false,
           error: remaining > 0 ? `Contraseña incorrecta. Intentos restantes: ${remaining}` : 'Contraseña incorrecta',
@@ -128,7 +149,7 @@ export class AuthService {
         };
       }
 
-      resetRateLimit(username);
+      await this.userRepo.resetLoginAttempts(username);
 
       const { password_hash: _, ...userWithoutPassword } = user;
 
@@ -136,7 +157,6 @@ export class AuthService {
     } catch (error: any) {
       logger.error({ err: error }, 'Login error');
       if (error.code === 'P2025') {
-        recordFailure(username);
         return { success: false, error: 'Usuario no encontrado', remainingAttempts: 0 };
       }
       return { success: false, error: 'Error interno del servidor' };

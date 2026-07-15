@@ -1,8 +1,5 @@
-import { app } from 'electron';
-import path from 'path';
-import fs from 'fs';
-import { fileURLToPath } from 'url';
 import { logger } from '../../shared/logger.js';
+import { SCHEMA_SQL } from './generatedSchema.js';
 
 /**
  * Split a SQL script into individual statements.
@@ -66,34 +63,6 @@ function splitSqlStatements(sql: string): string[] {
 }
 
 /**
- * Locate the schema.sql file.
- */
-function findSchemaSql(): string | null {
-  const candidates: string[] = [];
-
-  if (app.isPackaged) {
-    candidates.push(path.join(process.resourcesPath, 'prisma', 'schema.sql'));
-    candidates.push(path.join(process.resourcesPath, 'schema.sql'));
-  }
-
-  // Dev / fallback paths
-  try {
-    const currentDir = path.dirname(fileURLToPath(import.meta.url));
-    // dist-electron/backend/utils/ -> ../../.. -> project root -> prisma/schema.sql
-    candidates.push(path.join(currentDir, '..', '..', '..', 'prisma', 'schema.sql'));
-    // Also check relative to cwd (e.g. when running via tsx directly)
-    candidates.push(path.join(process.cwd(), 'prisma', 'schema.sql'));
-  } catch { /* ignore */ }
-
-  for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) {
-      return candidate;
-    }
-  }
-  return null;
-}
-
-/**
  * Check if the database appears to have been initialized
  * by checking for the existence of core tables.
  */
@@ -110,7 +79,7 @@ async function isDatabaseInitialized(prisma: any): Promise<boolean> {
 
 /**
  * Run the full schema DDL against the database.
- * Creates all tables, indexes, and constraints from schema.sql.
+ * Creates all tables, indexes, and constraints from the embedded schema.
  */
 export async function runMigrations(prisma: any): Promise<{ applied: boolean; error?: string }> {
   const alreadyInitialized = await isDatabaseInitialized(prisma);
@@ -119,16 +88,8 @@ export async function runMigrations(prisma: any): Promise<{ applied: boolean; er
     return { applied: false };
   }
 
-  const schemaPath = findSchemaSql();
-  if (!schemaPath) {
-    const msg = 'schema.sql not found in any expected location';
-    logger.error(msg);
-    return { applied: false, error: msg };
-  }
-
-  logger.info(`Loading schema from ${schemaPath}`);
-  const sqlContent = fs.readFileSync(schemaPath, 'utf-8');
-  const statements = splitSqlStatements(sqlContent);
+  logger.info('Loading embedded schema');
+  const statements = splitSqlStatements(SCHEMA_SQL);
   logger.info(`Found ${statements.length} SQL statements to execute`);
 
   for (let i = 0; i < statements.length; i++) {

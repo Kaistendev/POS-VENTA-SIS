@@ -64,4 +64,18 @@ export class PrismaUserRepository implements IUserRepository {
   async count(): Promise<number> {
     return this.prisma.user.count();
   }
+
+  async updateLoginAttempts(username: string, failed_attempts: number, locked_until: Date | null): Promise<void> {
+    await this.prisma.user.update({
+      where: { username },
+      data: { failed_attempts, locked_until },
+    });
+  }
+
+  async resetLoginAttempts(username: string): Promise<void> {
+    await this.prisma.user.update({
+      where: { username },
+      data: { failed_attempts: 0, locked_until: null },
+    });
+  }
 }

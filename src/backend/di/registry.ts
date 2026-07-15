@@ -19,6 +19,8 @@ export interface AppContainer {
   schedulerService: any;
   discountService: any;
   cacheService: any;
+  movementRepo: any;
+  aiService: any;
 }
 
 let _container: AppContainer | null = null;

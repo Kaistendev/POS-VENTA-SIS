@@ -13,9 +13,11 @@ import { PrismaCategoryRepository } from '../../infrastructure/persistence/Prism
 import { PrismaAuditLogRepository } from '../../infrastructure/persistence/PrismaAuditLogRepository.js';
 import { PrismaDashboardRepository } from '../../infrastructure/persistence/PrismaDashboardRepository.js';
 import { PrismaDiscountRepository } from '../../infrastructure/persistence/PrismaDiscountRepository.js';
+import { PrismaInventoryMovementRepository } from '../../infrastructure/persistence/PrismaInventoryMovementRepository.js';
 import { ElectronBackupService } from '../../infrastructure/backup/ElectronBackupService.js';
 import { PDFReportGenerator } from '../../infrastructure/reports/PDFReportGenerator.js';
 import { ExcelReportGenerator } from '../../infrastructure/reports/ExcelReportGenerator.js';
+import { OllamaAiProvider } from '../../infrastructure/ai/OllamaAiProvider.js';
 
 // Servicios de aplicación
 import { ProductService } from '../services/ProductService.js';
@@ -34,6 +36,7 @@ import { CacheService } from '../services/CacheService.js';
 import { ReportService } from '../services/ReportService.js';
 import { SchedulerService } from '../services/SchedulerService.js';
 import { DiscountService } from '../services/DiscountService.js';
+import { AiService } from '../services/AiService.js';
 
 export function buildContainer(prisma: PrismaClient) {
   // --- Repositorios (adaptadores) ---
@@ -49,6 +52,7 @@ export function buildContainer(prisma: PrismaClient) {
   const auditLogRepo = new PrismaAuditLogRepository(prisma);
   const dashboardRepo = new PrismaDashboardRepository(prisma);
   const discountRepo = new PrismaDiscountRepository(prisma);
+  const movementRepo = new PrismaInventoryMovementRepository(prisma);
 
   // --- Servicios de infraestructura ---
   const cacheService = new CacheService();
@@ -89,6 +93,8 @@ export function buildContainer(prisma: PrismaClient) {
     settingsService,
   );
   const schedulerService = new SchedulerService(reportService, backupService);
+  const aiProvider = new OllamaAiProvider();
+  const aiService = new AiService(aiProvider, dashboardService, productService, clientService);
 
   return {
     prisma,
@@ -109,5 +115,7 @@ export function buildContainer(prisma: PrismaClient) {
     schedulerService,
     discountService,
     cacheService,
+    movementRepo,
+    aiService,
   };
 }

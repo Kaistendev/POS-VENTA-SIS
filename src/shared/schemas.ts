@@ -116,6 +116,10 @@ export const discountSchema = z.object({
 });
 
 // ─── Settings allowlist ───
+export const aiChatSchema = z.object({
+  query: z.string().min(1, "La consulta no puede estar vacía."),
+});
+
 const SETTINGS_ALLOWLIST = [
   "business_name",
   "business_phone",

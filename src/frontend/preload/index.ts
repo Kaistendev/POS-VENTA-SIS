@@ -70,7 +70,7 @@ contextBridge.exposeInMainWorld('api', {
   deleteCategory: (id: number, userId?: number) => ipcRenderer.invoke('categories:delete', id, userId),
 
   // Sales
-  getAllSales: (startDate?: Date, endDate?: Date, clientId?: number, cashRegisterId?: number) => ipcRenderer.invoke('sales:getAll', startDate, endDate, clientId, cashRegisterId),
+  getAllSales: (startDate?: Date, endDate?: Date, clientId?: number, cashRegisterId?: number, page?: number, pageSize?: number) => ipcRenderer.invoke('sales:getAll', startDate, endDate, clientId, cashRegisterId, page, pageSize),
   getTodaySales: () => ipcRenderer.invoke('sales:getToday'),
   getLastSale: () => ipcRenderer.invoke('sales:getLast'),
   getSalesStats: (startDate?: Date, endDate?: Date) => ipcRenderer.invoke('sales:getStats', startDate, endDate),
@@ -102,7 +102,7 @@ contextBridge.exposeInMainWorld('api', {
   updatePurchasePaymentStatus: (purchaseId: number, paymentStatus: string) => ipcRenderer.invoke('purchases:updatePaymentStatus', purchaseId, paymentStatus),
 
   // Inventory Movements
-  getAllMovements: () => ipcRenderer.invoke('movements:getAll'),
+  getAllMovements: (page?: number, pageSize?: number, productId?: number, type?: string, reason?: string, startDate?: Date, endDate?: Date) => ipcRenderer.invoke('movements:getAll', page, pageSize, productId, type, reason, startDate, endDate),
 
   // Backup & Restore
   createBackup: (label?: string) => ipcRenderer.invoke('backup:create', label),
@@ -141,6 +141,9 @@ contextBridge.exposeInMainWorld('api', {
     showOpenDialog: (options: any) => ipcRenderer.invoke('dialog:showOpenDialog', options),
     showSaveDialog: (options: any) => ipcRenderer.invoke('dialog:showSaveDialog', options),
   },
+
+  // AI Assistant
+  askAi: (query: string) => ipcRenderer.invoke('ai:chat', { query }),
 
   // Modal management (native Electron modals)
   modal: {

@@ -15,16 +15,22 @@ export default function InventoryMovements() {
   const [filterDateFrom, setFilterDateFrom] = useState<string>('');
   const [filterDateTo, setFilterDateTo] = useState<string>('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  const itemsPerPage = 8;
 
-  const fetchData = async () => {
+  const fetchData = async (pageNum?: number) => {
     setLoading(true);
     try {
       if (window.api) {
-        const [movData, prodData] = await Promise.all([
-          window.api.getAllMovements ? window.api.getAllMovements() : Promise.resolve([]),
+        const [result, prodData] = await Promise.all([
+          window.api.getAllMovements ? window.api.getAllMovements(pageNum ?? currentPage, itemsPerPage, selectedProduct ?? undefined, filterType || undefined, filterReason || undefined, filterDateFrom ? new Date(filterDateFrom) : undefined, filterDateTo ? new Date(filterDateTo) : undefined) : Promise.resolve({ data: [], total: 0, page: 1, pageSize: 8, totalPages: 1 }),
           window.api.getAllProducts()
         ]);
-        setMovements(movData || []);
+        setMovements(result.data || []);
+        setTotalItems(result.total || 0);
+        setTotalPages(result.totalPages || 1);
+        setCurrentPage(result.page || 1);
         setProducts(prodData || []);
       }
     } catch (error) {
@@ -34,8 +40,12 @@ export default function InventoryMovements() {
   };
 
   useEffect(() => {
-    fetchData();
+    fetchData(1);
   }, []);
+
+  useEffect(() => {
+    if (!loading) fetchData(currentPage);
+  }, [currentPage, selectedProduct, filterType, filterReason, filterDateFrom, filterDateTo]);
 
   // Debounce search term
   useEffect(() => {
@@ -86,37 +96,12 @@ export default function InventoryMovements() {
     );
   };
 
-  const filteredMovements = selectedProduct
-    ? movements.filter(m => m.product_id === selectedProduct)
-    : movements;
-
   const query = debouncedSearch.toLowerCase().trim();
 
   const displayMovements = (() => {
-    let result = filteredMovements;
+    let result = movements;
 
-    // Filter by type
-    if (filterType) {
-      result = result.filter(m => m.type === filterType);
-    }
-
-    // Filter by reason
-    if (filterReason) {
-      result = result.filter(m => m.reason === filterReason);
-    }
-
-    // Filter by date range
-    if (filterDateFrom) {
-      const from = new Date(filterDateFrom);
-      result = result.filter(m => new Date(m.created_at) >= from);
-    }
-    if (filterDateTo) {
-      const to = new Date(filterDateTo);
-      to.setHours(23, 59, 59, 999);
-      result = result.filter(m => new Date(m.created_at) <= to);
-    }
-
-    // Filter by search term
+    // Filter by search term (client-side, since server doesn't support text search yet)
     if (query) {
       result = result.filter(m => {
         const prod = m.product ?? {};
@@ -129,13 +114,15 @@ export default function InventoryMovements() {
     return result;
   })();
 
-  // Stats calculation
-  const totalEntradas = displayMovements.filter(m => m.type === 'ENTRADA').length;
-  const totalSalidas = displayMovements.filter(m => m.type === 'SALIDA').length;
+  // Stats calculation from current page
+  const totalEntradas = movements.filter(m => m.type === 'ENTRADA').length;
+  const totalSalidas = movements.filter(m => m.type === 'SALIDA').length;
 
-  const itemsPerPage = 8;
-  const totalPages = Math.max(1, Math.ceil(displayMovements.length / itemsPerPage));
-  const paginatedMovements = displayMovements.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  const displayTotalPages = query ? Math.max(1, Math.ceil(displayMovements.length / itemsPerPage)) : totalPages;
+  const displayTotalItems = query ? displayMovements.length : totalItems;
+  const paginatedMovements = query
+    ? displayMovements.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+    : displayMovements;
 
   return (
     <div className="space-y-4 h-full flex flex-col">
@@ -365,8 +352,8 @@ export default function InventoryMovements() {
         emptyDescription={searchTerm || filterType || filterReason || filterDateFrom ? "No se encontraron movimientos con los filtros aplicados" : "No hay movimientos de inventario registrados"}
         emptyIcon={<History className="w-8 h-8" />}
         currentPage={currentPage}
-        totalPages={totalPages}
-        totalItems={displayMovements.length}
+        totalPages={displayTotalPages}
+        totalItems={displayTotalItems}
         onPageChange={setCurrentPage}
       />
     </div>

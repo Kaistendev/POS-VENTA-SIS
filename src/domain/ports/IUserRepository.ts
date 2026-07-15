@@ -12,4 +12,6 @@ export interface IUserRepository {
   delete(id: number): Promise<void>;
   exists(username: string, excludeId?: number): Promise<boolean>;
   count(): Promise<number>;
+  updateLoginAttempts(username: string, failed_attempts: number, locked_until: Date | null): Promise<void>;
+  resetLoginAttempts(username: string): Promise<void>;
 }

@@ -2,6 +2,7 @@ import { IDashboardRepository } from '../../domain/ports/IDashboardRepository.js
 import { CacheService } from './CacheService.js';
 import {
   DashboardStats,
+  LastSaleClient,
   WeeklySalesEntry,
   LowStockProduct,
   SalesByPaymentEntry,
@@ -57,6 +58,10 @@ export class DashboardService {
 
   async getInventoryMetrics(): Promise<InventoryMetrics> {
     return this.repo.getInventoryMetrics();
+  }
+
+  async getLastSaleWithClient(): Promise<LastSaleClient | null> {
+    return this.repo.getLastSaleWithClient();
   }
 
   invalidateCache(): void {

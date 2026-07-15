@@ -22,12 +22,14 @@ export class SaleService {
     private dashboardService: IDashboardRepository,
   ) {}
 
-  async getAllSales(startDate?: Date, endDate?: Date, clientId?: number, cashRegisterId?: number) {
+  async getAllSales(startDate?: Date, endDate?: Date, clientId?: number, cashRegisterId?: number, page?: number, pageSize?: number) {
     const filter: SaleFilterDTO = {};
     if (startDate) filter.startDate = startDate;
     if (endDate) filter.endDate = endDate;
     if (clientId) filter.clientId = clientId;
     if (cashRegisterId) filter.cashRegisterId = cashRegisterId;
+    if (page) filter.page = page;
+    if (pageSize) filter.pageSize = pageSize;
 
     return this.saleRepo.findAll(filter);
   }

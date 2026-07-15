@@ -74,6 +74,8 @@ export interface User {
   username: string;
   role: string;
   security_question?: string | null;
+  failed_attempts: number;
+  locked_until: Date | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -233,6 +235,14 @@ export interface AuditLog {
 }
 
 // ─── Dashboard Types ───
+export interface LastSaleClient {
+  client_name: string | null;
+  client_dni: string | null;
+  sale_id: number;
+  total: number;
+  created_at: Date;
+}
+
 export interface DashboardStats {
   todayRevenue: number;
   todayProfit: number;

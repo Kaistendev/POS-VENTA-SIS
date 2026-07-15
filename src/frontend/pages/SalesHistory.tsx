@@ -16,19 +16,24 @@ export default function SalesHistory() {
   const [businessInfo, setBusinessInfo] = useState<any>(null);
   const [taxSettings, setTaxSettings] = useState<{ taxRate: number; taxType: string; taxIncluded: boolean }>({ taxRate: 0, taxType: 'none', taxIncluded: false });
   const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
   const itemsPerPage = 8;
   const { success, error: toastError } = useToast();
 
-  const fetchSales = async () => {
+  const fetchSales = async (pageNum?: number) => {
     setLoading(true);
     try {
       if (window.api) {
-        const [data, settings, tax] = await Promise.all([
-            window.api.getAllSales(),
+        const [result, settings, tax] = await Promise.all([
+            window.api.getAllSales(undefined, undefined, undefined, undefined, pageNum ?? currentPage, itemsPerPage),
             window.api.getSettings(),
             window.api.getTaxSettings()
         ]);
-        setSales(data || []);
+        setSales(result.data || []);
+        setTotalPages(result.totalPages || 1);
+        setTotalItems(result.total || 0);
+        setCurrentPage(result.page || 1);
         setBusinessInfo(settings);
         setTaxSettings(tax || { taxRate: 0, taxType: 'none', taxIncluded: false });
       }
@@ -40,8 +45,12 @@ export default function SalesHistory() {
   };
 
   useEffect(() => {
-    fetchSales();
+    fetchSales(1);
   }, []);
+
+  useEffect(() => {
+    if (!loading) fetchSales(currentPage);
+  }, [currentPage]);
 
   const handleShowDetail = async (id: number) => {
     try {
@@ -131,8 +140,12 @@ export default function SalesHistory() {
     s.id?.toString().includes(searchTerm) || 
     (s.client?.name || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
-  const totalPages = Math.max(1, Math.ceil(filteredSales.length / itemsPerPage));
-  const paginatedSales = filteredSales.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  const displaySales = searchTerm ? filteredSales : sales;
+  const displayTotalPages = searchTerm ? Math.max(1, Math.ceil(filteredSales.length / itemsPerPage)) : totalPages;
+  const displayTotalItems = searchTerm ? filteredSales.length : totalItems;
+  const paginatedDisplay = searchTerm
+    ? displaySales.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+    : displaySales;
 
   const columns = [
     {
@@ -200,13 +213,13 @@ export default function SalesHistory() {
 
       <DataTable
         columns={columns}
-        data={paginatedSales}
+        data={paginatedDisplay}
         keyExtractor={(sale) => sale.id!}
         loading={loading}
         emptyMessage="No se encontraron ventas"
         currentPage={currentPage}
-        totalPages={totalPages}
-        totalItems={filteredSales.length}
+        totalPages={displayTotalPages}
+        totalItems={displayTotalItems}
         onPageChange={setCurrentPage}
       />
 

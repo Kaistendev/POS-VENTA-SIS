@@ -77,6 +77,8 @@ export interface SaleFilterDTO {
   endDate?: Date;
   clientId?: number;
   cashRegisterId?: number;
+  page?: number;
+  pageSize?: number;
 }
 
 export interface SalesStatsDTO {
@@ -96,6 +98,8 @@ export interface CreateUserDTO {
   role: string;
   security_question?: string | null;
   security_answer_hash?: string | null;
+  failed_attempts?: number;
+  locked_until?: Date | null;
 }
 
 export interface UpdateUserDTO {
@@ -104,6 +108,8 @@ export interface UpdateUserDTO {
   role?: string;
   security_question?: string | null;
   security_answer_hash?: string | null;
+  failed_attempts?: number;
+  locked_until?: Date | null;
 }
 
 export interface LoginDTO {
@@ -191,6 +197,20 @@ export interface UpdateDiscountDTO {
   min_purchase_amount?: number | null;
 }
 
+// ─── Pagination DTO ───
+export interface PaginationDTO {
+  page: number;
+  pageSize: number;
+}
+
+export interface PaginatedResult<T> {
+  data: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
 // ─── Report DTOs ───
 export type ReportFormat = 'pdf' | 'xlsx';
 export type ReportType = 'daily_sales' | 'sales_summary' | 'inventory' | 'low_stock' | 'top_products' | 'profit_summary' | 'sale_receipt' | 'cash_close';
@@ -259,6 +279,10 @@ export interface SaleReceiptItemDTO {
   discountAmount?: number | null;
   finalPrice?: number | null;
 }
+
+export type AiResponseDTO = 
+  | { type: 'TEXT'; content: string }
+  | { type: 'ACTION'; action: 'DRAFT_PRODUCT' | 'DRAFT_CLIENT' | 'DRAFT_SALE'; payload: Record<string, unknown> };
 
 export interface CashCloseDTO {
   registerId: number;

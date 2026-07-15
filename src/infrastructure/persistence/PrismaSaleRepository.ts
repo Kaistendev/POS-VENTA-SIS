@@ -1,30 +1,48 @@
 import type { PrismaClient } from '@prisma/client';
 import { ISaleRepository } from '../../domain/ports/ISaleRepository.js';
 import { Sale, SaleWithItems } from '../../domain/models.js';
-import { RegisterSaleDTO, SaleFilterDTO, SalesStatsDTO } from '../../domain/dtos.js';
+import { RegisterSaleDTO, SaleFilterDTO, SalesStatsDTO, PaginatedResult } from '../../domain/dtos.js';
 import { buildDateFilter } from '../../shared/helpers.js';
 import { BusinessRuleError } from '../../shared/errors.js';
 
 export class PrismaSaleRepository implements ISaleRepository {
   constructor(private prisma: PrismaClient) {}
 
-  async findAll(filter?: SaleFilterDTO): Promise<Sale[]> {
+  async findAll(filter?: SaleFilterDTO): Promise<PaginatedResult<Sale> | Sale[]> {
     const where: any = {};
     Object.assign(where, buildDateFilter('created_at', filter?.startDate, filter?.endDate));
     if (filter?.clientId) where.client_id = filter.clientId;
     if (filter?.cashRegisterId) where.cash_register_id = filter.cashRegisterId;
 
-    return this.prisma.sale.findMany({
-      where,
-      select: {
-        id: true, total: true, subtotal: true, tax_amount: true, payment_method: true,
-        created_at: true, updated_at: true, cash_register_id: true, client_id: true,
-        client: { select: { id: true, name: true, dni: true } },
-        cash_register: { select: { id: true, opened_at: true, opening_amount: true } },
-        _count: { select: { items: true } },
-      },
-      orderBy: { created_at: 'desc' },
-    }) as unknown as Sale[];
+    const page = filter?.page ?? 1;
+    const pageSize = filter?.pageSize ?? 50;
+    const skip = (page - 1) * pageSize;
+    const take = pageSize;
+
+    const [data, total] = await Promise.all([
+      this.prisma.sale.findMany({
+        where,
+        select: {
+          id: true, total: true, subtotal: true, tax_amount: true, payment_method: true,
+          created_at: true, updated_at: true, cash_register_id: true, client_id: true,
+          client: { select: { id: true, name: true, dni: true } },
+          cash_register: { select: { id: true, opened_at: true, opening_amount: true } },
+          _count: { select: { items: true } },
+        },
+        skip,
+        take,
+        orderBy: { created_at: 'desc' },
+      }),
+      this.prisma.sale.count({ where }),
+    ]);
+
+    return {
+      data: data as unknown as Sale[],
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
   }
 
   async findById(id: number): Promise<SaleWithItems | null> {
@@ -134,6 +152,15 @@ export class PrismaSaleRepository implements ISaleRepository {
 
       return sale.id;
     });
+  }
+
+  async count(filter?: SaleFilterDTO): Promise<number> {
+    const where: any = {};
+    Object.assign(where, buildDateFilter('created_at', filter?.startDate, filter?.endDate));
+    if (filter?.clientId) where.client_id = filter.clientId;
+    if (filter?.cashRegisterId) where.cash_register_id = filter.cashRegisterId;
+
+    return this.prisma.sale.count({ where });
   }
 
   async cancelSale(saleId: number): Promise<void> {

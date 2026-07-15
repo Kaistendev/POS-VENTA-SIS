@@ -1,7 +1,7 @@
-import React from 'react';
 import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar.tsx';
 import Header from './Header.tsx';
+import AiChatPanel from '../ai/AiChatPanel.tsx';
 
 export default function MainLayout() {
   return (
@@ -20,6 +20,9 @@ export default function MainLayout() {
           </div>
         </main>
       </div>
+
+      {/* AI Assistant Chat */}
+      <AiChatPanel />
     </div>
   );
 }
