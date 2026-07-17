@@ -14,10 +14,12 @@ import { PrismaAuditLogRepository } from '../../infrastructure/persistence/Prism
 import { PrismaDashboardRepository } from '../../infrastructure/persistence/PrismaDashboardRepository.js';
 import { PrismaDiscountRepository } from '../../infrastructure/persistence/PrismaDiscountRepository.js';
 import { PrismaInventoryMovementRepository } from '../../infrastructure/persistence/PrismaInventoryMovementRepository.js';
+import { PrismaAiTrainingLogRepository } from '../../infrastructure/persistence/PrismaAiTrainingLogRepository.js';
 import { ElectronBackupService } from '../../infrastructure/backup/ElectronBackupService.js';
 import { PDFReportGenerator } from '../../infrastructure/reports/PDFReportGenerator.js';
 import { ExcelReportGenerator } from '../../infrastructure/reports/ExcelReportGenerator.js';
 import { OllamaAiProvider } from '../../infrastructure/ai/OllamaAiProvider.js';
+import { ValidationPipeline, ReviewQueue, AiAuditService } from '../../infrastructure/ai/index.js';
 
 // Servicios de aplicación
 import { ProductService } from '../services/ProductService.js';
@@ -37,6 +39,7 @@ import { ReportService } from '../services/ReportService.js';
 import { SchedulerService } from '../services/SchedulerService.js';
 import { DiscountService } from '../services/DiscountService.js';
 import { AiService } from '../services/AiService.js';
+import { AiMonitorService } from '../services/AiMonitorService.js';
 
 export function buildContainer(prisma: PrismaClient) {
   // --- Repositorios (adaptadores) ---
@@ -53,6 +56,7 @@ export function buildContainer(prisma: PrismaClient) {
   const dashboardRepo = new PrismaDashboardRepository(prisma);
   const discountRepo = new PrismaDiscountRepository(prisma);
   const movementRepo = new PrismaInventoryMovementRepository(prisma);
+  const aiTrainingLogRepo = new PrismaAiTrainingLogRepository(prisma);
 
   // --- Servicios de infraestructura ---
   const cacheService = new CacheService();
@@ -94,7 +98,12 @@ export function buildContainer(prisma: PrismaClient) {
   );
   const schedulerService = new SchedulerService(reportService, backupService);
   const aiProvider = new OllamaAiProvider();
-  const aiService = new AiService(aiProvider, dashboardService, productService, clientService);
+  const aiService = new AiService(aiProvider, dashboardService, productService, clientService, aiTrainingLogRepo);
+  const aiMonitorService = new AiMonitorService();
+  const aiAuditService = new AiAuditService(aiTrainingLogRepo, auditLogRepo);
+  const reviewQueue = new ReviewQueue();
+  const validationPipeline = new ValidationPipeline(reviewQueue, aiAuditService);
+  aiService.setValidationPipeline(validationPipeline);
 
   return {
     prisma,
@@ -116,6 +125,11 @@ export function buildContainer(prisma: PrismaClient) {
     discountService,
     cacheService,
     movementRepo,
+    aiTrainingLogRepo,
+    aiProvider,
     aiService,
+    aiMonitorService,
+    aiAuditService,
+    validationPipeline,
   };
 }

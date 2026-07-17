@@ -846,6 +846,109 @@ export function setupIpcHandlers() {
    * AI ASSISTANT
    */
   ipcMain.handle("ai:chat", wrapIpc(async (data: { query: string }) => {
-    return await $.aiService.askAssistant(data.query);
+    const user = getCurrentUser();
+    return await $.aiService.askAssistant(data.query, user?.id);
   }, aiChatSchema));
+
+  /**
+   * AI MONITORING STATS
+   */
+  ipcMain.handle("ai:stats", wrapIpc(async () => {
+    return $.aiMonitorService.getSnapshot();
+  }));
+
+  ipcMain.handle("ai:stats:history", wrapIpc(async (data: { limit?: number }) => {
+    return $.aiMonitorService.getHistory(data?.limit);
+  }));
+
+  ipcMain.handle("ai:stats:errors", wrapIpc(async () => {
+    return $.aiMonitorService.getRecentErrors();
+  }));
+
+  ipcMain.handle("ai:stats:reset", wrapIpc(async () => {
+    $.aiMonitorService.resetHistory();
+    return { reset: true };
+  }));
+
+  /**
+   * AI FEEDBACK
+   */
+  ipcMain.handle('ai:feedback', wrapIpc(async (data: { messageIndex: number; rating: number; query?: string }) => {
+    const user = getCurrentUser();
+    if (!user || !$.aiTrainingLogRepo) return { success: false };
+
+    await $.aiTrainingLogRepo.create({
+      usuario_id: user.id,
+      mensaje_usuario: data.query || `feedback:${data.rating}`,
+      nlu_output: JSON.stringify({ feedback: data.rating, messageIndex: data.messageIndex }),
+      respuesta_sistema: null,
+    });
+
+    return { success: true };
+  }));
+
+  /**
+   * AI TRAINING
+   */
+  ipcMain.handle('ai:training:stats', wrapIpc(async () => {
+    const AutoTrainService = (await import('../infrastructure/neural/training/AutoTrainService.js')).AutoTrainService;
+    const svc = new AutoTrainService();
+    return svc.getStats();
+  }));
+
+  ipcMain.handle('ai:training:retrain', wrapIpc(async (data: { epochs?: number }) => {
+    const AutoTrainService = (await import('../infrastructure/neural/training/AutoTrainService.js')).AutoTrainService;
+    const svc = new AutoTrainService();
+    return svc.retrain({ epochs: data?.epochs });
+  }));
+
+  /**
+   * AI DRAFT APPROVAL
+   */
+  ipcMain.handle('ai:draft:approve', wrapIpc(async (data: { draftId: string; userId?: number }) => {
+    const pipeline = $.validationPipeline;
+    if (!pipeline) return { success: false, message: 'Validation pipeline not available' };
+
+    const draft = pipeline.getReviewQueue().approve(data.draftId, data.userId);
+    if (!draft) return { success: false, message: 'Draft not found or already processed' };
+
+    await pipeline.getAuditService().recordDraftConfirmed(draft.type, draft.payload, data.userId);
+
+    try {
+      if (draft.type === 'DRAFT_PRODUCT') {
+        const result = await $.productService.createProduct(draft.payload as any, data.userId);
+        return { success: true, action: draft.type, result };
+      }
+      if (draft.type === 'DRAFT_CLIENT') {
+        const result = await $.clientService.createClient(draft.payload as any, data.userId);
+        return { success: true, action: draft.type, result };
+      }
+      return { success: true, action: draft.type };
+    } catch (err: any) {
+      return { success: false, message: err.message ?? 'Failed to create entity' };
+    }
+  }));
+
+  ipcMain.handle('ai:draft:reject', wrapIpc(async (data: { draftId: string; userId?: number }) => {
+    const pipeline = $.validationPipeline;
+    if (!pipeline) return { success: false, message: 'Validation pipeline not available' };
+
+    const draft = pipeline.getReviewQueue().reject(data.draftId, String(data.userId));
+    if (!draft) return { success: false, message: 'Draft not found or already processed' };
+
+    await pipeline.getAuditService().recordDraftRejected(draft.type, data.userId);
+    return { success: true, draftId: draft.draftId, status: 'rejected' };
+  }));
+
+  ipcMain.handle('ai:draft:pending', wrapIpc(async () => {
+    const pipeline = $.validationPipeline;
+    if (!pipeline) return [];
+    return pipeline.getReviewQueue().getPending();
+  }));
+
+  ipcMain.handle('ai:draft:history', wrapIpc(async (data: { limit?: number }) => {
+    const pipeline = $.validationPipeline;
+    if (!pipeline) return [];
+    return pipeline.getReviewQueue().getHistory(data?.limit);
+  }));
 }

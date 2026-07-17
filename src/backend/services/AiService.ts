@@ -1,123 +1,234 @@
 import { IAiProvider } from '../../domain/ports/IAiProvider.js';
+import { IAiTrainingLogRepository } from '../../domain/ports/IAiTrainingLogRepository.js';
+import { IAuditLogRepository } from '../../domain/ports/IAuditLogRepository.js';
 import { AiResponseDTO } from '../../domain/dtos.js';
 import { ProductService } from './ProductService.js';
 import { DashboardService } from './DashboardService.js';
 import { ClientService } from './ClientService.js';
+import { NeuralOrchestrator } from '../../infrastructure/neural/orchestrator/neuralOrchestrator.js';
+import { UnifiedQueryService } from '../../infrastructure/neural/orchestrator/unifiedQueryService.js';
+import { IntentCategory } from '../../infrastructure/neural/types.js';
+import { ValidationPipeline } from '../../infrastructure/ai/validationPipeline.js';
+import { logger } from '../../shared/logger.js';
 
 export class AiService {
+  private neuralOrchestrator: NeuralOrchestrator | null = null;
+  private unifiedQueryService: UnifiedQueryService | null = null;
+  private neuralEnabled = false;
+  private validationPipeline: ValidationPipeline | null = null;
+
   constructor(
     private aiProvider: IAiProvider,
     private dashboardService: DashboardService,
     private productService: ProductService,
     private clientService: ClientService,
+    private aiTrainingLogRepo?: IAiTrainingLogRepository,
   ) {}
 
+  setNeuralOrchestrator(orchestrator: NeuralOrchestrator): void {
+    this.neuralOrchestrator = orchestrator;
+  }
+
+  setUnifiedQueryService(service: UnifiedQueryService): void {
+    this.unifiedQueryService = service;
+  }
+
+  setValidationPipeline(pipeline: ValidationPipeline): void {
+    this.validationPipeline = pipeline;
+  }
+
+  async enableNeuralClassifier(): Promise<boolean> {
+    if (!this.neuralOrchestrator) return false;
+    const loaded = await this.neuralOrchestrator.isModelLoaded();
+    this.neuralEnabled = loaded;
+    if (loaded) {
+      logger.info('Neural classifier enabled');
+    }
+    return loaded;
+  }
+
   async processCommand(userInput: string): Promise<AiResponseDTO> {
-    const q = userInput.toLowerCase();
+    // ─── Neural + UQS classification → route by intent ───
+    let intent: string | null = null;
+    let confidence = 0;
+    let entities: Record<string, unknown> = {};
 
-    // ─── Fast regex paths (no LLM) ───
-    if (/^sku[\s]*[:]?\s*[\w-]+/i.test(q)) return this.handleStockQuery(userInput);
-    if (/costoso|caro|precio\.?mas|mayor\.?precio|mas\.?caro|mas caro/i.test(q) && !/crear|nuevo/.test(q)) return this.handleMostExpensiveProduct();
-    if (/barato|mas\.?barato|menor\.?precio|economico|mas economico/i.test(q) && !/crear|nuevo/.test(q)) return this.handleCheapestProduct();
-    if (/cuantos?\s+clientes/i.test(q)) return this.handleClientCount();
-    if (/cuantos?\s+(categorías|categorias)/i.test(q)) return this.handleCategoryCount();
-    if (/cuantos?\s+proveedores/i.test(q)) return this.handleSupplierCount();
-    if (/cuantos?\s+productos\s+(tengo|hay|en|registrados)/i.test(q)) return this.handleProductCount();
-    if (/cuantos?\s+ventas/i.test(q)) return this.handleSalesSummary(userInput);
+    // Try UQS first (includes cache + neural + ambiguity)
+    if (this.unifiedQueryService) {
+      try {
+        const uqs = await this.unifiedQueryService.query(userInput);
+        if (uqs.source === 'cache' || uqs.source === 'neural') {
+          intent = uqs.intent;
+          confidence = uqs.confidence ?? 0;
+        }
+      } catch {
+        logger.warn('[AiService] UQS failed, falling back to neural');
+      }
+    }
 
-    // ─── LLM classifier ───
-    const result = await this.classifyWithLLM(userInput);
-    if (!result) return this.handleGeneralQuery(userInput);
+    // Fallback: direct neural classifier
+    if (!intent && this.neuralEnabled && this.neuralOrchestrator) {
+      try {
+        const nn = await this.neuralOrchestrator.classify(userInput);
+        if (nn.source === 'neural' || nn.source === 'cache') {
+          intent = nn.intent;
+          confidence = nn.confidence ?? 0;
+        }
+      } catch {
+        logger.warn('[AiService] Neural classifier failed');
+      }
+    }
 
-    switch (result.intent) {
+    // Final fallback: LLM intent classifier
+    if (!intent) {
+      const llm = await this.classifyWithLLM(userInput);
+      if (llm?.intent) {
+        intent = llm.intent;
+        entities = llm.entities ?? {};
+      }
+    }
+
+    if (intent) {
+      return this.routeByIntent(intent as IntentCategory, userInput, entities);
+    }
+
+    return this.handleGeneralQuery(userInput);
+  }
+
+  private async routeByIntent(
+    intent: string,
+    userInput: string,
+    entities: Record<string, unknown>,
+  ): Promise<AiResponseDTO> {
+    switch (intent) {
       case 'product_query':
         return this.handleStockQuery(userInput);
       case 'sales_summary':
         return this.handleSalesSummary(userInput);
       case 'entity_count': {
-        const type = (result.entities?.entity_type as string) || '';
-        if (type.includes('producto') || type === 'product') return this.handleProductCount();
-        if (type.includes('cliente') || type === 'client') return this.handleClientCount();
-        if (type.includes('categoria') || type === 'category') return this.handleCategoryCount();
-        if (type.includes('proveedor') || type === 'supplier') return this.handleSupplierCount();
+        const q = userInput.toLowerCase();
+        const type = (entities?.entity_type as string) || '';
+        if (/proveedor/.test(q) || type.includes('proveedor') || type === 'supplier') return this.handleSupplierCount();
+        if (/categor/.test(q) || type.includes('categoria') || type === 'category') return this.handleCategoryCount();
+        if (/cliente/.test(q) || type.includes('cliente') || type === 'client') return this.handleClientCount();
+        if (/producto/.test(q) || type.includes('producto') || type === 'product') return this.handleProductCount();
         return this.handleGeneralQuery(userInput);
       }
       case 'entity_creation':
-        return this.handleEntityCreation(userInput, result.entities);
+        return this.handleEntityCreation(userInput, entities);
+      case 'data_modification':
+        return this.handleDataModification(entities);
+      case 'data_deletion':
+        return this.handleDataDeletion(entities);
       case 'sale_draft':
-        return this.handleSaleDraft(userInput, result.entities);
+        return this.handleSaleDraft(userInput, entities);
       default:
         return this.handleGeneralQuery(userInput);
     }
   }
 
   private async classifyWithLLM(input: string): Promise<{ intent: string; entities?: Record<string, unknown> } | null> {
-    const examples = `Eres un clasificador de intenciones para un sistema POS. Responde SOLO un JSON con intent y entities.
+    const systemRules = `Eres un clasificador de intenciones para un sistema POS. Tu única tarea es elegir un intent y extraer entidades clave. NO generes texto libre, NO respondas preguntas, SOLO clasifica.
 
-Intents posibles:
-- product_query: preguntas sobre precio, stock, SKU, búsqueda de productos
-- sales_summary: resumen de ventas, ganancias, ingresos
-- entity_count: cuántos productos/clientes/categorías existen
-- entity_creation: crear o registrar un nuevo producto, cliente, categoría
-- sale_draft: preparar un carrito de venta
-- general: cualquier otra consulta
+## REGLAS DE CLASIFICACIÓN
 
-Ejemplos:
-Usuario: cuales son los productos con poco stock
-{"intent":"product_query","entities":{"query_type":"low_stock"}}
+### 1. product_query — Consultas sobre productos existentes
+- Preguntas por precio, stock, SKU, productos caros/baratos, poco stock, buscar productos
+- Incluye: "cuanto vale", "precio del", "dame el producto mas ...", "productos con poco stock", busqueda por SKU
+- NO incluye: crear productos nuevos, contar productos
 
-Usuario: cuanto se vendio ayer
-{"intent":"sales_summary","entities":{"period":"yesterday"}}
+### 2. entity_count — Preguntar cuántos existen
+- "cuantos productos", "cuantas categorias", "cuantos clientes", "cuantos proveedores"
+- Palabras clave: cuantos, cuantas, total, registrados, existen, hay
+- entity_type puede ser: "product", "client", "category", "supplier"
 
-Usuario: quiero saber el producto mas caro
-{"intent":"product_query","entities":{"query_type":"most_expensive"}}
+### 3. entity_creation — Crear/registrar un nuevo producto o cliente
+- Producto: menciona "producto", "precio de compra", "precio de venta", "sku"
+- Cliente: menciona "cliente", "persona", "dni", "documento"
+- entity_type: "product" o "client"
+- SI menciona "cliente" o "persona" SIN precios de compra/venta → entity_type = "client"
+- SI menciona "precio de compra" o "precio de venta" → entity_type = "product"
+- NUNCA uses entity_creation para modificar o borrar
 
-Usuario: registra un producto nuevo llamado te verde
-{"intent":"entity_creation","entities":{"entity_type":"product","name":"Te verde"}}
+### 4. data_modification — Modificar/editar/actualizar datos existentes
+- "modificar", "editar", "actualizar", "cambiar precio", "cambiar nombre"
+- Este intent NO tiene handler real, solo clasifica para dar mensaje
 
-Usuario: crea un cliente llamado juan perez con dni 12345678
-{"intent":"entity_creation","entities":{"entity_type":"client","name":"Juan Perez","dni":"12345678"}}
+### 5. data_deletion — Eliminar/borrar datos existentes
+- "eliminar", "borrar", "quitar", "dar de baja", "remover"
+- Este intent NO tiene handler real, solo clasifica para dar mensaje
 
-Usuario: registra un cliente nuevo maria lopez
-{"intent":"entity_creation","entities":{"entity_type":"client","name":"Maria Lopez"}}
+### 6. sale_draft — Preparar un carrito de venta
+- "vender", "comprar", "carrito", "prepara venta", "arma venta"
+- Incluye producto(s) y opcionalmente cliente
+- Entities: producto (string), cantidad (number), cliente (string opcional)
 
-Usuario: crear producto castañas precio compra 1.30 precio venta 2
-{"intent":"entity_creation","entities":{"entity_type":"product","name":"Castañas","price_purchase":1.30,"price_sale":2}}
+### 7. sales_summary — Resumen de ventas/ganancias
+- "cuanto se vendio", "resumen de ventas", "ganancias", "ingresos", "ventas del dia"
 
-Usuario: cuantos productos hay en total
-{"intent":"entity_count","entities":{"entity_type":"product"}}
+### 8. general — Cualquier cosa que no encaje arriba
+- Saludos, preguntas existenciales, consultas no relacionadas al POS
 
-Usuario: dame el precio del SKU BEB-001
-{"intent":"product_query","entities":{"query_type":"sku","sku":"BEB-001"}}
+## FORMATO DE RESPUESTA
+Siempre responde SOLO un JSON: {"intent":"...","entities":{...}}
+Si no hay entidades relevantes, entities puede ser {} u omitirse.
 
-Usuario: vende 2 cafes a juan perez
-{"intent":"sale_draft","entities":{"producto":"cafe","cantidad":2,"cliente":"juan perez"}}
+## EJEMPLOS`;
+    const examples = `
+product_query:
+- cuales son los productos con poco stock → {"intent":"product_query","entities":{"query_type":"low_stock"}}
+- quiero saber el producto mas caro → {"intent":"product_query","entities":{"query_type":"most_expensive"}}
+- dame el precio del SKU BEB-001 → {"intent":"product_query","entities":{"query_type":"sku","sku":"BEB-001"}}
+- cuanto vale el arroz → {"intent":"product_query"}
+- cuales son los productos mas vendidos → {"intent":"product_query","entities":{"query_type":"top_sold"}}
 
-Usuario: quiero comprar 3 arroz
-{"intent":"sale_draft","entities":{"producto":"arroz","cantidad":3}}
+entity_count:
+- cuantos productos hay en total → {"intent":"entity_count","entities":{"entity_type":"product"}}
+- cuantas categorias tengo → {"intent":"entity_count","entities":{"entity_type":"category"}}
+- cuantos clientes registrados → {"intent":"entity_count","entities":{"entity_type":"client"}}
+- cuantos proveedores existen → {"intent":"entity_count","entities":{"entity_type":"supplier"}}
 
-Usuario: vende una leche a maria
-{"intent":"sale_draft","entities":{"producto":"leche","cantidad":1,"cliente":"maria"}}
+entity_creation:
+- registra un producto nuevo llamado te verde → {"intent":"entity_creation","entities":{"entity_type":"product","name":"Te verde"}}
+- crea un cliente llamado juan perez con dni 12345678 → {"intent":"entity_creation","entities":{"entity_type":"client","name":"Juan Perez","dni":"12345678"}}
+- registra un cliente nuevo maria lopez → {"intent":"entity_creation","entities":{"entity_type":"client","name":"Maria Lopez"}}
+- crear producto castañas precio compra 1.30 precio venta 2 → {"intent":"entity_creation","entities":{"entity_type":"product","name":"Castañas","price_purchase":1.30,"price_sale":2}}
 
-Usuario: prepara carrito con pan y mantequilla
-{"intent":"sale_draft","entities":{"producto":"pan mantequilla","cantidad":1}}
+data_modification:
+- modifica el precio del arroz → {"intent":"data_modification","entities":{"entity_type":"product","name":"arroz"}}
+- actualiza el stock de la leche → {"intent":"data_modification","entities":{"entity_type":"product","name":"leche"}}
+- cambiar nombre del cliente juan → {"intent":"data_modification","entities":{"entity_type":"client","name":"juan"}}
 
-Usuario: cuales son las categorias que tengo
-{"intent":"entity_count","entities":{"entity_type":"category"}}
+data_deletion:
+- elimina el producto cafe → {"intent":"data_deletion","entities":{"entity_type":"product","name":"cafe"}}
+- borrar cliente pedro → {"intent":"data_deletion","entities":{"entity_type":"client","name":"pedro"}}
 
-Usuario: que productos estan por vencer
-{"intent":"general"}
+sale_draft:
+- vende 2 cafes a juan perez → {"intent":"sale_draft","entities":{"producto":"cafe","cantidad":2,"cliente":"juan perez"}}
+- quiero comprar 3 arroz → {"intent":"sale_draft","entities":{"producto":"arroz","cantidad":3}}
+- vende una leche a maria → {"intent":"sale_draft","entities":{"producto":"leche","cantidad":1,"cliente":"maria"}}
+- prepara carrito con pan y mantequilla → {"intent":"sale_draft","entities":{"producto":"pan mantequilla","cantidad":1}}
 
-Usuario: quien compro la ultima venta
-{"intent":"general"}`;
+sales_summary:
+- cuanto se vendio ayer → {"intent":"sales_summary","entities":{"period":"yesterday"}}
+- resumen de ventas de esta semana → {"intent":"sales_summary","entities":{"period":"week"}}
+- dame las ganancias del dia → {"intent":"sales_summary"}
 
-    const raw = await this.aiProvider.classifyIntent(input, examples);
+general:
+- que productos estan por vencer → {"intent":"general"}
+- quien compro la ultima venta → {"intent":"general"}
+- hola como estas → {"intent":"general"}`;
+
+    const prompt = `${systemRules}\n${examples}\n\nUsuario: ${input}\n\nJSON:`;
+    const raw = await this.aiProvider.classifyIntent(input, prompt);
     if (!raw || typeof raw.intent !== 'string') return null;
     return raw as { intent: string; entities?: Record<string, unknown> };
   }
 
-  async askAssistant(query: string): Promise<AiResponseDTO> {
-    return this.processCommand(query);
+  async askAssistant(query: string, userId?: number): Promise<AiResponseDTO> {
+    const response = await this.processCommand(query);
+    await this.logInteraction(query, response, userId);
+    return response;
   }
 
   private extractKeywords(input: string): string[] {
@@ -131,7 +242,31 @@ Usuario: quien compro la ultima venta
 
   // ─── SALES SUMMARY ───
 
-  private async handleSalesSummary(_input: string): Promise<AiResponseDTO> {
+  private async handleSalesSummary(input: string): Promise<AiResponseDTO> {
+    const q = input.toLowerCase();
+
+    // Top client
+    if (/cliente\s+(que\s+)?(mas|más|top|mayor)\s+(compro|compró|gasto|gastó|compra)/i.test(q)) {
+      const top = await this.dashboardService.getTopClients(1);
+      if (top.length > 0) {
+        const t = top[0];
+        return { type: 'TEXT', content: `🥇 **${t.client_name}** es el cliente que más compró hoy:\n• ${t.total_purchases} compras\n• Total: S/ ${t.total_spent.toFixed(2)}\n• Promedio: S/ ${t.avg_purchase.toFixed(2)} por compra` };
+      }
+      return { type: 'TEXT', content: 'No hay ventas con clientes registrados hoy.' };
+    }
+
+    // Last sale client
+    if (/a nombre de|comprador|cliente.*venta|quien.*compro|quien.*compró/i.test(q)) {
+      const last = await this.dashboardService.getLastSaleWithClient();
+      if (last?.client_name) {
+        return { type: 'TEXT', content: `La última venta fue a nombre de **${last.client_name}**${last.client_dni ? ` (${last.client_dni})` : ''}.` };
+      }
+      const cnt = (await this.dashboardService.getStats()).todaySalesCount;
+      if (cnt > 0) return { type: 'TEXT', content: 'La última venta del día no tiene cliente registrado (venta al mostrador).' };
+      return { type: 'TEXT', content: 'No hay ventas registradas hoy.' };
+    }
+
+    // Default: sales summary
     const stats = await this.dashboardService.getStats();
     const topProducts = await this.dashboardService.getTopProducts(3);
     const paymentMethods = await this.dashboardService.getSalesByPaymentMethod();
@@ -288,11 +423,11 @@ ${top5.slice(1).map((p, i) => `${i + 2}. ${p.name} — S/ ${p.price_sale.toFixed
 
   // ─── ENTITY CREATION ───
 
-  private handleEntityCreation(input: string, entities?: Record<string, unknown>): Promise<AiResponseDTO> {
+  private async handleEntityCreation(input: string, entities?: Record<string, unknown>): Promise<AiResponseDTO> {
     const q = input.toLowerCase();
     const entityType = ((entities?.entity_type as string) || '').toLowerCase();
 
-    const extractProduct = (): AiResponseDTO => {
+    const extractProduct = (): { action: 'DRAFT_PRODUCT'; payload: Record<string, unknown> } | null => {
       const nameMatch = q.match(/(?:llamado|llamada|nombre)\s+["""]?([a-záéíóúñ]+(?:\s+[a-záéíóúñ]+)*?)(?:["""]?\s+(?:con|de|y|precio|un|una)|["""]?\s*$|,|\.)/i);
       const name = nameMatch?.[1]?.trim();
       if (!name || name.length <= 1) return null;
@@ -301,7 +436,7 @@ ${top5.slice(1).map((p, i) => `${i + 2}. ${p.name} — S/ ${p.price_sale.toFixed
       const pvMatch = q.match(/precio\s*(?:de\s*)?venta\s*(?:de\s*)?(?:S\/|s\/|\$)?\s*([0-9]+(?:\.[0-9]+)?)/i);
 
       return {
-        type: 'ACTION' as const, action: 'DRAFT_PRODUCT',
+        action: 'DRAFT_PRODUCT',
         payload: {
           name: name.charAt(0).toUpperCase() + name.slice(1),
           price_purchase: ppMatch ? parseFloat(ppMatch[1]) : 0,
@@ -311,14 +446,14 @@ ${top5.slice(1).map((p, i) => `${i + 2}. ${p.name} — S/ ${p.price_sale.toFixed
       };
     };
 
-    const extractClient = (): AiResponseDTO => {
+    const extractClient = (): { action: 'DRAFT_CLIENT'; payload: Record<string, unknown> } | null => {
       const dniMatch = q.match(/\b(\d{6,11})\b/);
       const clName = q.match(/(?:llamado|llamada|nombre|cliente|persona)\s+["""]?([a-záéíóúñ]+(?:\s+[a-záéíóúñ]+)*?)(?:["""]?\s+(?:con|de|y|dni)|["""]?\s*$|,|\.)/i);
 
       if (!clName && !dniMatch) return null;
 
       return {
-        type: 'ACTION' as const, action: 'DRAFT_CLIENT',
+        action: 'DRAFT_CLIENT',
         payload: {
           name: clName?.[1] ? (clName[1].charAt(0).toUpperCase() + clName[1].slice(1)) : '',
           dni: dniMatch?.[1] || '',
@@ -327,32 +462,75 @@ ${top5.slice(1).map((p, i) => `${i + 2}. ${p.name} — S/ ${p.price_sale.toFixed
       };
     };
 
-    // Use entity_type from classifier to decide order
+    let draft: { action: 'DRAFT_PRODUCT' | 'DRAFT_CLIENT'; payload: Record<string, unknown> } | null = null;
+
     if (entityType.includes('cliente') || entityType === 'client') {
-      const client = extractClient();
-      if (client) return Promise.resolve(client);
+      draft = extractClient();
+    } else if (entityType.includes('producto') || entityType === 'product') {
+      draft = extractProduct();
     }
 
-    if (entityType.includes('producto') || entityType === 'product') {
-      const product = extractProduct();
-      if (product) return Promise.resolve(product);
+    if (!draft) {
+      if (/cliente|persona/.test(q) && !/precio/.test(q)) draft = extractClient();
+      else if (!/cliente|persona/.test(q) || /precio|producto|sku/.test(q)) draft = extractProduct();
+      else draft = extractClient();
     }
 
-    // No classifier guidance: heuristic by keywords
-    if (/cliente|persona/.test(q) && !/precio\s*(?:de\s*)?(?:compra|venta)/.test(q)) {
-      const client = extractClient();
-      if (client) return Promise.resolve(client);
+    if (!draft) {
+      return { type: 'TEXT', content: 'No pude entender los datos para crear. Especifica nombre, precio de compra y precio de venta del producto, o nombre y DNI del cliente.' };
     }
 
-    if (!/cliente|persona/.test(q) || /precio|producto|sku/.test(q)) {
-      const product = extractProduct();
-      if (product) return Promise.resolve(product);
+    if (!this.validationPipeline) {
+      return { type: 'ACTION', action: draft.action, payload: draft.payload };
     }
 
-    const client = extractClient();
-    if (client) return Promise.resolve(client);
+    const rateCheck = this.validationPipeline.checkRateLimit();
+    if (!rateCheck.allowed) {
+      return { type: 'TEXT', content: `Límite de solicitudes alcanzado. Espera ${Math.ceil(rateCheck.resetMs / 1000)}s antes de crear más.` };
+    }
 
-    return Promise.resolve({ type: 'TEXT', content: 'No pude entender los datos para crear. Especifica nombre, precio de compra y precio de venta del producto, o nombre y DNI del cliente.' });
+    const processed = await this.validationPipeline.processDraft(
+      draft.action,
+      draft.payload,
+      (entities?.confidence as number) ?? 0,
+      undefined,
+      'neural',
+    );
+
+    if (processed.autoApproved) {
+      try {
+        const result = draft.action === 'DRAFT_PRODUCT'
+          ? await this.productService.createProduct(draft.payload as any)
+          : (await this.clientService.createClient(draft.payload as any)).id;
+        return { type: 'TEXT', content: `✅ ${draft.action === 'DRAFT_PRODUCT' ? 'Producto' : 'Cliente'} creado automáticamente (alta confianza).` };
+      } catch {
+        return { type: 'TEXT', content: `No se pudo crear automáticamente. Revisa los datos en el formulario.`, draftId: processed.draft.id };
+      }
+    }
+
+    return { type: 'ACTION', action: draft.action, payload: draft.payload, draftId: processed.draft.id, autoApproved: false };
+  }
+
+  // ─── DATA MODIFICATION / DELETION ───
+
+  private handleDataModification(entities?: Record<string, unknown>): Promise<AiResponseDTO> {
+    const entityType = ((entities?.entity_type as string) || '').toLowerCase();
+    const name = (entities?.name as string) || '';
+
+    if (entityType === 'client' || entityType.includes('cliente')) {
+      return Promise.resolve({ type: 'TEXT', content: `Para modificar el cliente "${name}", ve a la sección Clientes y usa el botón Editar. El asistente IA solo puede consultar y crear datos, no modificarlos.` });
+    }
+    return Promise.resolve({ type: 'TEXT', content: `Para modificar ${name ? `"${name}"` : 'datos'}, ve a la sección correspondiente y usa el botón Editar. El asistente IA solo puede consultar y crear datos, no modificarlos.` });
+  }
+
+  private handleDataDeletion(entities?: Record<string, unknown>): Promise<AiResponseDTO> {
+    const entityType = ((entities?.entity_type as string) || '').toLowerCase();
+    const name = (entities?.name as string) || '';
+
+    if (entityType === 'client' || entityType.includes('cliente')) {
+      return Promise.resolve({ type: 'TEXT', content: `Para eliminar al cliente "${name}", ve a la sección Clientes y usa el botón Eliminar. El asistente IA no puede borrar datos por seguridad.` });
+    }
+    return Promise.resolve({ type: 'TEXT', content: `Para eliminar ${name ? `"${name}"` : 'datos'}, ve a la sección correspondiente y usa el botón Eliminar. El asistente IA no puede borrar datos por seguridad.` });
   }
 
   // ─── SALE DRAFT ───
@@ -420,26 +598,29 @@ ${top5.slice(1).map((p, i) => `${i + 2}. ${p.name} — S/ ${p.price_sale.toFixed
     return { type: 'ACTION', action: 'DRAFT_SALE', payload };
   }
 
+  private async logInteraction(query: string, response: AiResponseDTO, userId?: number): Promise<void> {
+    if (!this.aiTrainingLogRepo || !userId) return;
+    try {
+      const nlu = response.type === 'ACTION'
+        ? JSON.stringify({ intent: 'entity_creation', action: response.action, payload: response.payload })
+        : null;
+      await this.aiTrainingLogRepo.create({
+        usuario_id: userId,
+        mensaje_usuario: query,
+        nlu_output: nlu,
+        respuesta_sistema: response.type === 'TEXT' ? response.content : `[ACTION: ${response.action}]`,
+      });
+    } catch {
+      // Log failure is non-critical
+    }
+  }
+
   // ─── GENERAL ───
 
   private async handleGeneralQuery(input: string): Promise<AiResponseDTO> {
-    const q = input.toLowerCase();
-
-    // Cliente de la última venta
-    if (/a nombre de|comprador|cliente.*venta|quien.*compro|quien.*compró/.test(q)) {
-      const lastSale = await this.dashboardService.getLastSaleWithClient();
-      if (lastSale?.client_name) {
-        return { type: 'TEXT', content: `La última venta fue a nombre de **${lastSale.client_name}**${lastSale.client_dni ? ` (${lastSale.client_dni})` : ''}.` };
-      }
-      const saleCount = (await this.dashboardService.getStats()).todaySalesCount;
-      if (saleCount > 0) {
-        return { type: 'TEXT', content: 'La última venta del día no tiene cliente registrado (venta al mostrador).' };
-      }
-      return { type: 'TEXT', content: 'No hay ventas registradas hoy.' };
-    }
-
     const stats = await this.dashboardService.getStats();
     const products = await this.productService.getAllProducts();
+    const q = input.toLowerCase();
 
     const masCaro = products.length > 0 ? [...products].sort((a, b) => b.price_sale - a.price_sale)[0] : null;
     const masBarato = products.length > 0 ? [...products].sort((a, b) => a.price_sale - b.price_sale)[0] : null;

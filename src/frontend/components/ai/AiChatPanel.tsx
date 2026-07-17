@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Bot, Send, X, MessageCircle, Trash2 } from 'lucide-react';
+import { Bot, Send, X, MessageCircle, Trash2, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { cn } from '../../lib/utils.ts';
 import { useAiStore } from '../../store/useAiStore.ts';
 import AiDraftModal from './AiDraftModal.tsx';
@@ -7,10 +7,11 @@ import AiDraftModal from './AiDraftModal.tsx';
 export default function AiChatPanel() {
   const { messages, isLoading, isOpen, addMessage, setLoading, toggleOpen, clearMessages } = useAiStore();
   const [input, setInput] = useState('');
+  const [feedbackState, setFeedbackState] = useState<Record<number, 1 | -1 | null>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const [draftModal, setDraftModal] = useState<{ type: 'DRAFT_PRODUCT' | 'DRAFT_CLIENT' | 'DRAFT_SALE'; payload: Record<string, unknown> } | null>(null);
+  const [draftModal, setDraftModal] = useState<{ type: 'DRAFT_PRODUCT' | 'DRAFT_CLIENT' | 'DRAFT_SALE'; payload: Record<string, unknown>; draftId?: string } | null>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -47,7 +48,7 @@ export default function AiChatPanel() {
             role: 'assistant',
             content: `Datos extraídos. Revisa y confirma en la ventana que aparece.`,
           });
-          setDraftModal({ type: res.data.action, payload: res.data.payload });
+          setDraftModal({ type: res.data.action, payload: res.data.payload, draftId: res.data.draftId });
         } else {
           addMessage({ role: 'assistant', content: res.data.content });
         }
@@ -71,6 +72,23 @@ export default function AiChatPanel() {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
+    }
+  };
+
+  const handleFeedback = async (index: number, rating: 1 | -1) => {
+    if (feedbackState[index] === rating) {
+      setFeedbackState(prev => ({ ...prev, [index]: null }));
+      return;
+    }
+    setFeedbackState(prev => ({ ...prev, [index]: rating }));
+    try {
+      await window.api.submitAiFeedback({
+        messageIndex: index,
+        rating,
+        query: messages[index]?.content,
+      });
+    } catch {
+      // silent
     }
   };
 
@@ -130,15 +148,45 @@ export default function AiChatPanel() {
                   <Bot size={14} className="text-primary" />
                 </div>
               )}
-              <div
-                className={cn(
-                  "max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap",
-                  msg.role === 'user'
-                    ? "bg-primary text-white rounded-br-md"
-                    : "bg-[#252630] text-gray-200 rounded-bl-md"
+              <div className="max-w-[85%]">
+                <div
+                  className={cn(
+                    "rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap",
+                    msg.role === 'user'
+                      ? "bg-primary text-white rounded-br-md"
+                      : "bg-[#252630] text-gray-200 rounded-bl-md"
+                  )}
+                >
+                  {msg.content}
+                </div>
+                {msg.role === 'assistant' && msg.content && !msg.content.startsWith('Datos extraídos') && (
+                  <div className="flex items-center gap-1.5 mt-1 ml-1">
+                    <button
+                      onClick={() => handleFeedback(i, 1)}
+                      className={cn(
+                        "p-0.5 rounded transition-colors",
+                        feedbackState[i] === 1
+                          ? "text-green-400 bg-green-500/10"
+                          : "text-gray-500 hover:text-gray-300"
+                      )}
+                      title="Útil"
+                    >
+                      <ThumbsUp size={13} />
+                    </button>
+                    <button
+                      onClick={() => handleFeedback(i, -1)}
+                      className={cn(
+                        "p-0.5 rounded transition-colors",
+                        feedbackState[i] === -1
+                          ? "text-red-400 bg-red-500/10"
+                          : "text-gray-500 hover:text-gray-300"
+                      )}
+                      title="No útil"
+                    >
+                      <ThumbsDown size={13} />
+                    </button>
+                  </div>
                 )}
-              >
-                {msg.content}
               </div>
               {msg.role === 'user' && (
                 <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center shrink-0 mt-1">
@@ -196,6 +244,7 @@ export default function AiChatPanel() {
         onClose={() => setDraftModal(null)}
         draftType={draftModal?.type ?? null}
         draftPayload={draftModal?.payload ?? {}}
+        draftId={draftModal?.draftId}
       />
     </>
   );

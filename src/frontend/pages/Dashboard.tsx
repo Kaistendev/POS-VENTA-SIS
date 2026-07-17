@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { TrendingUp, Package, Users, DollarSign, AlertTriangle, ShoppingBag } from 'lucide-react';
+import { TrendingUp, Package, Users, DollarSign, AlertTriangle, ShoppingBag, Brain } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Product } from '../../shared/types';
+import { AiStatsPanel } from '../components/ai/AiStatsPanel';
 
 export default function Dashboard() {
   const [stats, setStats] = useState({ todayRevenue: 0, todayProfit: 0, todaySalesCount: 0, activeProducts: 0, totalClients: 0 });
@@ -125,6 +126,24 @@ export default function Dashboard() {
             }) : (
               <div className="text-gray-500 text-center py-20 italic text-sm">Todo el stock está bajo control</div>
             )}
+          </div>
+        </motion.div>
+      </div>
+
+      <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }}>
+          <AiStatsPanel />
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7 }} className="p-6 rounded-2xl glass-panel border border-white/5">
+          <h3 className="text-white font-bold mb-4 flex items-center"><Brain className="w-5 h-5 mr-2 text-purple-400" /> AI Assistant</h3>
+          <p className="text-gray-400 text-sm">El asistente IA clasifica consultas usando la red neuronal para respuestas rápidas y recurre al LLM (Phi3 vía Ollama) para consultas complejas.</p>
+          <div className="mt-4 space-y-2 text-xs text-gray-500">
+            <p>• Consultas rápidas por regex para casos comunes (SKU, precios, conteos).</p>
+            <p>• Red Neuronal TF.js para clasificación de intenciones (8 categorías).</p>
+            <p>• RAG con FAQ del sistema para contexto relevante.</p>
+            <p>• Phi3 vía Ollama como respaldo para consultas generales.</p>
+            <p>• Detector de ambigüedad cuando la confianza es baja.</p>
+            <p>• Circuit breaker para proteger contra fallos del LLM.</p>
           </div>
         </motion.div>
       </div>

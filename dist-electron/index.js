@@ -1,317 +1,351 @@
+import { t as logger } from "./logger-BsWMrnsx.js";
+import { t as __exportAll } from "./rag-CM8ewd7C.js";
 import "dotenv/config";
-import { BrowserWindow as e, app as t, dialog as n, ipcMain as r, session as i } from "electron";
-import a from "path";
-import o from "fs";
-import s from "pino";
-import c from "@prisma/client";
-import { PrismaBetterSqlite3 as l } from "@prisma/adapter-better-sqlite3";
-import { pipeline as u } from "stream";
-import { promisify as d } from "util";
-import { createGunzip as f, createGzip as p } from "zlib";
-import { jsPDF as m } from "jspdf";
-import h from "jspdf-autotable";
-import g from "exceljs";
-import { ZodError as ee, z as _ } from "zod";
-import v from "bcryptjs";
-import y from "node:crypto";
-import { existsSync as b, readFileSync as x, writeFileSync as te } from "node:fs";
-import { join as S } from "node:path";
-import { fileURLToPath as ne } from "url";
-import C from "node:fs/promises";
-//#region \0rolldown/runtime.js
-var w = Object.defineProperty, T = (e, t) => {
-	let n = {};
-	for (var r in e) w(n, r, {
-		get: e[r],
-		enumerable: !0
-	});
-	return t || w(n, Symbol.toStringTag, { value: "Module" }), n;
-}, E = s({
-	level: "info",
-	timestamp: s.stdTimeFunctions.isoTime
-}), D = !1;
-function O() {
-	if (D || (D = !0, !t.isPackaged)) return;
-	let e = t.getPath("userData"), n = a.join(e, "dev.sqlite3");
-	o.existsSync(e) || o.mkdirSync(e, { recursive: !0 }), o.existsSync(n) || E.info(`Database will be created at ${n} on first connect`), process.env.DATABASE_URL = `file:${n}`, E.info(`Database URL: ${process.env.DATABASE_URL}`);
+import { BrowserWindow, app, dialog, ipcMain, session } from "electron";
+import path from "path";
+import fs from "fs";
+import pkg from "@prisma/client";
+import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+import { pipeline } from "stream";
+import { promisify } from "util";
+import { createGunzip, createGzip } from "zlib";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
+import ExcelJS from "exceljs";
+import { ZodError, z } from "zod";
+import bcrypt from "bcryptjs";
+import crypto from "node:crypto";
+import { existsSync as existsSync$1, readFileSync as readFileSync$1, writeFileSync as writeFileSync$1 } from "node:fs";
+import { join as join$1 } from "node:path";
+import { fileURLToPath } from "url";
+import fs$1 from "node:fs/promises";
+//#region src/backend/env.ts
+var initialized = false;
+function setupProductionEnv() {
+	if (initialized) return;
+	initialized = true;
+	if (!app.isPackaged) return;
+	const userDataPath = app.getPath("userData");
+	let dbPath = path.join(userDataPath, "dev.sqlite3");
+	if (!fs.existsSync(userDataPath)) fs.mkdirSync(userDataPath, { recursive: true });
+	if (!fs.existsSync(dbPath)) logger.info(`Database will be created at ${dbPath} on first connect`);
+	process.env.DATABASE_URL = `file:${dbPath}`;
+	logger.info(`Database URL: ${process.env.DATABASE_URL}`);
 }
 //#endregion
 //#region src/shared/errors.ts
-var re = /* @__PURE__ */ T({
-	BusinessRuleError: () => N,
-	ConflictError: () => M,
-	DomainError: () => k,
-	NotFoundError: () => A,
-	ValidationError: () => j
-}), k = class extends Error {}, A = class extends k {
+var errors_exports = /* @__PURE__ */ __exportAll({
+	BusinessRuleError: () => BusinessRuleError,
+	ConflictError: () => ConflictError,
+	DomainError: () => DomainError,
+	NotFoundError: () => NotFoundError,
+	ValidationError: () => ValidationError
+});
+var DomainError = class extends Error {};
+var NotFoundError = class extends DomainError {
 	code = "NOT_FOUND";
-	constructor(e, t) {
-		super(t ? `${e} no encontrado (${t})` : `${e} no encontrado`), this.name = "NotFoundError";
+	constructor(entity, id) {
+		super(id ? `${entity} no encontrado (${id})` : `${entity} no encontrado`);
+		this.name = "NotFoundError";
 	}
-}, j = class extends k {
+};
+var ValidationError = class extends DomainError {
 	code = "VALIDATION";
 	errors;
-	constructor(e, t) {
-		super(e), this.name = "ValidationError", this.errors = t || [];
+	constructor(message, errors) {
+		super(message);
+		this.name = "ValidationError";
+		this.errors = errors || [];
 	}
-}, M = class extends k {
+};
+var ConflictError = class extends DomainError {
 	code = "CONFLICT";
-	constructor(e) {
-		super(e), this.name = "ConflictError";
+	constructor(message) {
+		super(message);
+		this.name = "ConflictError";
 	}
-}, N = class extends k {
+};
+var BusinessRuleError = class extends DomainError {
 	code = "BUSINESS_RULE";
-	constructor(e) {
-		super(e), this.name = "BusinessRuleError";
+	constructor(message) {
+		super(message);
+		this.name = "BusinessRuleError";
 	}
-}, ie = class {
+};
+//#endregion
+//#region src/infrastructure/persistence/PrismaProductRepository.ts
+var PrismaProductRepository = class {
 	prisma;
-	constructor(e) {
-		this.prisma = e;
+	constructor(prisma) {
+		this.prisma = prisma;
 	}
-	async findAll(e, t) {
-		let n = {};
-		return e && (n.OR = [
-			{ name: { contains: e } },
-			{ sku: { contains: e } },
-			{ description: { contains: e } }
-		]), t && (n.category_id = t), this.prisma.product.findMany({
-			where: n,
+	async findAll(search, categoryId) {
+		const where = {};
+		if (search) where.OR = [
+			{ name: { contains: search } },
+			{ sku: { contains: search } },
+			{ description: { contains: search } }
+		];
+		if (categoryId) where.category_id = categoryId;
+		return this.prisma.product.findMany({
+			where,
 			select: {
-				id: !0,
-				sku: !0,
-				name: !0,
-				description: !0,
-				price_sale: !0,
-				price_purchase: !0,
-				stock: !0,
-				min_stock: !0,
-				created_at: !0,
-				updated_at: !0,
-				category_id: !0,
-				supplier_id: !0,
+				id: true,
+				sku: true,
+				name: true,
+				description: true,
+				price_sale: true,
+				price_purchase: true,
+				stock: true,
+				min_stock: true,
+				created_at: true,
+				updated_at: true,
+				category_id: true,
+				supplier_id: true,
 				category: { select: {
-					id: !0,
-					name: !0
+					id: true,
+					name: true
 				} },
 				supplier: { select: {
-					id: !0,
-					name: !0
+					id: true,
+					name: true
 				} }
 			},
 			orderBy: { created_at: "desc" }
 		});
 	}
-	async findById(e) {
+	async findById(id) {
 		return await this.prisma.product.findUnique({
-			where: { id: e },
+			where: { id },
 			include: {
-				category: !0,
-				supplier: !0
+				category: true,
+				supplier: true
 			}
 		});
 	}
-	async findByIds(e) {
-		return this.prisma.product.findMany({ where: { id: { in: e } } });
+	async findByIds(ids) {
+		return this.prisma.product.findMany({ where: { id: { in: ids } } });
 	}
-	async findBySku(e) {
-		return this.prisma.product.findUnique({ where: { sku: e } });
+	async findBySku(sku) {
+		return this.prisma.product.findUnique({ where: { sku } });
 	}
 	async findLowStock() {
 		return this.prisma.product.findMany({
 			where: { stock: { lte: this.prisma.product.fields.min_stock } },
-			include: { category: !0 },
+			include: { category: true },
 			orderBy: { stock: "asc" }
 		});
 	}
-	async create(e) {
-		let t = e.stock || 0;
+	async create(data) {
+		const initialStock = data.stock || 0;
 		return this.prisma.product.create({ data: {
-			sku: e.sku,
-			name: e.name,
-			price_sale: e.price_sale,
-			price_purchase: e.price_purchase,
-			description: e.description,
-			category_id: e.category_id,
-			supplier_id: e.supplier_id,
-			min_stock: e.min_stock,
-			stock: t
+			sku: data.sku,
+			name: data.name,
+			price_sale: data.price_sale,
+			price_purchase: data.price_purchase,
+			description: data.description,
+			category_id: data.category_id,
+			supplier_id: data.supplier_id,
+			min_stock: data.min_stock,
+			stock: initialStock
 		} });
 	}
-	async update(e, t) {
+	async update(id, data) {
 		return this.prisma.product.update({
-			where: { id: e },
-			data: t,
+			where: { id },
+			data,
 			include: {
-				category: !0,
-				supplier: !0
+				category: true,
+				supplier: true
 			}
 		});
 	}
-	async delete(e) {
-		await this.prisma.product.delete({ where: { id: e } });
+	async delete(id) {
+		await this.prisma.product.delete({ where: { id } });
 	}
-	async getSalesCount(e) {
-		return this.prisma.saleItem.count({ where: { product_id: e } });
+	async getSalesCount(id) {
+		return this.prisma.saleItem.count({ where: { product_id: id } });
 	}
-	async updateStock(e, t) {
-		if (t < 0) {
+	async updateStock(id, delta) {
+		if (delta < 0) {
 			if ((await this.prisma.product.updateMany({
 				where: {
-					id: e,
-					stock: { gte: Math.abs(t) }
+					id,
+					stock: { gte: Math.abs(delta) }
 				},
-				data: { stock: { increment: t } }
-			})).count === 0) throw new N("Stock insuficiente");
+				data: { stock: { increment: delta } }
+			})).count === 0) throw new BusinessRuleError("Stock insuficiente");
 		} else await this.prisma.product.update({
-			where: { id: e },
-			data: { stock: { increment: t } }
+			where: { id },
+			data: { stock: { increment: delta } }
 		});
 	}
-	async createMovement(e) {
-		await this.prisma.inventoryMovement.create({ data: e });
+	async createMovement(data) {
+		await this.prisma.inventoryMovement.create({ data });
 	}
-	async getMovements(e, t = 50) {
+	async getMovements(productId, limit = 50) {
 		return this.prisma.inventoryMovement.findMany({
-			where: { product_id: e },
+			where: { product_id: productId },
 			orderBy: { created_at: "desc" },
-			take: t
+			take: limit
 		});
 	}
-}, ae = class {
+};
+//#endregion
+//#region src/infrastructure/persistence/PrismaClientRepository.ts
+var PrismaClientRepository = class {
 	prisma;
-	constructor(e) {
-		this.prisma = e;
+	constructor(prisma) {
+		this.prisma = prisma;
 	}
-	async findAll(e) {
-		let t = e ? { OR: [
-			{ dni: { contains: e } },
-			{ name: { contains: e } },
-			{ code: { contains: e } },
-			{ tax_id: { contains: e } }
+	async findAll(search) {
+		const where = search ? { OR: [
+			{ dni: { contains: search } },
+			{ name: { contains: search } },
+			{ code: { contains: search } },
+			{ tax_id: { contains: search } }
 		] } : {};
 		return this.prisma.client.findMany({
-			where: t,
+			where,
 			orderBy: { created_at: "desc" }
 		});
 	}
-	async findById(e) {
-		return this.prisma.client.findUnique({ where: { id: e } });
+	async findById(id) {
+		return this.prisma.client.findUnique({ where: { id } });
 	}
-	async findByDni(e) {
-		return this.prisma.client.findFirst({ where: { dni: e } });
+	async findByDni(dni) {
+		return this.prisma.client.findFirst({ where: { dni } });
 	}
-	async findByCode(e) {
-		return this.prisma.client.findFirst({ where: { code: e } });
+	async findByCode(code) {
+		return this.prisma.client.findFirst({ where: { code } });
 	}
-	async findByTaxId(e) {
-		return this.prisma.client.findFirst({ where: { tax_id: e } });
+	async findByTaxId(taxId) {
+		return this.prisma.client.findFirst({ where: { tax_id: taxId } });
 	}
-	async create(e) {
-		return this.prisma.client.create({ data: e });
+	async create(data) {
+		return this.prisma.client.create({ data });
 	}
-	async update(e, t) {
+	async update(id, data) {
 		return this.prisma.client.update({
-			where: { id: e },
-			data: t
+			where: { id },
+			data
 		});
 	}
-	async delete(e) {
-		await this.prisma.client.delete({ where: { id: e } });
+	async delete(id) {
+		await this.prisma.client.delete({ where: { id } });
 	}
-	async getSalesCount(e) {
-		return this.prisma.sale.count({ where: { client_id: e } });
+	async getSalesCount(id) {
+		return this.prisma.sale.count({ where: { client_id: id } });
 	}
 };
 //#endregion
 //#region src/shared/helpers.ts
-function P(e, t, n) {
-	if (!t && !n) return {};
-	let r = {};
-	return t && (r[e] = {
-		...r[e] || {},
-		gte: t
-	}), n && (r[e] = {
-		...r[e] || {},
-		lte: n
-	}), r;
+/**
+* Helpers DRY para evitar patrones repetidos en servicios y repositorios.
+*/
+/**
+* Construye un filtro de fecha para consultas Prisma.
+* Ej: buildDateFilter(startDate, endDate) => { created_at: { gte: ..., lte: ... } }
+*/
+function buildDateFilter(field, startDate, endDate) {
+	if (!startDate && !endDate) return {};
+	const filter = {};
+	if (startDate) filter[field] = {
+		...filter[field] || {},
+		gte: startDate
+	};
+	if (endDate) filter[field] = {
+		...filter[field] || {},
+		lte: endDate
+	};
+	return filter;
 }
-async function F(e, t, n) {
-	let r = await e();
-	if (!r) {
-		let { NotFoundError: e } = await Promise.resolve().then(() => re);
-		throw new e(t, n);
+/**
+* Busca una entidad por su función finder y lanza NotFoundError si no existe.
+*/
+async function findOrThrow(finder, entityName, id) {
+	const result = await finder();
+	if (!result) {
+		const { NotFoundError } = await Promise.resolve().then(() => errors_exports);
+		throw new NotFoundError(entityName, id);
 	}
-	return r;
+	return result;
 }
 //#endregion
 //#region src/infrastructure/persistence/PrismaSaleRepository.ts
-var oe = class {
+var PrismaSaleRepository = class {
 	prisma;
-	constructor(e) {
-		this.prisma = e;
+	constructor(prisma) {
+		this.prisma = prisma;
 	}
-	async findAll(e) {
-		let t = {};
-		Object.assign(t, P("created_at", e?.startDate, e?.endDate)), e?.clientId && (t.client_id = e.clientId), e?.cashRegisterId && (t.cash_register_id = e.cashRegisterId);
-		let n = e?.page ?? 1, r = e?.pageSize ?? 50, i = (n - 1) * r, a = r, [o, s] = await Promise.all([this.prisma.sale.findMany({
-			where: t,
+	async findAll(filter) {
+		const where = {};
+		Object.assign(where, buildDateFilter("created_at", filter?.startDate, filter?.endDate));
+		if (filter?.clientId) where.client_id = filter.clientId;
+		if (filter?.cashRegisterId) where.cash_register_id = filter.cashRegisterId;
+		const page = filter?.page ?? 1;
+		const pageSize = filter?.pageSize ?? 50;
+		const skip = (page - 1) * pageSize;
+		const take = pageSize;
+		const [data, total] = await Promise.all([this.prisma.sale.findMany({
+			where,
 			select: {
-				id: !0,
-				total: !0,
-				subtotal: !0,
-				tax_amount: !0,
-				payment_method: !0,
-				created_at: !0,
-				updated_at: !0,
-				cash_register_id: !0,
-				client_id: !0,
+				id: true,
+				total: true,
+				subtotal: true,
+				tax_amount: true,
+				payment_method: true,
+				created_at: true,
+				updated_at: true,
+				cash_register_id: true,
+				client_id: true,
 				client: { select: {
-					id: !0,
-					name: !0,
-					dni: !0
+					id: true,
+					name: true,
+					dni: true
 				} },
 				cash_register: { select: {
-					id: !0,
-					opened_at: !0,
-					opening_amount: !0
+					id: true,
+					opened_at: true,
+					opening_amount: true
 				} },
-				_count: { select: { items: !0 } }
+				_count: { select: { items: true } }
 			},
-			skip: i,
-			take: a,
+			skip,
+			take,
 			orderBy: { created_at: "desc" }
-		}), this.prisma.sale.count({ where: t })]);
+		}), this.prisma.sale.count({ where })]);
 		return {
-			data: o,
-			total: s,
-			page: n,
-			pageSize: r,
-			totalPages: Math.ceil(s / r)
+			data,
+			total,
+			page,
+			pageSize,
+			totalPages: Math.ceil(total / pageSize)
 		};
 	}
-	async findById(e) {
+	async findById(id) {
 		return await this.prisma.sale.findUnique({
-			where: { id: e },
+			where: { id },
 			include: {
-				items: { include: { product: !0 } },
-				client: !0,
-				cash_register: !0
+				items: { include: { product: true } },
+				client: true,
+				cash_register: true
 			}
 		});
 	}
 	async findToday() {
-		let e = /* @__PURE__ */ new Date();
-		e.setHours(0, 0, 0, 0);
-		let t = /* @__PURE__ */ new Date();
-		return t.setHours(23, 59, 59, 999), this.prisma.sale.findMany({
+		const startOfDay = /* @__PURE__ */ new Date();
+		startOfDay.setHours(0, 0, 0, 0);
+		const endOfDay = /* @__PURE__ */ new Date();
+		endOfDay.setHours(23, 59, 59, 999);
+		return this.prisma.sale.findMany({
 			where: { created_at: {
-				gte: e,
-				lte: t
+				gte: startOfDay,
+				lte: endOfDay
 			} },
 			include: {
-				client: !0,
-				cash_register: !0
+				client: true,
+				cash_register: true
 			},
 			orderBy: { created_at: "desc" }
 		});
@@ -319,98 +353,110 @@ var oe = class {
 	async findLast() {
 		return await this.prisma.sale.findFirst({
 			orderBy: { created_at: "desc" },
-			include: { items: !0 }
+			include: { items: true }
 		});
 	}
-	async getStats(e, t) {
-		let n = {};
-		Object.assign(n, P("created_at", e, t));
-		let r = await this.prisma.sale.aggregate({
-			where: n,
-			_count: { id: !0 },
-			_sum: { total: !0 },
-			_avg: { total: !0 }
+	async getStats(startDate, endDate) {
+		const where = {};
+		Object.assign(where, buildDateFilter("created_at", startDate, endDate));
+		const stats = await this.prisma.sale.aggregate({
+			where,
+			_count: { id: true },
+			_sum: { total: true },
+			_avg: { total: true }
 		});
 		return {
-			totalSales: r._count.id,
-			totalRevenue: r._sum.total || 0,
-			averageSale: r._avg.total || 0
+			totalSales: stats._count.id,
+			totalRevenue: stats._sum.total || 0,
+			averageSale: stats._avg.total || 0
 		};
 	}
-	async registerSale(e) {
-		return this.prisma.$transaction(async (t) => {
-			let n = await t.sale.create({ data: {
-				cash_register_id: e.cash_register_id,
-				client_id: e.client_id,
-				subtotal: e.subtotal,
-				tax_amount: e.tax_amount,
-				total: e.total,
-				discount_total: e.discount_total || 0,
-				payment_method: e.payment_method,
-				exchange_rate: e.exchange_rate || 0
+	async registerSale(input) {
+		return this.prisma.$transaction(async (tx) => {
+			const sale = await tx.sale.create({ data: {
+				cash_register_id: input.cash_register_id,
+				client_id: input.client_id,
+				subtotal: input.subtotal,
+				tax_amount: input.tax_amount,
+				total: input.total,
+				discount_total: input.discount_total || 0,
+				payment_method: input.payment_method,
+				exchange_rate: input.exchange_rate || 0
 			} });
-			for (let r of e.items) {
-				if (await t.saleItem.create({ data: {
-					sale_id: n.id,
-					product_id: r.product_id,
-					quantity: r.quantity,
-					unit_price: r.unit_price,
-					purchase_price: r.purchase_price,
-					discount_name: r.discount_name ?? null,
-					discount_type: r.discount_type ?? null,
-					discount_value: r.discount_value ?? null,
-					discount_amount: r.discount_amount ?? 0,
-					final_unit_price: r.final_unit_price ?? null
-				} }), (await t.product.updateMany({
+			for (const item of input.items) {
+				await tx.saleItem.create({ data: {
+					sale_id: sale.id,
+					product_id: item.product_id,
+					quantity: item.quantity,
+					unit_price: item.unit_price,
+					purchase_price: item.purchase_price,
+					discount_name: item.discount_name ?? null,
+					discount_type: item.discount_type ?? null,
+					discount_value: item.discount_value ?? null,
+					discount_amount: item.discount_amount ?? 0,
+					final_unit_price: item.final_unit_price ?? null
+				} });
+				if ((await tx.product.updateMany({
 					where: {
-						id: r.product_id,
-						stock: { gte: r.quantity }
+						id: item.product_id,
+						stock: { gte: item.quantity }
 					},
-					data: { stock: { decrement: r.quantity } }
-				})).count === 0) throw new N(`Stock insuficiente para el producto ${r.product_id}`);
-				await t.inventoryMovement.create({ data: {
-					product_id: r.product_id,
+					data: { stock: { decrement: item.quantity } }
+				})).count === 0) throw new BusinessRuleError(`Stock insuficiente para el producto ${item.product_id}`);
+				await tx.inventoryMovement.create({ data: {
+					product_id: item.product_id,
 					type: "SALIDA",
-					quantity: r.quantity,
+					quantity: item.quantity,
 					reason: "VENTA"
 				} });
 			}
-			return await t.cashRegister.update({
-				where: { id: e.cash_register_id },
-				data: { total_sales: { increment: e.total } }
-			}), n.id;
+			await tx.cashRegister.update({
+				where: { id: input.cash_register_id },
+				data: { total_sales: { increment: input.total } }
+			});
+			return sale.id;
 		});
 	}
-	async count(e) {
-		let t = {};
-		return Object.assign(t, P("created_at", e?.startDate, e?.endDate)), e?.clientId && (t.client_id = e.clientId), e?.cashRegisterId && (t.cash_register_id = e.cashRegisterId), this.prisma.sale.count({ where: t });
+	async count(filter) {
+		const where = {};
+		Object.assign(where, buildDateFilter("created_at", filter?.startDate, filter?.endDate));
+		if (filter?.clientId) where.client_id = filter.clientId;
+		if (filter?.cashRegisterId) where.cash_register_id = filter.cashRegisterId;
+		return this.prisma.sale.count({ where });
 	}
-	async cancelSale(e) {
-		let t = await this.prisma.sale.findUnique({
-			where: { id: e },
-			include: { items: !0 }
+	async cancelSale(saleId) {
+		const sale = await this.prisma.sale.findUnique({
+			where: { id: saleId },
+			include: { items: true }
 		});
-		if (!t) throw Error("Venta no encontrada");
-		await this.prisma.$transaction(async (n) => {
-			for (let e of t.items) await n.product.update({
-				where: { id: e.product_id },
-				data: { stock: { increment: e.quantity } }
-			}), await n.inventoryMovement.create({ data: {
-				product_id: e.product_id,
-				type: "ENTRADA",
-				quantity: e.quantity,
-				reason: "DEVOLUCION"
-			} });
-			await n.cashRegister.update({
-				where: { id: t.cash_register_id },
-				data: { total_sales: { decrement: t.total } }
-			}), await n.sale.delete({ where: { id: e } });
+		if (!sale) throw new Error("Venta no encontrada");
+		await this.prisma.$transaction(async (tx) => {
+			for (const item of sale.items) {
+				await tx.product.update({
+					where: { id: item.product_id },
+					data: { stock: { increment: item.quantity } }
+				});
+				await tx.inventoryMovement.create({ data: {
+					product_id: item.product_id,
+					type: "ENTRADA",
+					quantity: item.quantity,
+					reason: "DEVOLUCION"
+				} });
+			}
+			await tx.cashRegister.update({
+				where: { id: sale.cash_register_id },
+				data: { total_sales: { decrement: sale.total } }
+			});
+			await tx.sale.delete({ where: { id: saleId } });
 		});
 	}
-}, se = class {
+};
+//#endregion
+//#region src/infrastructure/persistence/PrismaCashRegisterRepository.ts
+var PrismaCashRegisterRepository = class {
 	prisma;
-	constructor(e) {
-		this.prisma = e;
+	constructor(prisma) {
+		this.prisma = prisma;
 	}
 	async findOpen() {
 		return this.prisma.cashRegister.findFirst({
@@ -418,116 +464,123 @@ var oe = class {
 			orderBy: { opened_at: "desc" }
 		});
 	}
-	async findById(e) {
+	async findById(id) {
 		return await this.prisma.cashRegister.findUnique({
-			where: { id: e },
+			where: { id },
 			include: { sales: { include: {
-				client: !0,
-				items: { include: { product: !0 } }
+				client: true,
+				items: { include: { product: true } }
 			} } }
 		});
 	}
-	async findAll(e, t) {
-		let n = {};
-		return Object.assign(n, P("opened_at", e, t)), this.prisma.cashRegister.findMany({
-			where: n,
-			include: { _count: { select: { sales: !0 } } },
+	async findAll(startDate, endDate) {
+		const where = {};
+		Object.assign(where, buildDateFilter("opened_at", startDate, endDate));
+		return this.prisma.cashRegister.findMany({
+			where,
+			include: { _count: { select: { sales: true } } },
 			orderBy: { opened_at: "desc" }
 		});
 	}
-	async create(e) {
+	async create(openingAmount) {
 		return this.prisma.cashRegister.create({ data: {
-			opening_amount: Number(e),
+			opening_amount: Number(openingAmount),
 			total_sales: 0
 		} });
 	}
-	async close(e, t, n, r) {
+	async close(id, closingAmount, difference, status) {
 		await this.prisma.cashRegister.update({
-			where: { id: e },
+			where: { id },
 			data: {
 				closed_at: /* @__PURE__ */ new Date(),
-				closing_amount: t,
-				difference: n,
-				status: r
+				closing_amount: closingAmount,
+				difference,
+				status
 			}
 		});
 	}
-	async updateTotalSales(e, t) {
+	async updateTotalSales(id, delta) {
 		await this.prisma.cashRegister.update({
-			where: { id: e },
-			data: { total_sales: { increment: t } }
+			where: { id },
+			data: { total_sales: { increment: delta } }
 		});
 	}
-	async getSalesCount(e, t) {
+	async getSalesCount(id, since) {
 		return this.prisma.sale.count({ where: {
-			cash_register_id: e,
-			created_at: { gte: t }
+			cash_register_id: id,
+			created_at: { gte: since }
 		} });
 	}
-	async getDailySummary(e) {
-		let t = /* @__PURE__ */ new Date();
-		t.setHours(0, 0, 0, 0);
-		let n = /* @__PURE__ */ new Date();
-		n.setHours(23, 59, 59, 999);
-		let r = {
-			cash_register_id: e,
+	async getDailySummary(registerId) {
+		const startOfDay = /* @__PURE__ */ new Date();
+		startOfDay.setHours(0, 0, 0, 0);
+		const endOfDay = /* @__PURE__ */ new Date();
+		endOfDay.setHours(23, 59, 59, 999);
+		const where = {
+			cash_register_id: registerId,
 			created_at: {
-				gte: t,
-				lte: n
+				gte: startOfDay,
+				lte: endOfDay
 			}
-		}, i = await this.prisma.cashRegister.findFirst({ where: {
-			id: e,
-			opened_at: { gte: t }
+		};
+		const register = await this.prisma.cashRegister.findFirst({ where: {
+			id: registerId,
+			opened_at: { gte: startOfDay }
 		} });
-		if (!i) throw Error("Caja no encontrada o no está abierta hoy.");
-		let a = await this.prisma.sale.aggregate({
-			where: r,
-			_count: { id: !0 },
-			_sum: { total: !0 },
-			_avg: { total: !0 }
-		}), o = await this.prisma.sale.groupBy({
+		if (!register) throw new Error("Caja no encontrada o no está abierta hoy.");
+		const salesStats = await this.prisma.sale.aggregate({
+			where,
+			_count: { id: true },
+			_sum: { total: true },
+			_avg: { total: true }
+		});
+		const salesByPayment = await this.prisma.sale.groupBy({
 			by: ["payment_method"],
-			where: r,
-			_count: { id: !0 },
-			_sum: { total: !0 }
+			where,
+			_count: { id: true },
+			_sum: { total: true }
 		});
 		return {
-			register: i,
-			totalSales: a._count.id,
-			totalRevenue: a._sum.total || 0,
-			averageSale: a._avg.total || 0,
-			salesByPayment: o
+			register,
+			totalSales: salesStats._count.id,
+			totalRevenue: salesStats._sum.total || 0,
+			averageSale: salesStats._avg.total || 0,
+			salesByPayment
 		};
 	}
-}, ce = class {
+};
+//#endregion
+//#region src/infrastructure/persistence/PrismaSupplierRepository.ts
+var PrismaSupplierRepository = class {
 	prisma;
-	constructor(e) {
-		this.prisma = e;
+	constructor(prisma) {
+		this.prisma = prisma;
 	}
-	async findAll(e) {
-		let t = {};
-		return e && (t.OR = [
-			{ name: { contains: e } },
-			{ ruc: { contains: e } },
-			{ email: { contains: e } }
-		]), this.prisma.supplier.findMany({
-			where: t,
+	async findAll(search) {
+		const where = {};
+		if (search) where.OR = [
+			{ name: { contains: search } },
+			{ ruc: { contains: search } },
+			{ email: { contains: search } }
+		];
+		return this.prisma.supplier.findMany({
+			where,
 			include: { _count: { select: {
-				products: !0,
-				purchases: !0
+				products: true,
+				purchases: true
 			} } },
 			orderBy: { name: "asc" }
 		});
 	}
-	async findById(e) {
+	async findById(id) {
 		return await this.prisma.supplier.findUnique({
-			where: { id: e },
+			where: { id },
 			include: {
 				products: { select: {
-					id: !0,
-					name: !0,
-					sku: !0,
-					stock: !0
+					id: true,
+					name: true,
+					sku: true,
+					stock: true
 				} },
 				purchases: {
 					orderBy: { created_at: "desc" },
@@ -536,545 +589,595 @@ var oe = class {
 			}
 		});
 	}
-	async findByRuc(e) {
-		return this.prisma.supplier.findFirst({ where: { ruc: e } });
+	async findByRuc(ruc) {
+		return this.prisma.supplier.findFirst({ where: { ruc } });
 	}
-	async create(e) {
-		return this.prisma.supplier.create({ data: e });
+	async create(data) {
+		return this.prisma.supplier.create({ data });
 	}
-	async update(e, t) {
+	async update(id, data) {
 		return this.prisma.supplier.update({
-			where: { id: e },
-			data: t
+			where: { id },
+			data
 		});
 	}
-	async delete(e) {
-		await this.prisma.supplier.delete({ where: { id: e } });
+	async delete(id) {
+		await this.prisma.supplier.delete({ where: { id } });
 	}
-	async hasProducts(e) {
-		return await this.prisma.product.count({ where: { supplier_id: e } }) > 0;
+	async hasProducts(id) {
+		return await this.prisma.product.count({ where: { supplier_id: id } }) > 0;
 	}
-	async hasPurchases(e) {
-		return await this.prisma.purchase.count({ where: { supplier_id: e } }) > 0;
+	async hasPurchases(id) {
+		return await this.prisma.purchase.count({ where: { supplier_id: id } }) > 0;
 	}
-}, le = class {
+};
+//#endregion
+//#region src/infrastructure/persistence/PrismaPurchaseRepository.ts
+var PrismaPurchaseRepository = class {
 	prisma;
-	constructor(e) {
-		this.prisma = e;
+	constructor(prisma) {
+		this.prisma = prisma;
 	}
-	async findAll(e, t) {
-		let n = {};
-		return e && (n.supplier_id = e), t && (n.status = t), this.prisma.purchase.findMany({
-			where: n,
+	async findAll(supplierId, status) {
+		const where = {};
+		if (supplierId) where.supplier_id = supplierId;
+		if (status) where.status = status;
+		return this.prisma.purchase.findMany({
+			where,
 			include: {
 				supplier: { select: {
-					id: !0,
-					name: !0,
-					ruc: !0
+					id: true,
+					name: true,
+					ruc: true
 				} },
 				items: { include: { product: { select: {
-					id: !0,
-					name: !0,
-					sku: !0
+					id: true,
+					name: true,
+					sku: true
 				} } } }
 			},
 			orderBy: { created_at: "desc" }
 		});
 	}
-	async findById(e) {
+	async findById(id) {
 		return await this.prisma.purchase.findUnique({
-			where: { id: e },
+			where: { id },
 			include: {
-				supplier: !0,
-				items: { include: { product: !0 } }
+				supplier: true,
+				items: { include: { product: true } }
 			}
 		});
 	}
-	async create(e) {
-		let t = e.items.reduce((e, t) => e + t.quantity * t.unit_cost, 0);
+	async create(data) {
+		const totalAmount = data.items.reduce((sum, item) => sum + item.quantity * item.unit_cost, 0);
 		return this.prisma.purchase.create({
 			data: {
-				supplier_id: e.supplier_id,
-				total_amount: t,
+				supplier_id: data.supplier_id,
+				total_amount: totalAmount,
 				status: "PENDING",
-				payment_status: e.payment_status || "UNPAID",
-				items: { create: e.items.map((e) => ({
-					product_id: e.product_id,
-					quantity: e.quantity,
-					unit_cost: e.unit_cost
+				payment_status: data.payment_status || "UNPAID",
+				items: { create: data.items.map((item) => ({
+					product_id: item.product_id,
+					quantity: item.quantity,
+					unit_cost: item.unit_cost
 				})) }
 			},
 			include: {
-				supplier: !0,
-				items: { include: { product: !0 } }
+				supplier: true,
+				items: { include: { product: true } }
 			}
 		});
 	}
-	async receive(e) {
-		let t = await this.prisma.purchase.findUnique({
-			where: { id: e },
-			include: { items: { include: { product: !0 } } }
+	async receive(purchaseId) {
+		const purchase = await this.prisma.purchase.findUnique({
+			where: { id: purchaseId },
+			include: { items: { include: { product: true } } }
 		});
-		if (!t) throw Error("Compra no encontrada");
-		if (t.status === "RECEIVED") throw Error("Esta compra ya fue recibida");
-		if (t.status === "CANCELLED") throw Error("No se puede recibir una compra cancelada");
-		await this.prisma.$transaction(async (n) => {
-			for (let e of t.items) await n.product.update({
-				where: { id: e.product_id },
-				data: {
-					stock: { increment: e.quantity },
-					price_purchase: e.unit_cost
-				}
-			}), await n.inventoryMovement.create({ data: {
-				product_id: e.product_id,
-				type: "ENTRADA",
-				quantity: e.quantity,
-				reason: "COMPRA"
-			} });
-			await n.purchase.update({
-				where: { id: e },
+		if (!purchase) throw new Error("Compra no encontrada");
+		if (purchase.status === "RECEIVED") throw new Error("Esta compra ya fue recibida");
+		if (purchase.status === "CANCELLED") throw new Error("No se puede recibir una compra cancelada");
+		await this.prisma.$transaction(async (tx) => {
+			for (const item of purchase.items) {
+				await tx.product.update({
+					where: { id: item.product_id },
+					data: {
+						stock: { increment: item.quantity },
+						price_purchase: item.unit_cost
+					}
+				});
+				await tx.inventoryMovement.create({ data: {
+					product_id: item.product_id,
+					type: "ENTRADA",
+					quantity: item.quantity,
+					reason: "COMPRA"
+				} });
+			}
+			await tx.purchase.update({
+				where: { id: purchaseId },
 				data: { status: "RECEIVED" }
 			});
 		});
 	}
-	async cancel(e) {
-		let t = await this.prisma.purchase.findUnique({ where: { id: e } });
-		if (!t) throw Error("Compra no encontrada");
-		if (t.status === "RECEIVED") throw Error("No se puede cancelar una compra ya recibida");
-		if (t.status === "CANCELLED") throw Error("Esta compra ya está cancelada");
+	async cancel(purchaseId) {
+		const purchase = await this.prisma.purchase.findUnique({ where: { id: purchaseId } });
+		if (!purchase) throw new Error("Compra no encontrada");
+		if (purchase.status === "RECEIVED") throw new Error("No se puede cancelar una compra ya recibida");
+		if (purchase.status === "CANCELLED") throw new Error("Esta compra ya está cancelada");
 		await this.prisma.purchase.update({
-			where: { id: e },
+			where: { id: purchaseId },
 			data: { status: "CANCELLED" }
 		});
 	}
-	async updatePaymentStatus(e, t) {
+	async updatePaymentStatus(purchaseId, paymentStatus) {
 		await this.prisma.purchase.update({
-			where: { id: e },
-			data: { payment_status: t }
+			where: { id: purchaseId },
+			data: { payment_status: paymentStatus }
 		});
 	}
-}, ue = class {
+};
+//#endregion
+//#region src/infrastructure/persistence/PrismaSettingsRepository.ts
+var PrismaSettingsRepository = class {
 	prisma;
-	constructor(e) {
-		this.prisma = e;
+	constructor(prisma) {
+		this.prisma = prisma;
 	}
 	async getAll() {
-		return (await this.prisma.setting.findMany()).reduce((e, t) => (e[t.key] = t.value, e), {});
+		return (await this.prisma.setting.findMany()).reduce((acc, curr) => {
+			acc[curr.key] = curr.value;
+			return acc;
+		}, {});
 	}
-	async get(e, t = "") {
-		let n = await this.prisma.setting.findUnique({ where: { key: e } });
-		return n ? n.value : t;
+	async get(key, defaultValue = "") {
+		const setting = await this.prisma.setting.findUnique({ where: { key } });
+		return setting ? setting.value : defaultValue;
 	}
-	async upsert(e, t) {
+	async upsert(key, value) {
 		await this.prisma.setting.upsert({
-			where: { key: e },
-			update: { value: t },
+			where: { key },
+			update: { value },
 			create: {
-				key: e,
-				value: t
+				key,
+				value
 			}
 		});
 	}
-	async upsertMany(e) {
-		let t = Object.entries(e).map(([e, t]) => this.prisma.setting.upsert({
-			where: { key: e },
-			update: { value: t },
+	async upsertMany(settings) {
+		const promises = Object.entries(settings).map(([key, value]) => this.prisma.setting.upsert({
+			where: { key },
+			update: { value },
 			create: {
-				key: e,
-				value: t
+				key,
+				value
 			}
 		}));
-		await Promise.all(t);
+		await Promise.all(promises);
 	}
 	async getTaxSettings() {
-		let e = await this.get("tax_rate", "0"), t = await this.get("tax_type", "none"), n = await this.get("tax_included", "false");
+		const taxRate = await this.get("tax_rate", "0");
+		const taxType = await this.get("tax_type", "none");
+		const taxIncluded = await this.get("tax_included", "false");
 		return {
-			taxRate: parseFloat(e) || 0,
-			taxType: t,
-			taxIncluded: n === "true"
+			taxRate: parseFloat(taxRate) || 0,
+			taxType,
+			taxIncluded: taxIncluded === "true"
 		};
 	}
-	async updateTaxSettings(e, t, n) {
+	async updateTaxSettings(taxRate, taxType, taxIncluded) {
 		await this.upsertMany({
-			tax_rate: e.toString(),
-			tax_type: t,
-			tax_included: n.toString()
+			tax_rate: taxRate.toString(),
+			tax_type: taxType,
+			tax_included: taxIncluded.toString()
 		});
 	}
-}, de = class {
+};
+//#endregion
+//#region src/infrastructure/persistence/PrismaUserRepository.ts
+var PrismaUserRepository = class {
 	prisma;
-	constructor(e) {
-		this.prisma = e;
+	constructor(prisma) {
+		this.prisma = prisma;
 	}
 	async findAll() {
 		return this.prisma.user.findMany({
 			select: {
-				id: !0,
-				username: !0,
-				role: !0,
-				created_at: !0,
-				updated_at: !0
+				id: true,
+				username: true,
+				role: true,
+				created_at: true,
+				updated_at: true
 			},
 			orderBy: { created_at: "desc" }
 		});
 	}
-	async findById(e) {
+	async findById(id) {
 		return this.prisma.user.findUnique({
-			where: { id: e },
+			where: { id },
 			select: {
-				id: !0,
-				username: !0,
-				role: !0,
-				created_at: !0,
-				updated_at: !0
+				id: true,
+				username: true,
+				role: true,
+				created_at: true,
+				updated_at: true
 			}
 		});
 	}
-	async findByIdWithPassword(e) {
-		return this.prisma.user.findUnique({ where: { id: e } });
+	async findByIdWithPassword(id) {
+		return this.prisma.user.findUnique({ where: { id } });
 	}
-	async findByUsername(e) {
-		return this.prisma.user.findUnique({ where: { username: e } });
+	async findByUsername(username) {
+		return this.prisma.user.findUnique({ where: { username } });
 	}
-	async create(e) {
+	async create(data) {
 		return this.prisma.user.create({
-			data: e,
+			data,
 			select: {
-				id: !0,
-				username: !0,
-				role: !0,
-				created_at: !0,
-				updated_at: !0
+				id: true,
+				username: true,
+				role: true,
+				created_at: true,
+				updated_at: true
 			}
 		});
 	}
-	async update(e, t) {
+	async update(id, data) {
 		return this.prisma.user.update({
-			where: { id: e },
-			data: t,
+			where: { id },
+			data,
 			select: {
-				id: !0,
-				username: !0,
-				role: !0,
-				created_at: !0,
-				updated_at: !0
+				id: true,
+				username: true,
+				role: true,
+				created_at: true,
+				updated_at: true
 			}
 		});
 	}
-	async delete(e) {
-		await this.prisma.user.delete({ where: { id: e } });
+	async delete(id) {
+		await this.prisma.user.delete({ where: { id } });
 	}
-	async exists(e, t) {
-		let n = { username: e };
-		return t && (n.id = { not: t }), !!await this.prisma.user.findFirst({
-			where: n,
-			select: { id: !0 }
+	async exists(username, excludeId) {
+		const where = { username };
+		if (excludeId) where.id = { not: excludeId };
+		return !!await this.prisma.user.findFirst({
+			where,
+			select: { id: true }
 		});
 	}
-	async updateByUsername(e, t) {
+	async updateByUsername(username, data) {
 		return this.prisma.user.update({
-			where: { username: e },
-			data: t,
+			where: { username },
+			data,
 			select: {
-				id: !0,
-				username: !0,
-				role: !0,
-				security_question: !0,
-				created_at: !0,
-				updated_at: !0
+				id: true,
+				username: true,
+				role: true,
+				security_question: true,
+				created_at: true,
+				updated_at: true
 			}
 		});
 	}
 	async count() {
 		return this.prisma.user.count();
 	}
-	async updateLoginAttempts(e, t, n) {
+	async updateLoginAttempts(username, failed_attempts, locked_until) {
 		await this.prisma.user.update({
-			where: { username: e },
+			where: { username },
 			data: {
-				failed_attempts: t,
-				locked_until: n
+				failed_attempts,
+				locked_until
 			}
 		});
 	}
-	async resetLoginAttempts(e) {
+	async resetLoginAttempts(username) {
 		await this.prisma.user.update({
-			where: { username: e },
+			where: { username },
 			data: {
 				failed_attempts: 0,
 				locked_until: null
 			}
 		});
 	}
-}, fe = class {
+};
+//#endregion
+//#region src/infrastructure/persistence/PrismaCategoryRepository.ts
+var PrismaCategoryRepository = class {
 	prisma;
-	constructor(e) {
-		this.prisma = e;
+	constructor(prisma) {
+		this.prisma = prisma;
 	}
-	async findAll(e) {
-		let t = e ? { name: { contains: e } } : {};
+	async findAll(search) {
+		const where = search ? { name: { contains: search } } : {};
 		return this.prisma.category.findMany({
-			where: t,
+			where,
 			select: {
-				id: !0,
-				name: !0,
-				created_at: !0,
-				updated_at: !0
+				id: true,
+				name: true,
+				created_at: true,
+				updated_at: true
 			},
 			orderBy: { name: "asc" }
 		});
 	}
-	async findById(e) {
+	async findById(id) {
 		return await this.prisma.category.findUnique({
-			where: { id: e },
+			where: { id },
 			include: { products: { select: {
-				id: !0,
-				name: !0,
-				sku: !0,
-				stock: !0
+				id: true,
+				name: true,
+				sku: true,
+				stock: true
 			} } }
 		});
 	}
-	async findByName(e) {
-		return this.prisma.category.findFirst({ where: { name: e } });
+	async findByName(name) {
+		return this.prisma.category.findFirst({ where: { name } });
 	}
-	async create(e) {
-		return this.prisma.category.create({ data: e });
+	async create(data) {
+		return this.prisma.category.create({ data });
 	}
-	async update(e, t) {
+	async update(id, data) {
 		return this.prisma.category.update({
-			where: { id: e },
-			data: t
+			where: { id },
+			data
 		});
 	}
-	async delete(e) {
-		await this.prisma.category.delete({ where: { id: e } });
+	async delete(id) {
+		await this.prisma.category.delete({ where: { id } });
 	}
-	async getProductCount(e) {
-		return this.prisma.product.count({ where: { category_id: e } });
+	async getProductCount(id) {
+		return this.prisma.product.count({ where: { category_id: id } });
 	}
-}, pe = class {
+};
+//#endregion
+//#region src/infrastructure/persistence/PrismaAuditLogRepository.ts
+var PrismaAuditLogRepository = class {
 	prisma;
-	constructor(e) {
-		this.prisma = e;
+	constructor(prisma) {
+		this.prisma = prisma;
 	}
-	async create(e) {
+	async create(entry) {
 		try {
-			let t = e.userId;
-			if (t) {
+			let finalUserId = entry.userId;
+			if (finalUserId) {
 				if (!await this.prisma.user.findUnique({
-					where: { id: t },
-					select: { id: !0 }
+					where: { id: finalUserId },
+					select: { id: true }
 				})) {
-					let n = await this.getDefaultAdminUserId();
-					if (!n) {
-						console.warn(`User ${e.userId} not found and no admin available, skipping audit log`);
+					const adminId = await this.getDefaultAdminUserId();
+					if (!adminId) {
+						console.warn(`User ${entry.userId} not found and no admin available, skipping audit log`);
 						return;
 					}
-					t = n;
+					finalUserId = adminId;
 				}
 			} else {
-				let e = await this.getDefaultAdminUserId();
-				if (!e) {
+				const adminId = await this.getDefaultAdminUserId();
+				if (!adminId) {
 					console.warn("No userId provided and no admin user found, skipping audit log");
 					return;
 				}
-				t = e;
+				finalUserId = adminId;
 			}
 			await this.prisma.auditLog.create({ data: {
-				user_id: t,
-				action: e.action,
-				entity: e.entity,
-				entity_id: e.entity_id
+				user_id: finalUserId,
+				action: entry.action,
+				entity: entry.entity,
+				entity_id: entry.entity_id
 			} });
-		} catch (e) {
-			console.warn("Failed to create audit log:", e);
+		} catch (error) {
+			console.warn("Failed to create audit log:", error);
 		}
 	}
 	async getDefaultAdminUserId() {
 		try {
 			return (await this.prisma.user.findFirst({
 				where: { role: "ADMIN" },
-				select: { id: !0 },
+				select: { id: true },
 				orderBy: { id: "asc" }
 			}))?.id ?? null;
 		} catch {
 			return null;
 		}
 	}
-}, me = class {
+};
+//#endregion
+//#region src/infrastructure/persistence/PrismaDashboardRepository.ts
+var PrismaDashboardRepository = class {
 	prisma;
-	constructor(e) {
-		this.prisma = e;
+	constructor(prisma) {
+		this.prisma = prisma;
 	}
-	async getStats(e, t) {
-		let n = {};
-		Object.assign(n, P("created_at", e, t));
-		let r = Object.keys(n).length === 0 ? { created_at: { gte: new Date((/* @__PURE__ */ new Date()).setHours(0, 0, 0, 0)) } } : n, i = await this.prisma.sale.aggregate({
-			where: r,
-			_sum: { total: !0 }
-		}), a = await this.prisma.sale.count({ where: r }), o = (await this.prisma.sale.findMany({
-			where: r,
+	async getStats(startDate, endDate) {
+		const where = {};
+		Object.assign(where, buildDateFilter("created_at", startDate, endDate));
+		const filterWhere = Object.keys(where).length === 0 ? { created_at: { gte: new Date((/* @__PURE__ */ new Date()).setHours(0, 0, 0, 0)) } } : where;
+		const revenueResult = await this.prisma.sale.aggregate({
+			where: filterWhere,
+			_sum: { total: true }
+		});
+		const salesCount = await this.prisma.sale.count({ where: filterWhere });
+		const totalProfit = (await this.prisma.sale.findMany({
+			where: filterWhere,
 			select: {
-				id: !0,
-				total: !0,
+				id: true,
+				total: true,
 				items: { select: {
-					quantity: !0,
-					unit_price: !0,
-					purchase_price: !0
+					quantity: true,
+					unit_price: true,
+					purchase_price: true
 				} }
 			}
-		})).reduce((e, t) => e + t.items.reduce((e, t) => e + t.quantity * (t.unit_price - t.purchase_price), 0), 0), s = await this.prisma.product.count({ where: { stock: { gt: 0 } } }), c = await this.prisma.client.count(), l = await this.prisma.product.count({ where: { stock: { lt: this.prisma.product.fields.min_stock } } });
+		})).reduce((acc, sale) => {
+			return acc + sale.items.reduce((itemAcc, item) => {
+				return itemAcc + item.quantity * (item.unit_price - item.purchase_price);
+			}, 0);
+		}, 0);
+		const activeProducts = await this.prisma.product.count({ where: { stock: { gt: 0 } } });
+		const totalClients = await this.prisma.client.count();
+		const lowStockCount = await this.prisma.product.count({ where: { stock: { lt: this.prisma.product.fields.min_stock } } });
 		return {
-			todayRevenue: i._sum.total || 0,
-			todayProfit: o,
-			todaySalesCount: a,
-			totalRevenue: i._sum.total || 0,
-			totalProfit: o,
-			totalSales: a,
-			activeProducts: s,
-			totalClients: c,
-			lowStockProducts: l,
-			averageSale: a > 0 ? (i._sum.total || 0) / a : 0
+			todayRevenue: revenueResult._sum.total || 0,
+			todayProfit: totalProfit,
+			todaySalesCount: salesCount,
+			totalRevenue: revenueResult._sum.total || 0,
+			totalProfit,
+			totalSales: salesCount,
+			activeProducts,
+			totalClients,
+			lowStockProducts: lowStockCount,
+			averageSale: salesCount > 0 ? (revenueResult._sum.total || 0) / salesCount : 0
 		};
 	}
-	async getWeeklySales(e = 7) {
-		let t = /* @__PURE__ */ new Date();
-		t.setDate(t.getDate() - e);
-		let n = (await this.prisma.sale.findMany({
-			where: { created_at: { gte: t } },
+	async getWeeklySales(days = 7) {
+		const startDate = /* @__PURE__ */ new Date();
+		startDate.setDate(startDate.getDate() - days);
+		const groupedByDate = (await this.prisma.sale.findMany({
+			where: { created_at: { gte: startDate } },
 			select: {
-				total: !0,
-				created_at: !0
+				total: true,
+				created_at: true
 			},
 			orderBy: { created_at: "asc" }
-		})).reduce((e, t) => {
-			let n = t.created_at.toISOString().split("T")[0];
-			return e[n] || (e[n] = {
-				date: n,
+		})).reduce((acc, sale) => {
+			const date = sale.created_at.toISOString().split("T")[0];
+			if (!acc[date]) acc[date] = {
+				date,
 				total: 0,
 				count: 0
-			}), e[n].total += t.total, e[n].count += 1, e;
+			};
+			acc[date].total += sale.total;
+			acc[date].count += 1;
+			return acc;
 		}, {});
-		return Object.values(n);
+		return Object.values(groupedByDate);
 	}
-	async getLowStockProducts(e = 10) {
+	async getLowStockProducts(limit = 10) {
 		return (await this.prisma.$queryRaw`
       SELECT p.id, p.sku, p.name, p.stock, p.min_stock, c.name as category_name
       FROM products p
       LEFT JOIN categories c ON p.category_id = c.id
       WHERE p.stock <= COALESCE(p.min_stock, 5) OR p.stock = 0
       ORDER BY p.stock ASC
-      LIMIT ${e}
-    ` || []).map((e) => ({
-			id: e.id,
-			sku: e.sku,
-			name: e.name,
-			stock: e.stock,
-			min_stock: e.min_stock,
-			category: e.category_name ? { name: e.category_name } : null
+      LIMIT ${limit}
+    ` || []).map((r) => ({
+			id: r.id,
+			sku: r.sku,
+			name: r.name,
+			stock: r.stock,
+			min_stock: r.min_stock,
+			category: r.category_name ? { name: r.category_name } : null
 		}));
 	}
-	async getSalesByPaymentMethod(e, t) {
-		let n = {};
-		return Object.assign(n, P("created_at", e, t)), this.prisma.sale.groupBy({
+	async getSalesByPaymentMethod(startDate, endDate) {
+		const where = {};
+		Object.assign(where, buildDateFilter("created_at", startDate, endDate));
+		return this.prisma.sale.groupBy({
 			by: ["payment_method"],
-			where: n,
-			_count: { id: !0 },
-			_sum: { total: !0 },
-			_avg: { total: !0 }
+			where,
+			_count: { id: true },
+			_sum: { total: true },
+			_avg: { total: true }
 		});
 	}
-	async getTopProducts(e = 10, t, n) {
-		let r = {};
-		Object.assign(r, P("created_at", t, n));
-		let i = await this.prisma.saleItem.groupBy({
+	async getTopProducts(limit = 10, startDate, endDate) {
+		const where = {};
+		Object.assign(where, buildDateFilter("created_at", startDate, endDate));
+		const topProducts = await this.prisma.saleItem.groupBy({
 			by: ["product_id"],
-			where: r,
-			_sum: { quantity: !0 },
-			_avg: { unit_price: !0 },
-			_count: { id: !0 },
+			where,
+			_sum: { quantity: true },
+			_avg: { unit_price: true },
+			_count: { id: true },
 			orderBy: { _sum: { quantity: "desc" } },
-			take: e
-		}), a = i.map((e) => e.product_id), o = await this.prisma.product.findMany({
-			where: { id: { in: a } },
-			include: { category: !0 }
+			take: limit
 		});
-		return i.map((e) => {
-			let t = o.find((t) => t.id === e.product_id);
+		const productIds = topProducts.map((item) => item.product_id);
+		const products = await this.prisma.product.findMany({
+			where: { id: { in: productIds } },
+			include: { category: true }
+		});
+		return topProducts.map((item) => {
+			const product = products.find((p) => p.id === item.product_id);
 			return {
-				product_id: e.product_id,
-				product_name: t?.name || "Unknown",
-				product_sku: t?.sku || "Unknown",
-				category: t?.category?.name || "Sin categoría",
-				total_quantity: e._sum.quantity || 0,
-				avg_price: e._avg.unit_price || 0,
-				times_sold: e._count.id
+				product_id: item.product_id,
+				product_name: product?.name || "Unknown",
+				product_sku: product?.sku || "Unknown",
+				category: product?.category?.name || "Sin categoría",
+				total_quantity: item._sum.quantity || 0,
+				avg_price: item._avg.unit_price || 0,
+				times_sold: item._count.id
 			};
 		});
 	}
-	async getTopClients(e = 10, t, n) {
-		let r = {};
-		Object.assign(r, P("created_at", t, n));
-		let i = await this.prisma.sale.groupBy({
+	async getTopClients(limit = 10, startDate, endDate) {
+		const where = {};
+		Object.assign(where, buildDateFilter("created_at", startDate, endDate));
+		const topClients = await this.prisma.sale.groupBy({
 			by: ["client_id"],
-			where: r,
-			_count: { id: !0 },
-			_sum: { total: !0 },
-			_avg: { total: !0 },
+			where,
+			_count: { id: true },
+			_sum: { total: true },
+			_avg: { total: true },
 			orderBy: { _sum: { total: "desc" } },
-			take: e
-		}), a = i.map((e) => e.client_id).filter((e) => e !== null), o = await this.prisma.client.findMany({ where: { id: { in: a } } });
-		return i.map((e) => {
-			let t = o.find((t) => t.id === e.client_id);
+			take: limit
+		});
+		const clientIds = topClients.map((item) => item.client_id).filter((id) => id !== null);
+		const clients = await this.prisma.client.findMany({ where: { id: { in: clientIds } } });
+		return topClients.map((item) => {
+			const client = clients.find((c) => c.id === item.client_id);
 			return {
-				client_id: e.client_id,
-				client_name: t?.name || "Cliente Desconocido",
-				client_dni: t?.dni || "N/A",
-				total_purchases: e._count.id,
-				total_spent: e._sum.total || 0,
-				avg_purchase: e._avg.total || 0
+				client_id: item.client_id,
+				client_name: client?.name || "Cliente Desconocido",
+				client_dni: client?.dni || "N/A",
+				total_purchases: item._count.id,
+				total_spent: item._sum.total || 0,
+				avg_purchase: item._avg.total || 0
 			};
 		});
 	}
-	async getSalesByHour(e, t) {
-		let n = {};
-		Object.assign(n, P("created_at", e, t));
-		let r = await this.prisma.sale.findMany({
-			where: n,
+	async getSalesByHour(startDate, endDate) {
+		const where = {};
+		Object.assign(where, buildDateFilter("created_at", startDate, endDate));
+		const sales = await this.prisma.sale.findMany({
+			where,
 			select: {
-				total: !0,
-				created_at: !0
+				total: true,
+				created_at: true
 			}
-		}), i = Array.from({ length: 24 }, (e, t) => ({
-			hour: t,
+		});
+		const hours = Array.from({ length: 24 }, (_, i) => ({
+			hour: i,
 			total: 0,
 			count: 0
 		}));
-		return r.forEach((e) => {
-			let t = e.created_at.getHours();
-			i[t].total += e.total, i[t].count += 1;
-		}), i;
+		sales.forEach((sale) => {
+			const hour = sale.created_at.getHours();
+			hours[hour].total += sale.total;
+			hours[hour].count += 1;
+		});
+		return hours;
 	}
-	async getCashRegisterSummary(e, t) {
-		let n = {};
-		Object.assign(n, P("opened_at", e, t));
-		let r = await this.prisma.cashRegister.findMany({
-			where: n,
+	async getCashRegisterSummary(startDate, endDate) {
+		const where = {};
+		Object.assign(where, buildDateFilter("opened_at", startDate, endDate));
+		const registers = await this.prisma.cashRegister.findMany({
+			where,
 			select: {
-				id: !0,
-				opened_at: !0,
-				opening_amount: !0,
-				total_sales: !0
+				id: true,
+				opened_at: true,
+				opening_amount: true,
+				total_sales: true
 			},
 			orderBy: { opened_at: "desc" }
 		});
 		return {
-			registers: r,
-			summary: r.reduce((e, t) => ({
-				totalRegisters: e.totalRegisters + 1,
-				totalOpening: e.totalOpening + Number(t.opening_amount),
-				totalSales: e.totalSales + Number(t.total_sales)
+			registers,
+			summary: registers.reduce((acc, reg) => ({
+				totalRegisters: acc.totalRegisters + 1,
+				totalOpening: acc.totalOpening + Number(reg.opening_amount),
+				totalSales: acc.totalSales + Number(reg.total_sales)
 			}), {
 				totalRegisters: 0,
 				totalOpening: 0,
@@ -1083,354 +1186,495 @@ var oe = class {
 		};
 	}
 	async getLastSaleWithClient() {
-		let e = /* @__PURE__ */ new Date();
-		e.setHours(0, 0, 0, 0);
-		let t = await this.prisma.sale.findFirst({
-			where: { created_at: { gte: e } },
+		const today = /* @__PURE__ */ new Date();
+		today.setHours(0, 0, 0, 0);
+		const sale = await this.prisma.sale.findFirst({
+			where: { created_at: { gte: today } },
 			orderBy: { created_at: "desc" },
 			include: { client: { select: {
-				name: !0,
-				dni: !0
+				name: true,
+				dni: true
 			} } }
 		});
-		return t ? {
-			sale_id: t.id,
-			client_name: t.client?.name ?? null,
-			client_dni: t.client?.dni ?? null,
-			total: t.total,
-			created_at: t.created_at
-		} : null;
+		if (!sale) return null;
+		return {
+			sale_id: sale.id,
+			client_name: sale.client?.name ?? null,
+			client_dni: sale.client?.dni ?? null,
+			total: sale.total,
+			created_at: sale.created_at
+		};
 	}
 	async getInventoryMetrics() {
-		let e = await this.prisma.product.count(), t = await this.prisma.product.count({ where: { stock: { gt: 0 } } }), n = await this.prisma.product.count({ where: { stock: { equals: 0 } } }), r = await this.prisma.product.count({ where: { stock: { lt: this.prisma.product.fields.min_stock } } }), i = await this.prisma.product.aggregate({
-			_sum: { price_purchase: !0 },
+		const totalProducts = await this.prisma.product.count();
+		const productsWithStock = await this.prisma.product.count({ where: { stock: { gt: 0 } } });
+		const productsWithoutStock = await this.prisma.product.count({ where: { stock: { equals: 0 } } });
+		const lowStockProducts = await this.prisma.product.count({ where: { stock: { lt: this.prisma.product.fields.min_stock } } });
+		const inventoryValue = await this.prisma.product.aggregate({
+			_sum: { price_purchase: true },
 			where: { stock: { gt: 0 } }
-		}), a = await this.prisma.product.aggregate({
-			_sum: { price_sale: !0 },
+		});
+		const inventorySaleValue = await this.prisma.product.aggregate({
+			_sum: { price_sale: true },
 			where: { stock: { gt: 0 } }
-		}), o = await this.prisma.inventoryMovement.findMany({
+		});
+		const recentMovements = await this.prisma.inventoryMovement.findMany({
 			take: 10,
 			orderBy: { created_at: "desc" },
 			include: { product: { select: {
-				name: !0,
-				sku: !0
+				name: true,
+				sku: true
 			} } }
 		});
 		return {
-			totalProducts: e,
-			productsWithStock: t,
-			productsWithoutStock: n,
-			lowStockProducts: r,
-			totalPurchaseValue: i._sum.price_purchase || 0,
-			totalSaleValue: a._sum.price_sale || 0,
-			potentialProfit: (a._sum.price_sale || 0) - (i._sum.price_purchase || 0),
-			recentMovements: o
+			totalProducts,
+			productsWithStock,
+			productsWithoutStock,
+			lowStockProducts,
+			totalPurchaseValue: inventoryValue._sum.price_purchase || 0,
+			totalSaleValue: inventorySaleValue._sum.price_sale || 0,
+			potentialProfit: (inventorySaleValue._sum.price_sale || 0) - (inventoryValue._sum.price_purchase || 0),
+			recentMovements
 		};
 	}
-}, he = class {
+};
+//#endregion
+//#region src/infrastructure/persistence/PrismaDiscountRepository.ts
+var PrismaDiscountRepository = class {
 	prisma;
-	constructor(e) {
-		this.prisma = e;
+	constructor(prisma) {
+		this.prisma = prisma;
 	}
-	async findAll(e) {
-		let t = {};
-		return e && (t.is_active = !0), this.prisma.discount.findMany({
-			where: t,
+	async findAll(activeOnly) {
+		const where = {};
+		if (activeOnly) where.is_active = true;
+		return this.prisma.discount.findMany({
+			where,
 			include: { category: { select: {
-				id: !0,
-				name: !0
+				id: true,
+				name: true
 			} } },
 			orderBy: { created_at: "desc" }
 		});
 	}
-	async findById(e) {
+	async findById(id) {
 		return await this.prisma.discount.findUnique({
-			where: { id: e },
+			where: { id },
 			include: {
 				category: { select: {
-					id: !0,
-					name: !0
+					id: true,
+					name: true
 				} },
 				products: { include: { product: { select: {
-					id: !0,
-					name: !0,
-					sku: !0
+					id: true,
+					name: true,
+					sku: true
 				} } } }
 			}
 		});
 	}
-	async findApplicableToProduct(e, t) {
-		let n = await this.prisma.product.findUnique({
-			where: { id: e },
-			select: { category_id: !0 }
+	async findApplicableToProduct(productId, totalAmount) {
+		const product = await this.prisma.product.findUnique({
+			where: { id: productId },
+			select: { category_id: true }
 		});
-		if (!n) return [];
-		let r = await this.prisma.discount.findMany({ where: {
-			is_active: !0,
+		if (!product) return [];
+		const discounts = await this.prisma.discount.findMany({ where: {
+			is_active: true,
 			OR: [
 				{ applicable_to: "ALL" },
 				{
 					applicable_to: "CATEGORY",
-					category_id: n.category_id
+					category_id: product.category_id
 				},
 				{
 					applicable_to: "SPECIFIC",
-					products: { some: { product_id: e } }
+					products: { some: { product_id: productId } }
 				}
 			]
 		} });
-		return t === void 0 ? r : r.filter((e) => e.min_purchase_amount === null || e.min_purchase_amount <= t);
+		if (totalAmount !== void 0) return discounts.filter((d) => d.min_purchase_amount === null || d.min_purchase_amount <= totalAmount);
+		return discounts;
 	}
-	async create(e) {
-		let { product_ids: t, ...n } = e;
-		return this.prisma.$transaction(async (e) => {
-			let r = await e.discount.create({ data: {
-				name: n.name,
-				type: n.type,
-				value: n.value,
-				is_active: n.is_active ?? !0,
-				applicable_to: n.applicable_to ?? "ALL",
-				category_id: n.category_id ?? null,
-				min_purchase_amount: n.min_purchase_amount ?? null
+	async create(data) {
+		const { product_ids, ...discountData } = data;
+		return this.prisma.$transaction(async (tx) => {
+			const discount = await tx.discount.create({ data: {
+				name: discountData.name,
+				type: discountData.type,
+				value: discountData.value,
+				is_active: discountData.is_active ?? true,
+				applicable_to: discountData.applicable_to ?? "ALL",
+				category_id: discountData.category_id ?? null,
+				min_purchase_amount: discountData.min_purchase_amount ?? null
 			} });
-			return t && t.length > 0 && await e.productDiscount.createMany({ data: t.map((e) => ({
-				product_id: e,
-				discount_id: r.id
-			})) }), r;
+			if (product_ids && product_ids.length > 0) await tx.productDiscount.createMany({ data: product_ids.map((pid) => ({
+				product_id: pid,
+				discount_id: discount.id
+			})) });
+			return discount;
 		});
 	}
-	async update(e, t) {
-		let { product_ids: n, ...r } = t;
-		return this.prisma.$transaction(async (t) => {
-			let i = await t.discount.update({
-				where: { id: e },
+	async update(id, data) {
+		const { product_ids, ...discountData } = data;
+		return this.prisma.$transaction(async (tx) => {
+			const discount = await tx.discount.update({
+				where: { id },
 				data: {
-					...r,
-					category_id: r.category_id ?? null,
-					min_purchase_amount: r.min_purchase_amount ?? null
+					...discountData,
+					category_id: discountData.category_id ?? null,
+					min_purchase_amount: discountData.min_purchase_amount ?? null
 				}
 			});
-			return n !== void 0 && (await t.productDiscount.deleteMany({ where: { discount_id: e } }), n.length > 0 && await t.productDiscount.createMany({ data: n.map((t) => ({
-				product_id: t,
-				discount_id: e
-			})) })), i;
+			if (product_ids !== void 0) {
+				await tx.productDiscount.deleteMany({ where: { discount_id: id } });
+				if (product_ids.length > 0) await tx.productDiscount.createMany({ data: product_ids.map((pid) => ({
+					product_id: pid,
+					discount_id: id
+				})) });
+			}
+			return discount;
 		});
 	}
-	async delete(e) {
-		await this.prisma.discount.delete({ where: { id: e } });
+	async delete(id) {
+		await this.prisma.discount.delete({ where: { id } });
 	}
-	async addProducts(e, t) {
-		await this.prisma.productDiscount.createMany({ data: t.map((t) => ({
-			product_id: t,
-			discount_id: e
+	async addProducts(discountId, productIds) {
+		await this.prisma.productDiscount.createMany({ data: productIds.map((pid) => ({
+			product_id: pid,
+			discount_id: discountId
 		})) });
 	}
-	async removeProducts(e, t) {
+	async removeProducts(discountId, productIds) {
 		await this.prisma.productDiscount.deleteMany({ where: {
-			discount_id: e,
-			product_id: { in: t }
+			discount_id: discountId,
+			product_id: { in: productIds }
 		} });
 	}
-}, ge = class {
+};
+//#endregion
+//#region src/infrastructure/persistence/PrismaInventoryMovementRepository.ts
+var PrismaInventoryMovementRepository = class {
 	prisma;
-	constructor(e) {
-		this.prisma = e;
+	constructor(prisma) {
+		this.prisma = prisma;
 	}
-	async findAll(e) {
-		let t = {};
-		Object.assign(t, P("created_at", e?.startDate, e?.endDate)), e?.productId && (t.product_id = e.productId), e?.type && (t.type = e.type), e?.reason && (t.reason = e.reason);
-		let n = e?.page ?? 1, r = e?.pageSize ?? 50, i = (n - 1) * r, a = r, [o, s] = await Promise.all([this.prisma.inventoryMovement.findMany({
-			where: t,
+	async findAll(filter) {
+		const where = {};
+		Object.assign(where, buildDateFilter("created_at", filter?.startDate, filter?.endDate));
+		if (filter?.productId) where.product_id = filter.productId;
+		if (filter?.type) where.type = filter.type;
+		if (filter?.reason) where.reason = filter.reason;
+		const page = filter?.page ?? 1;
+		const pageSize = filter?.pageSize ?? 50;
+		const skip = (page - 1) * pageSize;
+		const take = pageSize;
+		const [data, total] = await Promise.all([this.prisma.inventoryMovement.findMany({
+			where,
 			include: { product: { select: {
-				id: !0,
-				name: !0,
-				sku: !0
+				id: true,
+				name: true,
+				sku: true
 			} } },
-			skip: i,
-			take: a,
+			skip,
+			take,
 			orderBy: { created_at: "desc" }
-		}), this.prisma.inventoryMovement.count({ where: t })]);
+		}), this.prisma.inventoryMovement.count({ where })]);
 		return {
-			data: o,
-			total: s,
-			page: n,
-			pageSize: r,
-			totalPages: Math.ceil(s / r)
+			data,
+			total,
+			page,
+			pageSize,
+			totalPages: Math.ceil(total / pageSize)
 		};
 	}
-	async count(e) {
-		let t = {};
-		return Object.assign(t, P("created_at", e?.startDate, e?.endDate)), e?.productId && (t.product_id = e.productId), e?.type && (t.type = e.type), e?.reason && (t.reason = e.reason), this.prisma.inventoryMovement.count({ where: t });
+	async count(filter) {
+		const where = {};
+		Object.assign(where, buildDateFilter("created_at", filter?.startDate, filter?.endDate));
+		if (filter?.productId) where.product_id = filter.productId;
+		if (filter?.type) where.type = filter.type;
+		if (filter?.reason) where.reason = filter.reason;
+		return this.prisma.inventoryMovement.count({ where });
+	}
+};
+//#endregion
+//#region src/infrastructure/persistence/PrismaAiTrainingLogRepository.ts
+var PrismaAiTrainingLogRepository = class {
+	prisma;
+	constructor(prisma) {
+		this.prisma = prisma;
+	}
+	async create(data) {
+		const record = await this.prisma.aiTrainingLog.create({ data: {
+			usuario_id: data.usuario_id,
+			mensaje_usuario: data.mensaje_usuario,
+			nlu_output: data.nlu_output ?? null,
+			respuesta_sistema: data.respuesta_sistema ?? null
+		} });
+		return this.mapToDTO(record);
+	}
+	async findById(id) {
+		const record = await this.prisma.aiTrainingLog.findUnique({ where: { id } });
+		return record ? this.mapToDTO(record) : null;
+	}
+	async findAll(filter) {
+		return (await this.prisma.aiTrainingLog.findMany({
+			where: {
+				usuario_id: filter?.usuario_id,
+				created_at: {
+					gte: filter?.startDate,
+					lte: filter?.endDate
+				}
+			},
+			orderBy: { created_at: "desc" },
+			take: filter?.limit ?? 100
+		})).map((r) => this.mapToDTO(r));
+	}
+	async countByIntentSince(intent, since) {
+		const logs = await this.prisma.aiTrainingLog.findMany({
+			where: {
+				nlu_output: { not: null },
+				created_at: { gte: since }
+			},
+			select: { nlu_output: true }
+		});
+		const intentPattern = `"intent":"${intent}"`;
+		return logs.filter((l) => l.nlu_output?.includes(intentPattern)).length;
+	}
+	async getLatestByUser(usuario_id, limit = 20) {
+		return (await this.prisma.aiTrainingLog.findMany({
+			where: { usuario_id },
+			orderBy: { created_at: "desc" },
+			take: limit
+		})).map((r) => this.mapToDTO(r));
+	}
+	mapToDTO(record) {
+		return {
+			id: record.id,
+			usuario_id: record.usuario_id,
+			mensaje_usuario: record.mensaje_usuario,
+			nlu_output: record.nlu_output,
+			respuesta_sistema: record.respuesta_sistema,
+			created_at: record.created_at
+		};
 	}
 };
 //#endregion
 //#region src/backend/utils/pathValidation.ts
-function _e(e, t) {
-	let n = a.resolve(e), r = a.resolve(t);
-	return r === n || r.startsWith(n + a.sep);
+function isPathWithin(base, target) {
+	const resolvedBase = path.resolve(base);
+	const resolvedTarget = path.resolve(target);
+	return resolvedTarget === resolvedBase || resolvedTarget.startsWith(resolvedBase + path.sep);
 }
-function I(e, t, n) {
-	if (!_e(e, t)) throw Error(`${n || "Ruta"} no válida: debe estar dentro del directorio permitido`);
+function assertPathWithin(base, target, label) {
+	if (!isPathWithin(base, target)) throw new Error(`${label || "Ruta"} no válida: debe estar dentro del directorio permitido`);
 }
 //#endregion
 //#region src/infrastructure/backup/ElectronBackupService.ts
-var ve = d(u), ye = class {
+var pipelineAsync = promisify(pipeline);
+var ElectronBackupService = class {
 	getDbPath() {
-		if (!t.isPackaged) return a.resolve(process.cwd(), "prisma", "dev.sqlite3");
-		let e = t.getPath("userData");
-		return a.join(e, "dev.sqlite3");
+		if (!app.isPackaged) return path.resolve(process.cwd(), "prisma", "dev.sqlite3");
+		const userDataPath = app.getPath("userData");
+		return path.join(userDataPath, "dev.sqlite3");
 	}
 	getBackupDir() {
-		let e = !t.isPackaged, n;
-		n = e ? process.cwd() : t.getPath("userData");
-		let r = a.join(n, "backups");
-		return o.existsSync(r) || o.mkdirSync(r, { recursive: !0 }), r;
+		const isDev = !app.isPackaged;
+		let basePath;
+		if (isDev) basePath = process.cwd();
+		else basePath = app.getPath("userData");
+		const backupDir = path.join(basePath, "backups");
+		if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
+		return backupDir;
 	}
-	async createBackup(e) {
+	async createBackup(label) {
 		try {
-			let t = this.getDbPath();
-			if (!o.existsSync(t)) return {
-				success: !1,
+			const dbPath = this.getDbPath();
+			if (!fs.existsSync(dbPath)) return {
+				success: false,
 				message: "Database file not found"
 			};
-			let n = this.getBackupDir(), r = `backup-${(/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-").split("T")[0]}${e ? `-${e}` : ""}.sqlite.gz`, i = a.join(n, r);
-			return await ve(o.createReadStream(t), p(), o.createWriteStream(i)), {
-				success: !0,
-				path: r
+			const backupDir = this.getBackupDir();
+			const backupFileName = `backup-${(/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-").split("T")[0]}${label ? `-${label}` : ""}.sqlite.gz`;
+			const backupPath = path.join(backupDir, backupFileName);
+			await pipelineAsync(fs.createReadStream(dbPath), createGzip(), fs.createWriteStream(backupPath));
+			return {
+				success: true,
+				path: backupFileName
 			};
-		} catch (e) {
-			return E.error({ err: e }, "Error creating backup"), {
-				success: !1,
+		} catch (error) {
+			logger.error({ err: error }, "Error creating backup");
+			return {
+				success: false,
 				message: "Error al crear respaldo"
 			};
 		}
 	}
 	async listBackups() {
 		try {
-			let e = this.getBackupDir();
-			return o.existsSync(e) ? o.readdirSync(e).filter((e) => e.endsWith(".sqlite.gz")).map((t) => {
-				let n = a.join(e, t), r = o.statSync(n);
+			const backupDir = this.getBackupDir();
+			if (!fs.existsSync(backupDir)) return [];
+			return fs.readdirSync(backupDir).filter((f) => f.endsWith(".sqlite.gz")).map((filename) => {
+				const filePath = path.join(backupDir, filename);
+				const stats = fs.statSync(filePath);
 				return {
-					filename: t,
-					path: t,
-					size: r.size,
-					created: r.mtime
+					filename,
+					path: filename,
+					size: stats.size,
+					created: stats.mtime
 				};
-			}).sort((e, t) => t.created.getTime() - e.created.getTime()) : [];
-		} catch (e) {
-			return E.error({ err: e }, "Error listing backups"), [];
+			}).sort((a, b) => b.created.getTime() - a.created.getTime());
+		} catch (error) {
+			logger.error({ err: error }, "Error listing backups");
+			return [];
 		}
 	}
-	async restoreBackup(e) {
+	async restoreBackup(backupPath) {
 		try {
-			let t = this.getBackupDir();
-			if (a.isAbsolute(e)) return {
-				success: !1,
+			const backupDir = this.getBackupDir();
+			if (path.isAbsolute(backupPath)) return {
+				success: false,
 				message: "Ruta absoluta no permitida. Use solo el nombre del archivo."
 			};
-			let n = a.join(t, e);
-			if (I(t, n, "Archivo de backup"), !o.existsSync(n)) return {
-				success: !1,
+			const resolvedPath = path.join(backupDir, backupPath);
+			assertPathWithin(backupDir, resolvedPath, "Archivo de backup");
+			if (!fs.existsSync(resolvedPath)) return {
+				success: false,
 				message: "Archivo de backup no encontrado"
 			};
-			let r = this.getDbPath();
-			return await this.createBackup("before-restore"), await ve(o.createReadStream(n), f(), o.createWriteStream(r)), {
-				success: !0,
+			const dbPath = this.getDbPath();
+			await this.createBackup("before-restore");
+			await pipelineAsync(fs.createReadStream(resolvedPath), createGunzip(), fs.createWriteStream(dbPath));
+			return {
+				success: true,
 				message: "Backup restaurado correctamente. Reinicia la aplicación."
 			};
-		} catch (e) {
-			return E.error({ err: e }, "Error restoring backup"), {
-				success: !1,
+		} catch (error) {
+			logger.error({ err: error }, "Error restoring backup");
+			return {
+				success: false,
 				message: "Error al restaurar respaldo"
 			};
 		}
 	}
-	async deleteBackup(e) {
+	async deleteBackup(backupPath) {
 		try {
-			let t = this.getBackupDir();
-			if (a.isAbsolute(e)) return {
-				success: !1,
+			const backupDir = this.getBackupDir();
+			if (path.isAbsolute(backupPath)) return {
+				success: false,
 				message: "Ruta absoluta no permitida. Use solo el nombre del archivo."
 			};
-			let n = a.join(t, e);
-			return I(t, n, "Archivo de backup"), o.existsSync(n) ? (o.unlinkSync(n), { success: !0 }) : {
-				success: !1,
+			const resolvedPath = path.join(backupDir, backupPath);
+			assertPathWithin(backupDir, resolvedPath, "Archivo de backup");
+			if (!fs.existsSync(resolvedPath)) return {
+				success: false,
 				message: "Archivo de backup no encontrado"
 			};
-		} catch (e) {
-			return E.error({ err: e }, "Error deleting backup"), {
-				success: !1,
+			fs.unlinkSync(resolvedPath);
+			return { success: true };
+		} catch (error) {
+			logger.error({ err: error }, "Error deleting backup");
+			return {
+				success: false,
 				message: "Error al eliminar respaldo"
 			};
 		}
 	}
 	async createScheduledBackup() {
-		let e = await this.listBackups(), t = /* @__PURE__ */ new Date(), n = new Date(t.getFullYear(), t.getMonth(), t.getDate());
-		e.find((e) => {
-			let t = new Date(e.created);
-			return new Date(t.getFullYear(), t.getMonth(), t.getDate()).getTime() === n.getTime();
-		}) || (await this.createBackup("auto"), E.info("Automatic backup created"));
-	}
-	async cleanupOldBackups(e = 10) {
-		try {
-			let t = this.getBackupDir(), n = await this.listBackups();
-			if (n.length > e) {
-				let r = n.slice(e);
-				for (let e of r) {
-					let n = a.join(t, e.path);
-					o.unlinkSync(n);
-				}
-				E.info(`Cleaned up ${r.length} old backups`);
-			}
-		} catch (e) {
-			E.error({ err: e }, "Error cleaning up backups");
+		const backups = await this.listBackups();
+		const now = /* @__PURE__ */ new Date();
+		const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+		if (!backups.find((b) => {
+			const backupDate = new Date(b.created);
+			return new Date(backupDate.getFullYear(), backupDate.getMonth(), backupDate.getDate()).getTime() === today.getTime();
+		})) {
+			await this.createBackup("auto");
+			logger.info("Automatic backup created");
 		}
 	}
-}, be = class {
-	async generateSalesReport(e, t, n = "Reporte de Ventas", r = !0) {
-		let i = new m({
-			unit: "mm",
-			format: "a4"
-		});
-		i.setFontSize(16), i.text(n, 14, 20), i.setFontSize(10), i.text(`Generado: ${(/* @__PURE__ */ new Date()).toLocaleDateString("es-PE")}`, 14, 28);
-		let a = 34;
-		return r && e.length > 0 && (h(i, {
-			head: [[
-				"Fecha",
-				"# Factura",
-				"Cliente",
-				"Items",
-				"Subtotal",
-				"Impuesto",
-				"Total",
-				"Pago"
-			]],
-			body: e.map((e) => [
-				e.date,
-				String(e.invoiceNumber),
-				e.client,
-				String(e.itemsCount),
-				`$ ${e.subtotal.toFixed(2)}`,
-				`$ ${e.tax.toFixed(2)}`,
-				`$ ${e.total.toFixed(2)}`,
-				e.paymentMethod
-			]),
-			startY: 34,
-			styles: { fontSize: 7 },
-			headStyles: { fillColor: [
-				41,
-				128,
-				185
-			] },
-			tableWidth: "auto"
-		}), a = i.lastAutoTable.finalY + 10), i.setFontSize(10), i.text(`Total Ventas: ${t.totalSales}`, 14, a), i.text(`Ingreso Total: $ ${t.totalRevenue.toFixed(2)}`, 14, a + 6), i.text(`Promedio: $ ${t.averageSale.toFixed(2)}`, 14, a + 12), (t.cashSales !== void 0 || t.cardSales !== void 0) && (i.text(`Efectivo: ${t.cashSales ?? 0} ventas  |  $ ${(t.cashRevenue ?? 0).toFixed(2)}`, 14, a + 18), i.text(`Tarjeta: ${t.cardSales ?? 0} ventas  |  $ ${(t.cardRevenue ?? 0).toFixed(2)}`, 14, a + 24)), new Uint8Array(i.output("arraybuffer"));
+	async cleanupOldBackups(keep = 10) {
+		try {
+			const backupDir = this.getBackupDir();
+			const backups = await this.listBackups();
+			if (backups.length > keep) {
+				const toDelete = backups.slice(keep);
+				for (const backup of toDelete) {
+					const fullPath = path.join(backupDir, backup.path);
+					fs.unlinkSync(fullPath);
+				}
+				logger.info(`Cleaned up ${toDelete.length} old backups`);
+			}
+		} catch (error) {
+			logger.error({ err: error }, "Error cleaning up backups");
+		}
 	}
-	async generateInventoryReport(e, t, n = "Reporte de Inventario") {
-		let r = new m({
+};
+//#endregion
+//#region src/infrastructure/reports/PDFReportGenerator.ts
+var PDFReportGenerator = class {
+	async generateSalesReport(rows, totals, title = "Reporte de Ventas", showTable = true) {
+		const doc = new jsPDF({
 			unit: "mm",
 			format: "a4"
 		});
-		r.setFontSize(16), r.text(n, 14, 20), r.setFontSize(10), r.text(`Generado: ${(/* @__PURE__ */ new Date()).toLocaleDateString("es-PE")}`, 14, 28), h(r, {
+		doc.setFontSize(16);
+		doc.text(title, 14, 20);
+		doc.setFontSize(10);
+		doc.text(`Generado: ${(/* @__PURE__ */ new Date()).toLocaleDateString("es-PE")}`, 14, 28);
+		let finalY = 34;
+		if (showTable && rows.length > 0) {
+			autoTable(doc, {
+				head: [[
+					"Fecha",
+					"# Factura",
+					"Cliente",
+					"Items",
+					"Subtotal",
+					"Impuesto",
+					"Total",
+					"Pago"
+				]],
+				body: rows.map((r) => [
+					r.date,
+					String(r.invoiceNumber),
+					r.client,
+					String(r.itemsCount),
+					`$ ${r.subtotal.toFixed(2)}`,
+					`$ ${r.tax.toFixed(2)}`,
+					`$ ${r.total.toFixed(2)}`,
+					r.paymentMethod
+				]),
+				startY: 34,
+				styles: { fontSize: 7 },
+				headStyles: { fillColor: [
+					41,
+					128,
+					185
+				] },
+				tableWidth: "auto"
+			});
+			finalY = doc.lastAutoTable.finalY + 10;
+		}
+		doc.setFontSize(10);
+		doc.text(`Total Ventas: ${totals.totalSales}`, 14, finalY);
+		doc.text(`Ingreso Total: $ ${totals.totalRevenue.toFixed(2)}`, 14, finalY + 6);
+		doc.text(`Promedio: $ ${totals.averageSale.toFixed(2)}`, 14, finalY + 12);
+		if (totals.cashSales !== void 0 || totals.cardSales !== void 0) {
+			doc.text(`Efectivo: ${totals.cashSales ?? 0} ventas  |  $ ${(totals.cashRevenue ?? 0).toFixed(2)}`, 14, finalY + 18);
+			doc.text(`Tarjeta: ${totals.cardSales ?? 0} ventas  |  $ ${(totals.cardRevenue ?? 0).toFixed(2)}`, 14, finalY + 24);
+		}
+		return new Uint8Array(doc.output("arraybuffer"));
+	}
+	async generateInventoryReport(rows, metrics, title = "Reporte de Inventario") {
+		const doc = new jsPDF({
+			unit: "mm",
+			format: "a4"
+		});
+		doc.setFontSize(16);
+		doc.text(title, 14, 20);
+		doc.setFontSize(10);
+		doc.text(`Generado: ${(/* @__PURE__ */ new Date()).toLocaleDateString("es-PE")}`, 14, 28);
+		autoTable(doc, {
 			head: [[
 				"SKU",
 				"Producto",
@@ -1441,15 +1685,15 @@ var ve = d(u), ye = class {
 				"P. Venta",
 				"Estado"
 			]],
-			body: e.map((e) => [
-				e.sku,
-				e.name,
-				e.category,
-				String(e.stock),
-				e.minStock === null ? "-" : String(e.minStock),
-				`$ ${e.purchasePrice.toFixed(2)}`,
-				`$ ${e.salePrice.toFixed(2)}`,
-				e.status === "ok" ? "OK" : e.status === "low" ? "Stock Bajo" : "Sin Stock"
+			body: rows.map((r) => [
+				r.sku,
+				r.name,
+				r.category,
+				String(r.stock),
+				r.minStock !== null ? String(r.minStock) : "-",
+				`$ ${r.purchasePrice.toFixed(2)}`,
+				`$ ${r.salePrice.toFixed(2)}`,
+				r.status === "ok" ? "OK" : r.status === "low" ? "Stock Bajo" : "Sin Stock"
 			]),
 			startY: 34,
 			styles: { fontSize: 7 },
@@ -1459,18 +1703,20 @@ var ve = d(u), ye = class {
 				96
 			] },
 			tableWidth: "auto",
-			didParseCell: (e) => {
-				if (e.section === "body" && e.column.index === 7) {
-					let t = e.cell.raw;
-					t === "Sin Stock" ? e.cell.styles.textColor = [
+			didParseCell: (data) => {
+				if (data.section === "body" && data.column.index === 7) {
+					const status = data.cell.raw;
+					if (status === "Sin Stock") data.cell.styles.textColor = [
 						255,
 						0,
 						0
-					] : t === "Stock Bajo" ? e.cell.styles.textColor = [
+					];
+					else if (status === "Stock Bajo") data.cell.styles.textColor = [
 						255,
 						165,
 						0
-					] : e.cell.styles.textColor = [
+					];
+					else data.cell.styles.textColor = [
 						0,
 						128,
 						0
@@ -1478,41 +1724,154 @@ var ve = d(u), ye = class {
 				}
 			}
 		});
-		let i = r.lastAutoTable.finalY + 10 || 50;
-		return r.setFontSize(10), r.text(`Total Productos: ${t.totalProducts}`, 14, i), r.text(`Con Stock: ${t.productsWithStock}  |  Sin Stock: ${t.productsWithoutStock}  |  Stock Bajo: ${t.lowStockProducts}`, 14, i + 6), r.text(`Valor Compra: $ ${t.totalPurchaseValue.toFixed(2)}  |  Valor Venta: $ ${t.totalSaleValue.toFixed(2)}`, 14, i + 12), r.text(`Ganancia Potencial: $ ${t.potentialProfit.toFixed(2)}`, 14, i + 18), new Uint8Array(r.output("arraybuffer"));
+		const finalY = doc.lastAutoTable.finalY + 10 || 50;
+		doc.setFontSize(10);
+		doc.text(`Total Productos: ${metrics.totalProducts}`, 14, finalY);
+		doc.text(`Con Stock: ${metrics.productsWithStock}  |  Sin Stock: ${metrics.productsWithoutStock}  |  Stock Bajo: ${metrics.lowStockProducts}`, 14, finalY + 6);
+		doc.text(`Valor Compra: $ ${metrics.totalPurchaseValue.toFixed(2)}  |  Valor Venta: $ ${metrics.totalSaleValue.toFixed(2)}`, 14, finalY + 12);
+		doc.text(`Ganancia Potencial: $ ${metrics.potentialProfit.toFixed(2)}`, 14, finalY + 18);
+		return new Uint8Array(doc.output("arraybuffer"));
 	}
-	async generateSaleReceipt(e) {
-		let t = new m({
+	async generateSaleReceipt(data) {
+		const doc = new jsPDF({
 			unit: "mm",
-			format: [80, 120 + e.items.length * 6]
-		}), n = 10;
-		if (e.logoBase64) try {
-			t.addImage(e.logoBase64, "PNG", 30, n, 20, 20), n += 22;
+			format: [80, 120 + data.items.length * 6]
+		});
+		let y = 10;
+		if (data.logoBase64) try {
+			doc.addImage(data.logoBase64, "PNG", 30, y, 20, 20);
+			y += 22;
 		} catch {}
-		return t.setFontSize(10), t.text(e.businessName, 40, n, { align: "center" }), n += 5, t.setFontSize(7), e.businessAddress && (t.text(e.businessAddress, 40, n, { align: "center" }), n += 4), e.businessPhone && (t.text(`Tel: ${e.businessPhone}`, 40, n, { align: "center" }), n += 4), e.businessTaxId && (t.text(`RUC: ${e.businessTaxId}`, 40, n, { align: "center" }), n += 4), n += 3, t.setFontSize(8), t.text("=".repeat(32), 5, n), n += 4, t.text(`Ticket: #${e.saleId}`, 5, n), n += 4, t.text(`Fecha: ${e.createdAt.toLocaleString("es-PE")}`, 5, n), n += 4, t.text(`Cliente: ${e.clientName}`, 5, n), n += 4, e.clientDni && (t.text(`DNI: ${e.clientDni}`, 5, n), n += 4), e.clientTaxId && (t.text(`RUC: ${e.clientTaxId}`, 5, n), n += 4), t.text(`Pago: ${e.paymentMethod === "CASH" ? "EFECTIVO" : "TARJETA"}`, 5, n), n += 4, t.text("-".repeat(32), 5, n), n += 5, e.items.forEach((e) => {
-			t.text(`${e.quantity} x ${e.productName}`, 5, n), t.text(`$ ${e.totalPrice.toFixed(2)}`, 75, n, { align: "right" }), n += 5, e.discountName && e.discountAmount && e.discountAmount > 0 && (t.setFontSize(6), t.text(`  Desc. ${e.discountName}: -$${e.discountAmount.toFixed(2)}`, 8, n), n += 4, t.setFontSize(8));
-		}), t.text("-".repeat(32), 5, n + 2), n += 6, t.setFontSize(8), t.text("Subtotal:", 5, n), t.text(`$ ${e.subtotal.toFixed(2)}`, 75, n, { align: "right" }), n += 5, e.discountTotal && e.discountTotal > 0 && (t.text("Descuento:", 5, n), t.text(`-$${e.discountTotal.toFixed(2)}`, 75, n, { align: "right" }), n += 5), e.taxAmount > 0 && (t.text(`${e.taxType.toUpperCase()} (${(e.taxRate * 100).toFixed(1)}%):`, 5, n), t.text(`$ ${e.taxAmount.toFixed(2)}`, 75, n, { align: "right" }), n += 5), t.setFontSize(10), t.text("TOTAL:", 5, n + 2), t.text(`$ ${e.total.toFixed(2)}`, 75, n + 2, { align: "right" }), n += 8, t.setFontSize(7), t.text(e.ticketFooter || "Gracias por su compra", 40, n, { align: "center" }), new Uint8Array(t.output("arraybuffer"));
+		doc.setFontSize(10);
+		doc.text(data.businessName, 40, y, { align: "center" });
+		y += 5;
+		doc.setFontSize(7);
+		if (data.businessAddress) {
+			doc.text(data.businessAddress, 40, y, { align: "center" });
+			y += 4;
+		}
+		if (data.businessPhone) {
+			doc.text(`Tel: ${data.businessPhone}`, 40, y, { align: "center" });
+			y += 4;
+		}
+		if (data.businessTaxId) {
+			doc.text(`RUC: ${data.businessTaxId}`, 40, y, { align: "center" });
+			y += 4;
+		}
+		y += 3;
+		doc.setFontSize(8);
+		doc.text("=".repeat(32), 5, y);
+		y += 4;
+		doc.text(`Ticket: #${data.saleId}`, 5, y);
+		y += 4;
+		doc.text(`Fecha: ${data.createdAt.toLocaleString("es-PE")}`, 5, y);
+		y += 4;
+		doc.text(`Cliente: ${data.clientName}`, 5, y);
+		y += 4;
+		if (data.clientDni) {
+			doc.text(`DNI: ${data.clientDni}`, 5, y);
+			y += 4;
+		}
+		if (data.clientTaxId) {
+			doc.text(`RUC: ${data.clientTaxId}`, 5, y);
+			y += 4;
+		}
+		doc.text(`Pago: ${data.paymentMethod === "CASH" ? "EFECTIVO" : "TARJETA"}`, 5, y);
+		y += 4;
+		doc.text("-".repeat(32), 5, y);
+		y += 5;
+		data.items.forEach((item) => {
+			doc.text(`${item.quantity} x ${item.productName}`, 5, y);
+			doc.text(`$ ${item.totalPrice.toFixed(2)}`, 75, y, { align: "right" });
+			y += 5;
+			if (item.discountName && item.discountAmount && item.discountAmount > 0) {
+				doc.setFontSize(6);
+				doc.text(`  Desc. ${item.discountName}: -$${item.discountAmount.toFixed(2)}`, 8, y);
+				y += 4;
+				doc.setFontSize(8);
+			}
+		});
+		doc.text("-".repeat(32), 5, y + 2);
+		y += 6;
+		doc.setFontSize(8);
+		doc.text(`Subtotal:`, 5, y);
+		doc.text(`$ ${data.subtotal.toFixed(2)}`, 75, y, { align: "right" });
+		y += 5;
+		if (data.discountTotal && data.discountTotal > 0) {
+			doc.text(`Descuento:`, 5, y);
+			doc.text(`-$${data.discountTotal.toFixed(2)}`, 75, y, { align: "right" });
+			y += 5;
+		}
+		if (data.taxAmount > 0) {
+			doc.text(`${data.taxType.toUpperCase()} (${(data.taxRate * 100).toFixed(1)}%):`, 5, y);
+			doc.text(`$ ${data.taxAmount.toFixed(2)}`, 75, y, { align: "right" });
+			y += 5;
+		}
+		doc.setFontSize(10);
+		doc.text(`TOTAL:`, 5, y + 2);
+		doc.text(`$ ${data.total.toFixed(2)}`, 75, y + 2, { align: "right" });
+		y += 8;
+		doc.setFontSize(7);
+		doc.text(data.ticketFooter || "Gracias por su compra", 40, y, { align: "center" });
+		return new Uint8Array(doc.output("arraybuffer"));
 	}
-	async generateCashCloseReport(e) {
-		let t = new m({
+	async generateCashCloseReport(data) {
+		const doc = new jsPDF({
 			unit: "mm",
 			format: "a4"
-		}), n = 20;
-		t.setFontSize(16), t.text("Reporte de Cierre de Caja", 14, n), n += 8, t.setFontSize(10), t.text(e.businessName, 14, n), n += 6, t.setFontSize(8), t.text(`Generado: ${(/* @__PURE__ */ new Date()).toLocaleDateString("es-PE")}`, 14, n), n += 6, t.text(`Caja #${e.registerId}`, 14, n), n += 5, t.text(`Apertura: ${e.openDate.toLocaleString("es-PE")}`, 14, n), n += 5, t.text(`Cierre: ${e.closeDate.toLocaleString("es-PE")}`, 14, n), n += 8, t.setFontSize(9), [
-			["Ventas Realizadas", String(e.salesCount)],
-			["Ventas Efectivo", `$ ${e.cashSales.toFixed(2)}`],
-			["Ventas Tarjeta", `$ ${e.cardSales.toFixed(2)}`]
-		].forEach(([e, r]) => {
-			t.text(e, 14, n), t.text(r, 100, n), n += 7;
-		}), n += 4, t.setDrawColor(100, 100, 100), t.line(14, n, 190, n), n += 6, t.setFontSize(10), t.text("RESUMEN", 14, n), n += 6, [
-			["Fondo Inicial", `$ ${e.openingAmount.toFixed(2)}`],
-			["Total Ventas", `$ ${e.totalSales.toFixed(2)}`],
-			["Esperado (Fondo + Ventas)", `$ ${e.expectedCash.toFixed(2)}`],
-			["Real (Declarado)", `$ ${e.realCash.toFixed(2)}`]
-		].forEach(([e, r]) => {
-			t.text(e, 14, n), t.text(r, 100, n), n += 7;
-		}), n += 3, t.setDrawColor(100, 100, 100), t.line(14, n, 190, n), n += 6;
-		let r = e.difference >= 0 ? "SOBRANTE" : "FALTANTE", i = e.difference === 0 ? [
+		});
+		let y = 20;
+		doc.setFontSize(16);
+		doc.text("Reporte de Cierre de Caja", 14, y);
+		y += 8;
+		doc.setFontSize(10);
+		doc.text(data.businessName, 14, y);
+		y += 6;
+		doc.setFontSize(8);
+		doc.text(`Generado: ${(/* @__PURE__ */ new Date()).toLocaleDateString("es-PE")}`, 14, y);
+		y += 6;
+		doc.text(`Caja #${data.registerId}`, 14, y);
+		y += 5;
+		doc.text(`Apertura: ${data.openDate.toLocaleString("es-PE")}`, 14, y);
+		y += 5;
+		doc.text(`Cierre: ${data.closeDate.toLocaleString("es-PE")}`, 14, y);
+		y += 8;
+		const leftX = 14;
+		const rightX = 100;
+		const rowH = 7;
+		doc.setFontSize(9);
+		[
+			["Ventas Realizadas", String(data.salesCount)],
+			["Ventas Efectivo", `$ ${data.cashSales.toFixed(2)}`],
+			["Ventas Tarjeta", `$ ${data.cardSales.toFixed(2)}`]
+		].forEach(([label, value]) => {
+			doc.text(label, leftX, y);
+			doc.text(value, rightX, y);
+			y += rowH;
+		});
+		y += 4;
+		doc.setDrawColor(100, 100, 100);
+		doc.line(leftX, y, 190, y);
+		y += 6;
+		doc.setFontSize(10);
+		doc.text("RESUMEN", leftX, y);
+		y += 6;
+		[
+			["Fondo Inicial", `$ ${data.openingAmount.toFixed(2)}`],
+			["Total Ventas", `$ ${data.totalSales.toFixed(2)}`],
+			["Esperado (Fondo + Ventas)", `$ ${data.expectedCash.toFixed(2)}`],
+			["Real (Declarado)", `$ ${data.realCash.toFixed(2)}`]
+		].forEach(([label, value]) => {
+			doc.text(label, leftX, y);
+			doc.text(value, rightX, y);
+			y += rowH;
+		});
+		y += 3;
+		doc.setDrawColor(100, 100, 100);
+		doc.line(leftX, y, 190, y);
+		y += 6;
+		const diffLabel = data.difference >= 0 ? "SOBRANTE" : "FALTANTE";
+		const diffColor = data.difference === 0 ? [
 			0,
 			128,
 			0
@@ -1521,22 +1880,40 @@ var ve = d(u), ye = class {
 			0,
 			0
 		];
-		return t.setTextColor(...i), t.setFontSize(12), t.text(`${r}: $ ${Math.abs(e.difference).toFixed(2)}`, 14, n), t.setTextColor(0, 0, 0), n += 8, t.setFontSize(8), t.setTextColor(100, 100, 100), t.text(`Estado: ${e.status === "PERFECT" ? "Cuadra Perfectamente" : e.status === "SURPLUS" ? "Sobrante detectado" : "Faltante detectado"}`, 14, n), n += 6, t.text("Firma del responsable: _______________________________", 14, n), new Uint8Array(t.output("arraybuffer"));
+		doc.setTextColor(...diffColor);
+		doc.setFontSize(12);
+		doc.text(`${diffLabel}: $ ${Math.abs(data.difference).toFixed(2)}`, leftX, y);
+		doc.setTextColor(0, 0, 0);
+		y += 8;
+		doc.setFontSize(8);
+		doc.setTextColor(100, 100, 100);
+		doc.text(`Estado: ${data.status === "PERFECT" ? "Cuadra Perfectamente" : data.status === "SURPLUS" ? "Sobrante detectado" : "Faltante detectado"}`, leftX, y);
+		y += 6;
+		doc.text(`Firma del responsable: _______________________________`, leftX, y);
+		return new Uint8Array(doc.output("arraybuffer"));
 	}
-}, xe = class {
-	async generateSalesReport(e, t, n = "Reporte de Ventas", r = !0) {
-		let i = new g.Workbook();
-		i.creator = "POS Venta SIS", i.created = /* @__PURE__ */ new Date();
-		let a = i.addWorksheet("Ventas");
-		a.mergeCells("A1:H1");
-		let o = a.getCell("A1");
-		o.value = n, o.font = {
+};
+//#endregion
+//#region src/infrastructure/reports/ExcelReportGenerator.ts
+var ExcelReportGenerator = class {
+	async generateSalesReport(rows, totals, title = "Reporte de Ventas", _showTable = true) {
+		const workbook = new ExcelJS.Workbook();
+		workbook.creator = "POS Venta SIS";
+		workbook.created = /* @__PURE__ */ new Date();
+		const sheet = workbook.addWorksheet("Ventas");
+		sheet.mergeCells("A1:H1");
+		const titleCell = sheet.getCell("A1");
+		titleCell.value = title;
+		titleCell.font = {
 			size: 16,
-			bold: !0
-		}, a.getCell("A2").value = `Generado: ${(/* @__PURE__ */ new Date()).toLocaleDateString("es-PE")}`, a.getCell("A2").font = {
+			bold: true
+		};
+		sheet.getCell("A2").value = `Generado: ${(/* @__PURE__ */ new Date()).toLocaleDateString("es-PE")}`;
+		sheet.getCell("A2").font = {
 			size: 10,
-			italic: !0
-		}, a.columns = [
+			italic: true
+		};
+		sheet.columns = [
 			{
 				header: "Fecha",
 				key: "date",
@@ -1578,68 +1955,83 @@ var ve = d(u), ye = class {
 				width: 16
 			}
 		];
-		let s = a.getRow(4);
-		s.font = {
-			bold: !0,
+		const headerRow = sheet.getRow(4);
+		headerRow.font = {
+			bold: true,
 			color: { argb: "FFFFFFFF" }
-		}, s.fill = {
+		};
+		headerRow.fill = {
 			type: "pattern",
 			pattern: "solid",
 			fgColor: { argb: "FF2980B9" }
-		}, s.alignment = { horizontal: "center" }, e.forEach((e) => {
-			a.addRow({
-				date: e.date,
-				invoiceNumber: e.invoiceNumber,
-				client: e.client,
-				itemsCount: e.itemsCount,
-				subtotal: e.subtotal,
-				tax: e.tax,
-				total: e.total,
-				paymentMethod: e.paymentMethod
+		};
+		headerRow.alignment = { horizontal: "center" };
+		rows.forEach((r) => {
+			sheet.addRow({
+				date: r.date,
+				invoiceNumber: r.invoiceNumber,
+				client: r.client,
+				itemsCount: r.itemsCount,
+				subtotal: r.subtotal,
+				tax: r.tax,
+				total: r.total,
+				paymentMethod: r.paymentMethod
 			});
 		});
-		let c = 5 + e.length - 1;
-		a.addRow({});
-		let l = a.addRow({
+		const dataStartRow = 5;
+		const dataEndRow = dataStartRow + rows.length - 1;
+		sheet.addRow({});
+		const summaryRow = sheet.addRow({
 			date: "TOTALES",
-			itemsCount: t.totalSales,
-			subtotal: { formula: `SUM(E5:E${c})` },
-			tax: { formula: `SUM(F5:F${c})` },
-			total: { formula: `SUM(G5:G${c})` }
+			itemsCount: totals.totalSales,
+			subtotal: { formula: `SUM(E${dataStartRow}:E${dataEndRow})` },
+			tax: { formula: `SUM(F${dataStartRow}:F${dataEndRow})` },
+			total: { formula: `SUM(G${dataStartRow}:G${dataEndRow})` }
 		});
-		l.font = { bold: !0 }, l.getCell(1).font = {
-			bold: !0,
+		summaryRow.font = { bold: true };
+		summaryRow.getCell(1).font = {
+			bold: true,
 			size: 11
 		};
-		let u = a.addRow({
+		const avgRow = sheet.addRow({
 			date: "Promedio",
-			total: t.averageSale
+			total: totals.averageSale
 		});
-		u.font = { italic: !0 }, (t.cashSales !== void 0 || t.cardSales !== void 0) && (a.addRow({}), a.addRow({
-			date: "Efectivo",
-			itemsCount: t.cashSales ?? 0,
-			total: t.cashRevenue ?? 0
-		}), a.addRow({
-			date: "Tarjeta",
-			itemsCount: t.cardSales ?? 0,
-			total: t.cardRevenue ?? 0
-		}));
-		let d = await i.xlsx.writeBuffer();
-		return new Uint8Array(d);
+		avgRow.font = { italic: true };
+		if (totals.cashSales !== void 0 || totals.cardSales !== void 0) {
+			sheet.addRow({});
+			sheet.addRow({
+				date: "Efectivo",
+				itemsCount: totals.cashSales ?? 0,
+				total: totals.cashRevenue ?? 0
+			});
+			sheet.addRow({
+				date: "Tarjeta",
+				itemsCount: totals.cardSales ?? 0,
+				total: totals.cardRevenue ?? 0
+			});
+		}
+		const buffer = await workbook.xlsx.writeBuffer();
+		return new Uint8Array(buffer);
 	}
-	async generateInventoryReport(e, t, n = "Reporte de Inventario") {
-		let r = new g.Workbook();
-		r.creator = "POS Venta SIS", r.created = /* @__PURE__ */ new Date();
-		let i = r.addWorksheet("Inventario");
-		i.mergeCells("A1:H1");
-		let a = i.getCell("A1");
-		a.value = n, a.font = {
+	async generateInventoryReport(rows, metrics, title = "Reporte de Inventario") {
+		const workbook = new ExcelJS.Workbook();
+		workbook.creator = "POS Venta SIS";
+		workbook.created = /* @__PURE__ */ new Date();
+		const sheet = workbook.addWorksheet("Inventario");
+		sheet.mergeCells("A1:H1");
+		const titleCell = sheet.getCell("A1");
+		titleCell.value = title;
+		titleCell.font = {
 			size: 16,
-			bold: !0
-		}, i.getCell("A2").value = `Generado: ${(/* @__PURE__ */ new Date()).toLocaleDateString("es-PE")}`, i.getCell("A2").font = {
+			bold: true
+		};
+		sheet.getCell("A2").value = `Generado: ${(/* @__PURE__ */ new Date()).toLocaleDateString("es-PE")}`;
+		sheet.getCell("A2").font = {
 			size: 10,
-			italic: !0
-		}, i.columns = [
+			italic: true
+		};
+		sheet.columns = [
 			{
 				header: "SKU",
 				key: "sku",
@@ -1681,65 +2073,81 @@ var ve = d(u), ye = class {
 				width: 14
 			}
 		];
-		let o = i.getRow(4);
-		o.font = {
-			bold: !0,
+		const headerRow = sheet.getRow(4);
+		headerRow.font = {
+			bold: true,
 			color: { argb: "FFFFFFFF" }
-		}, o.fill = {
+		};
+		headerRow.fill = {
 			type: "pattern",
 			pattern: "solid",
 			fgColor: { argb: "FF27AE60" }
-		}, o.alignment = { horizontal: "center" }, e.forEach((e) => {
-			let t = i.addRow({
-				sku: e.sku,
-				name: e.name,
-				category: e.category,
-				stock: e.stock,
-				minStock: e.minStock ?? "-",
-				purchasePrice: e.purchasePrice,
-				salePrice: e.salePrice,
-				status: e.status === "ok" ? "OK" : e.status === "low" ? "Stock Bajo" : "Sin Stock"
+		};
+		headerRow.alignment = { horizontal: "center" };
+		rows.forEach((r) => {
+			const statusCell = sheet.addRow({
+				sku: r.sku,
+				name: r.name,
+				category: r.category,
+				stock: r.stock,
+				minStock: r.minStock ?? "-",
+				purchasePrice: r.purchasePrice,
+				salePrice: r.salePrice,
+				status: r.status === "ok" ? "OK" : r.status === "low" ? "Stock Bajo" : "Sin Stock"
 			}).getCell(8);
-			e.status === "out" ? t.font = {
+			if (r.status === "out") statusCell.font = {
 				color: { argb: "FFFF0000" },
-				bold: !0
-			} : e.status === "low" ? t.font = {
+				bold: true
+			};
+			else if (r.status === "low") statusCell.font = {
 				color: { argb: "FFFFA500" },
-				bold: !0
-			} : t.font = { color: { argb: "FF008000" } };
-		}), i.addRow({});
-		let s = i.addRow({
+				bold: true
+			};
+			else statusCell.font = { color: { argb: "FF008000" } };
+		});
+		sheet.addRow({});
+		const summaryRow = sheet.addRow({
 			sku: "RESUMEN",
-			stock: t.totalProducts,
-			purchasePrice: t.totalPurchaseValue,
-			salePrice: t.totalSaleValue
+			stock: metrics.totalProducts,
+			purchasePrice: metrics.totalPurchaseValue,
+			salePrice: metrics.totalSaleValue
 		});
-		s.font = { bold: !0 }, i.addRow({
+		summaryRow.font = { bold: true };
+		sheet.addRow({
 			sku: "Con Stock",
-			stock: t.productsWithStock
-		}), i.addRow({
-			sku: "Sin Stock",
-			stock: t.productsWithoutStock
-		}), i.addRow({
-			sku: "Stock Bajo",
-			stock: t.lowStockProducts
+			stock: metrics.productsWithStock
 		});
-		let c = await r.xlsx.writeBuffer();
-		return new Uint8Array(c);
+		sheet.addRow({
+			sku: "Sin Stock",
+			stock: metrics.productsWithoutStock
+		});
+		sheet.addRow({
+			sku: "Stock Bajo",
+			stock: metrics.lowStockProducts
+		});
+		const buffer = await workbook.xlsx.writeBuffer();
+		return new Uint8Array(buffer);
 	}
-	async generateSaleReceipt(e) {
-		let t = new g.Workbook();
-		t.creator = "POS Venta SIS", t.created = /* @__PURE__ */ new Date();
-		let n = t.addWorksheet("Comprobante");
-		n.mergeCells("A1:D1");
-		let r = n.getCell("A1");
-		r.value = `${e.businessName} - Ticket #${e.saleId}`, r.font = {
+	async generateSaleReceipt(data) {
+		const workbook = new ExcelJS.Workbook();
+		workbook.creator = "POS Venta SIS";
+		workbook.created = /* @__PURE__ */ new Date();
+		const sheet = workbook.addWorksheet("Comprobante");
+		sheet.mergeCells("A1:D1");
+		const titleCell = sheet.getCell("A1");
+		titleCell.value = `${data.businessName} - Ticket #${data.saleId}`;
+		titleCell.font = {
 			size: 14,
-			bold: !0
-		}, n.getCell("A2").value = `Fecha: ${e.createdAt.toLocaleString("es-PE")}`, n.getCell("A2").font = {
+			bold: true
+		};
+		sheet.getCell("A2").value = `Fecha: ${data.createdAt.toLocaleString("es-PE")}`;
+		sheet.getCell("A2").font = {
 			size: 10,
-			italic: !0
-		}, n.getCell("A3").value = `Cliente: ${e.clientName}`, n.getCell("A4").value = `Pago: ${e.paymentMethod === "CASH" ? "EFECTIVO" : "TARJETA"}`, n.columns = [
+			italic: true
+		};
+		sheet.getCell("A3").value = `Cliente: ${data.clientName}`;
+		sheet.getCell("A4").value = `Pago: ${data.paymentMethod === "CASH" ? "EFECTIVO" : "TARJETA"}`;
+		sheet.columns = [
 			{
 				header: "Cant.",
 				key: "quantity",
@@ -1761,45 +2169,64 @@ var ve = d(u), ye = class {
 				width: 14
 			}
 		];
-		let i = n.getRow(6);
-		i.font = {
-			bold: !0,
+		const headerRow = sheet.getRow(6);
+		headerRow.font = {
+			bold: true,
 			color: { argb: "FFFFFFFF" }
-		}, i.fill = {
+		};
+		headerRow.fill = {
 			type: "pattern",
 			pattern: "solid",
 			fgColor: { argb: "FF2980B9" }
-		}, e.items.forEach((e) => {
-			n.addRow({
-				quantity: e.quantity,
-				productName: e.productName,
-				unitPrice: e.unitPrice,
-				totalPrice: e.totalPrice
+		};
+		data.items.forEach((item) => {
+			sheet.addRow({
+				quantity: item.quantity,
+				productName: item.productName,
+				unitPrice: item.unitPrice,
+				totalPrice: item.totalPrice
 			});
 		});
-		let a = 6 + e.items.length + 1;
-		n.addRow({}), n.getCell(`A${a + 1}`).value = "Subtotal:", n.getCell(`D${a + 1}`).value = e.subtotal, n.getCell(`D${a + 1}`).numFmt = "#,##0.00", e.taxAmount > 0 && (n.getCell(`A${a + 2}`).value = `${e.taxType.toUpperCase()} (${(e.taxRate * 100).toFixed(1)}%):`, n.getCell(`D${a + 2}`).value = e.taxAmount, n.getCell(`D${a + 2}`).numFmt = "#,##0.00");
-		let o = e.taxAmount > 0 ? a + 3 : a + 2;
-		n.getCell(`A${o}`).value = "TOTAL:", n.getCell(`A${o}`).font = {
-			bold: !0,
+		const summaryRow = 6 + data.items.length + 1;
+		sheet.addRow({});
+		sheet.getCell(`A${summaryRow + 1}`).value = "Subtotal:";
+		sheet.getCell(`D${summaryRow + 1}`).value = data.subtotal;
+		sheet.getCell(`D${summaryRow + 1}`).numFmt = "#,##0.00";
+		if (data.taxAmount > 0) {
+			sheet.getCell(`A${summaryRow + 2}`).value = `${data.taxType.toUpperCase()} (${(data.taxRate * 100).toFixed(1)}%):`;
+			sheet.getCell(`D${summaryRow + 2}`).value = data.taxAmount;
+			sheet.getCell(`D${summaryRow + 2}`).numFmt = "#,##0.00";
+		}
+		const totalRow = data.taxAmount > 0 ? summaryRow + 3 : summaryRow + 2;
+		sheet.getCell(`A${totalRow}`).value = "TOTAL:";
+		sheet.getCell(`A${totalRow}`).font = {
+			bold: true,
 			size: 12
-		}, n.getCell(`D${o}`).value = e.total, n.getCell(`D${o}`).font = {
-			bold: !0,
+		};
+		sheet.getCell(`D${totalRow}`).value = data.total;
+		sheet.getCell(`D${totalRow}`).font = {
+			bold: true,
 			size: 12
-		}, n.getCell(`D${o}`).numFmt = "#,##0.00";
-		let s = await t.xlsx.writeBuffer();
-		return new Uint8Array(s);
+		};
+		sheet.getCell(`D${totalRow}`).numFmt = "#,##0.00";
+		const buffer = await workbook.xlsx.writeBuffer();
+		return new Uint8Array(buffer);
 	}
-	async generateCashCloseReport(e) {
-		let t = new g.Workbook();
-		t.creator = "POS Venta SIS", t.created = /* @__PURE__ */ new Date();
-		let n = t.addWorksheet("Cierre de Caja");
-		n.mergeCells("A1:B1");
-		let r = n.getCell("A1");
-		r.value = `${e.businessName} - Cierre de Caja #${e.registerId}`, r.font = {
+	async generateCashCloseReport(data) {
+		const workbook = new ExcelJS.Workbook();
+		workbook.creator = "POS Venta SIS";
+		workbook.created = /* @__PURE__ */ new Date();
+		const sheet = workbook.addWorksheet("Cierre de Caja");
+		sheet.mergeCells("A1:B1");
+		const titleCell = sheet.getCell("A1");
+		titleCell.value = `${data.businessName} - Cierre de Caja #${data.registerId}`;
+		titleCell.font = {
 			size: 14,
-			bold: !0
-		}, n.getCell("A3").value = `Apertura: ${e.openDate.toLocaleString("es-PE")}`, n.getCell("A4").value = `Cierre: ${e.closeDate.toLocaleString("es-PE")}`, n.columns = [{
+			bold: true
+		};
+		sheet.getCell("A3").value = `Apertura: ${data.openDate.toLocaleString("es-PE")}`;
+		sheet.getCell("A4").value = `Cierre: ${data.closeDate.toLocaleString("es-PE")}`;
+		sheet.columns = [{
 			header: "Concepto",
 			key: "concept",
 			width: 30
@@ -1807,26 +2234,28 @@ var ve = d(u), ye = class {
 			header: "Valor",
 			key: "value",
 			width: 20
-		}], n.addRow({});
-		let i = n.addRow({
+		}];
+		sheet.addRow({});
+		const summaryHeaderRow = sheet.addRow({
 			concept: "RESUMEN",
 			value: ""
 		});
-		i.font = {
-			bold: !0,
+		summaryHeaderRow.font = {
+			bold: true,
 			size: 11
-		}, [
+		};
+		[
 			{
 				concept: "Ventas Realizadas",
-				value: e.salesCount
+				value: data.salesCount
 			},
 			{
 				concept: "Ventas Efectivo",
-				value: e.cashSales
+				value: data.cashSales
 			},
 			{
 				concept: "Ventas Tarjeta",
-				value: e.cardSales
+				value: data.cardSales
 			},
 			{
 				concept: "",
@@ -1834,185 +2263,436 @@ var ve = d(u), ye = class {
 			},
 			{
 				concept: "Fondo Inicial",
-				value: e.openingAmount
+				value: data.openingAmount
 			},
 			{
 				concept: "Total Ventas",
-				value: e.totalSales
+				value: data.totalSales
 			},
 			{
 				concept: "Esperado",
-				value: e.expectedCash
+				value: data.expectedCash
 			},
 			{
 				concept: "Real (Declarado)",
-				value: e.realCash
+				value: data.realCash
 			}
-		].forEach((e) => {
-			let t = n.addRow({
-				concept: e.concept,
-				value: (e.value, e.value)
+		].forEach((r) => {
+			const row = sheet.addRow({
+				concept: r.concept,
+				value: typeof r.value === "number" ? r.value : r.value
 			});
-			typeof e.value == "number" && e.concept && (t.getCell(2).numFmt = e.concept.includes("Realizadas") ? "#,##0" : "#,##0.00");
+			if (typeof r.value === "number" && r.concept) row.getCell(2).numFmt = r.concept.includes("Realizadas") ? "#,##0" : "#,##0.00";
 		});
-		let a = n.addRow({
-			concept: e.difference >= 0 ? "SOBRANTE" : "FALTANTE",
-			value: Math.abs(e.difference)
+		const diffRow = sheet.addRow({
+			concept: data.difference >= 0 ? "SOBRANTE" : "FALTANTE",
+			value: Math.abs(data.difference)
 		});
-		a.font = {
-			bold: !0,
+		diffRow.font = {
+			bold: true,
 			size: 12,
-			color: { argb: e.difference === 0 ? "FF008000" : "FFC80000" }
-		}, a.getCell(2).numFmt = "#,##0.00";
-		let o = await t.xlsx.writeBuffer();
-		return new Uint8Array(o);
+			color: { argb: data.difference === 0 ? "FF008000" : "FFC80000" }
+		};
+		diffRow.getCell(2).numFmt = "#,##0.00";
+		const buffer = await workbook.xlsx.writeBuffer();
+		return new Uint8Array(buffer);
 	}
-}, Se = class {
-	baseUrl;
-	model;
-	constructor(e = process.env.IA_URL ?? "", t = "phi3:latest") {
-		this.baseUrl = e, this.model = t;
+};
+//#endregion
+//#region src/infrastructure/ai/OllamaAiProvider.ts
+var DEFAULT_CONFIG = {
+	baseUrl: process.env.IA_URL ?? "http://localhost:11434",
+	model: "phi3:latest",
+	timeoutMs: 3e4,
+	maxRetries: 2,
+	circuitBreakerThreshold: 3,
+	circuitBreakerResetMs: 6e4
+};
+var OllamaAiProvider = class {
+	config;
+	consecutiveFailures = 0;
+	circuitOpen = false;
+	circuitOpenTime = 0;
+	constructor(config) {
+		this.config = {
+			...DEFAULT_CONFIG,
+			...config
+		};
 	}
-	async generateResponse(e, t) {
+	async generateResponse(prompt, systemContext) {
+		return this.withCircuitBreaker(async () => {
+			const body = JSON.stringify({
+				model: this.config.model,
+				prompt: `${systemContext}\n\nPregunta: ${prompt}\n\nRespuesta directa:`,
+				stream: false,
+				options: {
+					temperature: .1,
+					top_p: .9
+				}
+			});
+			return (await this.fetchWithTimeout("/api/generate", body)).response.trim();
+		}, "generateResponse");
+	}
+	async classifyIntent(prompt, examples) {
+		return this.withCircuitBreaker(async () => {
+			const body = JSON.stringify({
+				model: this.config.model,
+				prompt: `${examples}\n\nUsuario: ${prompt}\n\nJSON:`,
+				stream: false,
+				format: "json",
+				options: {
+					temperature: 0,
+					top_p: .5
+				}
+			});
+			const data = await this.fetchWithTimeout("/api/generate", body);
+			const parsed = JSON.parse(data.response.trim());
+			if (parsed && typeof parsed === "object" && parsed.intent) return parsed;
+			return null;
+		}, "classifyIntent");
+	}
+	async generateWithContext(prompt, systemPrompt, context) {
+		return this.withCircuitBreaker(async () => {
+			const fullPrompt = context ? `${systemPrompt}\n\n${context}\n\nPregunta: ${prompt}\n\nRespuesta:` : `${systemPrompt}\n\nPregunta: ${prompt}\n\nRespuesta:`;
+			const body = JSON.stringify({
+				model: this.config.model,
+				prompt: fullPrompt,
+				stream: false,
+				options: {
+					temperature: .2,
+					top_p: .9
+				}
+			});
+			return (await this.fetchWithTimeout("/api/generate", body)).response.trim();
+		}, "generateWithContext");
+	}
+	async fetchWithTimeout(path, body) {
+		const controller = new AbortController();
+		const timeoutId = setTimeout(() => controller.abort(), this.config.timeoutMs);
 		try {
-			let n = await fetch(`${this.baseUrl}/api/generate`, {
+			const res = await fetch(`${this.config.baseUrl}${path}`, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
-					model: this.model,
-					prompt: `${t}\n\nPregunta: ${e}\n\nRespuesta directa:`,
-					stream: !1,
-					options: {
-						temperature: .1,
-						top_p: .9
-					}
-				})
+				body,
+				signal: controller.signal
 			});
-			if (!n.ok) {
-				let e = await n.text();
-				throw Error(`Ollama responded with ${n.status}: ${e}`);
+			if (!res.ok) {
+				const text = await res.text();
+				throw new Error(`Ollama responded with ${res.status}: ${text}`);
 			}
-			return (await n.json()).response.trim();
-		} catch (e) {
-			return E.error({ err: e }, "[Ollama] Failed to generate response"), "⚠️ El asistente IA no está disponible. Asegúrate de que Ollama esté ejecutándose.";
+			return await res.json();
+		} finally {
+			clearTimeout(timeoutId);
 		}
 	}
-	async classifyIntent(e, t) {
+	async withCircuitBreaker(fn, operation) {
+		if (this.circuitOpen) {
+			const elapsed = Date.now() - this.circuitOpenTime;
+			if (elapsed < this.config.circuitBreakerResetMs) {
+				logger.warn({
+					operation,
+					remainingMs: this.config.circuitBreakerResetMs - elapsed
+				}, "[Ollama] Circuit open, skipping");
+				throw new OllamaCircuitBreakerError();
+			}
+			this.circuitOpen = false;
+			this.consecutiveFailures = 0;
+		}
 		try {
-			let n = await fetch(`${this.baseUrl}/api/generate`, {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
-					model: this.model,
-					prompt: `${t}\n\nUsuario: ${e}\n\nJSON:`,
-					stream: !1,
-					format: "json",
-					options: {
-						temperature: 0,
-						top_p: .5
-					}
-				})
-			});
-			if (!n.ok) {
-				let e = await n.text();
-				throw Error(`Ollama responded with ${n.status}: ${e}`);
+			const result = await fn();
+			this.consecutiveFailures = 0;
+			return result;
+		} catch (error) {
+			if (error instanceof OllamaCircuitBreakerError) throw error;
+			this.consecutiveFailures++;
+			logger.error({
+				err: error,
+				operation,
+				consecutiveFailures: this.consecutiveFailures
+			}, "[Ollama] Request failed");
+			if (this.consecutiveFailures >= this.config.circuitBreakerThreshold) {
+				this.circuitOpen = true;
+				this.circuitOpenTime = Date.now();
+				logger.warn({ threshold: this.config.circuitBreakerThreshold }, "[Ollama] Circuit opened");
 			}
-			let r = await n.json(), i = JSON.parse(r.response.trim());
-			return i && typeof i == "object" && i.intent ? i : null;
-		} catch (e) {
-			return E.error({ err: e }, "[Ollama] Failed to classify intent"), null;
+			if (this.consecutiveFailures <= this.config.maxRetries) {
+				logger.info({
+					retry: this.consecutiveFailures,
+					operation
+				}, "[Ollama] Retrying");
+				return this.withCircuitBreaker(fn, operation);
+			}
+			throw error;
 		}
 	}
-}, L = _.object({
-	sku: _.string().min(1, "El SKU es obligatorio."),
-	name: _.string().min(1, "El nombre es obligatorio."),
-	description: _.string().optional(),
-	category_id: _.coerce.number().int().positive().optional().nullable(),
-	supplier_id: _.coerce.number().int().positive().optional().nullable(),
-	price_purchase: _.coerce.number().min(0, "El precio de compra no puede ser negativo."),
-	price_sale: _.coerce.number().min(0, "El precio de venta no puede ser negativo."),
-	stock: _.coerce.number().int().optional(),
-	min_stock: _.coerce.number().int().min(0).optional().default(10)
-}), Ce = _.object({
-	product_id: _.coerce.number().int().positive("El ID del producto es obligatorio."),
-	quantity: _.coerce.number().int().positive("La cantidad debe ser mayor a 0."),
-	unit_price: _.coerce.number().min(0, "El precio unitario no puede ser negativo."),
-	discount_id: _.coerce.number().int().positive().optional()
-}), we = _.object({
-	cash_register_id: _.coerce.number().int().positive("El ID de la caja es obligatorio."),
-	client_id: _.coerce.number().int().optional(),
-	client_dni: _.string().optional(),
-	client_name: _.string().optional(),
-	payment_method: _.enum(["CASH", "CARD"]).default("CASH"),
-	items: _.array(Ce).min(1, "La venta debe tener al menos un producto.")
+	isAvailable() {
+		return !this.circuitOpen;
+	}
+	getStats() {
+		return {
+			baseUrl: this.config.baseUrl,
+			model: this.config.model,
+			circuitOpen: this.circuitOpen,
+			consecutiveFailures: this.consecutiveFailures,
+			timeoutMs: this.config.timeoutMs
+		};
+	}
+	resetCircuitBreaker() {
+		this.circuitOpen = false;
+		this.consecutiveFailures = 0;
+		logger.info("[Ollama] Circuit breaker reset");
+	}
+};
+var OllamaCircuitBreakerError = class extends Error {
+	constructor() {
+		super("Ollama circuit breaker is open");
+		this.name = "OllamaCircuitBreakerError";
+	}
+};
+//#endregion
+//#region src/infrastructure/ai/reviewQueue.ts
+var ReviewQueue = class {
+	items = [];
+	enqueue(draft) {
+		this.items.push(draft);
+	}
+	dequeue(draftId) {
+		const idx = this.items.findIndex((i) => i.draftId === draftId);
+		if (idx === -1) return void 0;
+		return this.items.splice(idx, 1)[0];
+	}
+	peek(draftId) {
+		return this.items.find((i) => i.draftId === draftId);
+	}
+	listPending(types) {
+		return this.items.filter((i) => i.status === "pending" && (!types || types.includes(i.type)));
+	}
+	approve(draftId, by) {
+		const item = this.items.find((i) => i.draftId === draftId);
+		if (!item) return void 0;
+		item.status = "approved";
+		item.reviewedAt = /* @__PURE__ */ new Date();
+		item.reviewedBy = by;
+		return item;
+	}
+	reject(draftId, reason, by) {
+		const item = this.items.find((i) => i.draftId === draftId);
+		if (!item) return void 0;
+		item.status = "rejected";
+		item.reviewedAt = /* @__PURE__ */ new Date();
+		item.reviewedBy = by;
+		item.reason = reason;
+		return item;
+	}
+	getPending() {
+		return this.items.filter((i) => i.status === "pending");
+	}
+	getHistory(limit) {
+		const processed = this.items.filter((i) => i.status !== "pending");
+		return limit ? processed.slice(0, limit) : processed;
+	}
+	size() {
+		return this.items.length;
+	}
+};
+//#endregion
+//#region src/infrastructure/ai/aiAuditService.ts
+var AiAuditService = class {
+	trainingLogRepo;
+	auditLogRepo;
+	constructor(trainingLogRepo, auditLogRepo) {
+		this.trainingLogRepo = trainingLogRepo;
+		this.auditLogRepo = auditLogRepo;
+	}
+	async logDecision(decision) {
+		await this.trainingLogRepo.create({
+			usuario_id: Number(decision.reviewedBy) || 1,
+			mensaje_usuario: JSON.stringify({
+				draftId: decision.draftId,
+				action: decision.action
+			}),
+			nlu_output: JSON.stringify(decision),
+			respuesta_sistema: `Draft ${decision.action.toLowerCase()}d`
+		});
+		await this.auditLogRepo.create({
+			action: `AI_DRAFT_${decision.action}`,
+			entity: "AI_DRAFT",
+			entityId: decision.draftId,
+			details: `Draft ${decision.draftId} was ${decision.action.toLowerCase()}ed${decision.reason ? `: ${decision.reason}` : ""}`,
+			userId: decision.reviewedBy || "system",
+			createdAt: /* @__PURE__ */ new Date()
+		});
+	}
+	async recordDraftConfirmed(type, _payload, userId) {
+		await this.auditLogRepo.create({
+			action: "AI_DRAFT_CONFIRMED",
+			entity: type,
+			details: `Draft confirmed by user ${userId ?? "unknown"}`,
+			userId: String(userId ?? "system"),
+			createdAt: /* @__PURE__ */ new Date()
+		});
+	}
+	async recordDraftRejected(type, userId) {
+		await this.auditLogRepo.create({
+			action: "AI_DRAFT_REJECTED",
+			entity: type,
+			details: `Draft rejected by user ${userId ?? "unknown"}`,
+			userId: String(userId ?? "system"),
+			createdAt: /* @__PURE__ */ new Date()
+		});
+	}
+};
+//#endregion
+//#region src/infrastructure/ai/validationPipeline.ts
+var ValidationPipeline = class {
+	reviewQueue;
+	auditService;
+	constructor(reviewQueue, auditService) {
+		this.reviewQueue = reviewQueue;
+		this.auditService = auditService;
+	}
+	async enqueueDraft(draft) {
+		this.reviewQueue.enqueue({
+			draftId: draft.id,
+			status: "pending",
+			type: draft.type,
+			payload: draft.payload,
+			createdAt: /* @__PURE__ */ new Date()
+		});
+	}
+	async approveDraft(draftId, by) {
+		if (!this.reviewQueue.approve(draftId, by)) return false;
+		await this.auditService.logDecision({
+			draftId,
+			action: "APPROVE",
+			reviewedBy: by,
+			confidence: .9,
+			timestamp: /* @__PURE__ */ new Date()
+		});
+		return true;
+	}
+	async rejectDraft(draftId, reason, by) {
+		if (!this.reviewQueue.reject(draftId, reason, by)) return false;
+		await this.auditService.logDecision({
+			draftId,
+			action: "REJECT",
+			reason,
+			reviewedBy: by,
+			confidence: .9,
+			timestamp: /* @__PURE__ */ new Date()
+		});
+		return true;
+	}
+	async getPendingDrafts(types) {
+		return this.reviewQueue.listPending(types);
+	}
+	getReviewQueue() {
+		return this.reviewQueue;
+	}
+	getAuditService() {
+		return this.auditService;
+	}
+};
+//#endregion
+//#region src/shared/schemas.ts
+var productSchema = z.object({
+	sku: z.string().min(1, "El SKU es obligatorio."),
+	name: z.string().min(1, "El nombre es obligatorio."),
+	description: z.string().optional(),
+	category_id: z.coerce.number().int().positive().optional().nullable(),
+	supplier_id: z.coerce.number().int().positive().optional().nullable(),
+	price_purchase: z.coerce.number().min(0, "El precio de compra no puede ser negativo."),
+	price_sale: z.coerce.number().min(0, "El precio de venta no puede ser negativo."),
+	stock: z.coerce.number().int().optional(),
+	min_stock: z.coerce.number().int().min(0).optional().default(10)
 });
-_.object({ opening_amount: _.coerce.number().min(0, "El monto de apertura no puede ser negativo.") }), _.object({
-	register_id: _.coerce.number().int().positive("El ID de la caja es obligatorio."),
-	closing_amount: _.coerce.number().min(0, "El monto de cierre no puede ser negativo.")
+var saleItemSchema = z.object({
+	product_id: z.coerce.number().int().positive("El ID del producto es obligatorio."),
+	quantity: z.coerce.number().int().positive("La cantidad debe ser mayor a 0."),
+	unit_price: z.coerce.number().min(0, "El precio unitario no puede ser negativo."),
+	discount_id: z.coerce.number().int().positive().optional()
 });
-var R = _.object({
-	dni: _.string().min(1, "El DNI/Documento es obligatorio."),
-	name: _.string().min(1, "El nombre es obligatorio."),
-	phone: _.string().optional().nullable(),
-	code: _.string().min(1, "El código de cliente es obligatorio."),
-	tax_id: _.string().optional().nullable()
-}), Te = _.object({ name: _.string().min(1, "El nombre de la categoría es obligatorio.").max(255) });
-_.object({
-	product_id: _.coerce.number().int().positive("El ID del producto es obligatorio."),
-	type: _.enum(["ENTRADA", "SALIDA"], { errorMap: () => ({ message: "El tipo debe ser ENTRADA o SALIDA." }) }),
-	quantity: _.coerce.number().int().positive("La cantidad debe ser mayor a 0.")
+var saleSchema = z.object({
+	cash_register_id: z.coerce.number().int().positive("El ID de la caja es obligatorio."),
+	client_id: z.coerce.number().int().optional(),
+	client_dni: z.string().optional(),
+	client_name: z.string().optional(),
+	payment_method: z.enum(["CASH", "CARD"]).default("CASH"),
+	items: z.array(saleItemSchema).min(1, "La venta debe tener al menos un producto.")
 });
-var Ee = _.object({
-	name: _.string().min(1, "El nombre del proveedor es obligatorio."),
-	ruc: _.string().optional().nullable(),
-	phone: _.string().optional().nullable(),
-	email: _.string().email("Email inválido").optional().nullable().or(_.literal("")),
-	address: _.string().optional().nullable()
+z.object({ opening_amount: z.coerce.number().min(0, "El monto de apertura no puede ser negativo.") });
+z.object({
+	register_id: z.coerce.number().int().positive("El ID de la caja es obligatorio."),
+	closing_amount: z.coerce.number().min(0, "El monto de cierre no puede ser negativo.")
 });
-_.object({
-	name: _.string().min(1, "El nombre del proveedor es obligatorio.").optional(),
-	ruc: _.string().optional().nullable(),
-	phone: _.string().optional().nullable(),
-	email: _.string().email("Email inválido").optional().nullable().or(_.literal("")),
-	address: _.string().optional().nullable()
+var clientSchema = z.object({
+	dni: z.string().min(1, "El DNI/Documento es obligatorio."),
+	name: z.string().min(1, "El nombre es obligatorio."),
+	phone: z.string().optional().nullable(),
+	code: z.string().min(1, "El código de cliente es obligatorio."),
+	tax_id: z.string().optional().nullable()
 });
-var De = _.object({
-	product_id: _.coerce.number().int().positive("El ID del producto es obligatorio."),
-	quantity: _.coerce.number().int().positive("La cantidad debe ser mayor a 0."),
-	unit_cost: _.coerce.number().min(0, "El costo unitario no puede ser negativo.")
-}), Oe = _.object({
-	supplier_id: _.coerce.number().int().positive("El ID del proveedor es obligatorio."),
-	items: _.array(De).min(1, "La orden debe tener al menos un producto."),
-	payment_status: _.enum([
+var categorySchema = z.object({ name: z.string().min(1, "El nombre de la categoría es obligatorio.").max(255) });
+z.object({
+	product_id: z.coerce.number().int().positive("El ID del producto es obligatorio."),
+	type: z.enum(["ENTRADA", "SALIDA"], { errorMap: () => ({ message: "El tipo debe ser ENTRADA o SALIDA." }) }),
+	quantity: z.coerce.number().int().positive("La cantidad debe ser mayor a 0.")
+});
+var supplierSchema = z.object({
+	name: z.string().min(1, "El nombre del proveedor es obligatorio."),
+	ruc: z.string().optional().nullable(),
+	phone: z.string().optional().nullable(),
+	email: z.string().email("Email inválido").optional().nullable().or(z.literal("")),
+	address: z.string().optional().nullable()
+});
+z.object({
+	name: z.string().min(1, "El nombre del proveedor es obligatorio.").optional(),
+	ruc: z.string().optional().nullable(),
+	phone: z.string().optional().nullable(),
+	email: z.string().email("Email inválido").optional().nullable().or(z.literal("")),
+	address: z.string().optional().nullable()
+});
+var purchaseItemSchema = z.object({
+	product_id: z.coerce.number().int().positive("El ID del producto es obligatorio."),
+	quantity: z.coerce.number().int().positive("La cantidad debe ser mayor a 0."),
+	unit_cost: z.coerce.number().min(0, "El costo unitario no puede ser negativo.")
+});
+var purchaseSchema = z.object({
+	supplier_id: z.coerce.number().int().positive("El ID del proveedor es obligatorio."),
+	items: z.array(purchaseItemSchema).min(1, "La orden debe tener al menos un producto."),
+	payment_status: z.enum([
 		"UNPAID",
 		"PAID",
 		"CANCELED"
 	]).optional().default("UNPAID")
-}), ke = _.object({
-	username: _.string().min(1, "El nombre de usuario es obligatorio.").max(50),
-	password: _.string().min(8, "La contraseña debe tener al menos 8 caracteres, una mayúscula, un número y un carácter especial").regex(/[A-Z]/, "Debe contener al menos una mayúscula").regex(/[a-z]/, "Debe contener al menos una minúscula").regex(/[0-9]/, "Debe contener al menos un número").regex(/[!@#$%^&*()_\-+=<>?/{}~|]/, "Debe contener al menos un carácter especial"),
-	role: _.enum(["ADMIN", "VENDEDOR"], { errorMap: () => ({ message: "El rol debe ser ADMIN o VENDEDOR." }) }),
-	question: _.string().optional(),
-	answer: _.string().optional()
 });
-_.object({
-	username: _.string().min(1, "El nombre de usuario es obligatorio.").max(50).optional(),
-	role: _.enum(["ADMIN", "VENDEDOR"]).optional()
+var userCreateSchema = z.object({
+	username: z.string().min(1, "El nombre de usuario es obligatorio.").max(50),
+	password: z.string().min(8, "La contraseña debe tener al menos 8 caracteres, una mayúscula, un número y un carácter especial").regex(/[A-Z]/, "Debe contener al menos una mayúscula").regex(/[a-z]/, "Debe contener al menos una minúscula").regex(/[0-9]/, "Debe contener al menos un número").regex(/[!@#$%^&*()_\-+=<>?/{}~|]/, "Debe contener al menos un carácter especial"),
+	role: z.enum(["ADMIN", "VENDEDOR"], { errorMap: () => ({ message: "El rol debe ser ADMIN o VENDEDOR." }) }),
+	question: z.string().optional(),
+	answer: z.string().optional()
 });
-var Ae = _.object({
-	name: _.string().min(1, "El nombre del descuento es obligatorio."),
-	type: _.enum(["PERCENTAGE", "FIXED_AMOUNT"], { errorMap: () => ({ message: "El tipo debe ser PERCENTAGE o FIXED_AMOUNT." }) }),
-	value: _.coerce.number().min(0, "El valor no puede ser negativo."),
-	is_active: _.boolean().optional(),
-	applicable_to: _.enum([
+z.object({
+	username: z.string().min(1, "El nombre de usuario es obligatorio.").max(50).optional(),
+	role: z.enum(["ADMIN", "VENDEDOR"]).optional()
+});
+var discountSchema = z.object({
+	name: z.string().min(1, "El nombre del descuento es obligatorio."),
+	type: z.enum(["PERCENTAGE", "FIXED_AMOUNT"], { errorMap: () => ({ message: "El tipo debe ser PERCENTAGE o FIXED_AMOUNT." }) }),
+	value: z.coerce.number().min(0, "El valor no puede ser negativo."),
+	is_active: z.boolean().optional(),
+	applicable_to: z.enum([
 		"ALL",
 		"CATEGORY",
 		"SPECIFIC"
 	]).optional(),
-	category_id: _.coerce.number().int().positive().optional().nullable(),
-	product_ids: _.array(_.coerce.number().int().positive()).optional(),
-	min_purchase_amount: _.coerce.number().min(0).optional().nullable()
-}), je = _.object({ query: _.string().min(1, "La consulta no puede estar vacía.") }), Me = _.record(_.enum([
+	category_id: z.coerce.number().int().positive().optional().nullable(),
+	product_ids: z.array(z.coerce.number().int().positive()).optional(),
+	min_purchase_amount: z.coerce.number().min(0).optional().nullable()
+});
+var aiChatSchema = z.object({ query: z.string().min(1, "La consulta no puede estar vacía.") });
+var settingsSchema = z.record(z.enum([
 	"business_name",
 	"business_phone",
 	"business_address",
@@ -2023,172 +2703,208 @@ var Ae = _.object({
 	"tax_rate",
 	"tax_type",
 	"tax_included"
-]), _.string()).refine((e) => Object.keys(e).length > 0, { message: "Debe enviar al menos una configuración." }), Ne = class {
+]), z.string()).refine((val) => Object.keys(val).length > 0, { message: "Debe enviar al menos una configuración." });
+//#endregion
+//#region src/backend/services/ProductService.ts
+var ProductService = class {
 	productRepo;
 	categoryRepo;
 	auditLogRepo;
-	constructor(e, t, n) {
-		this.productRepo = e, this.categoryRepo = t, this.auditLogRepo = n;
+	constructor(productRepo, categoryRepo, auditLogRepo) {
+		this.productRepo = productRepo;
+		this.categoryRepo = categoryRepo;
+		this.auditLogRepo = auditLogRepo;
 	}
-	async getAllProducts(e, t) {
-		return this.productRepo.findAll(e, t);
+	async getAllProducts(search, categoryId) {
+		return this.productRepo.findAll(search, categoryId);
 	}
-	async getProductById(e) {
-		let t = await this.productRepo.findById(e);
-		if (!t) throw new A("Producto");
-		return t;
+	async getProductById(id) {
+		const product = await this.productRepo.findById(id);
+		if (!product) throw new NotFoundError("Producto");
+		return product;
 	}
-	async getLowStockProducts(e) {
+	async getLowStockProducts(threshold) {
 		return this.productRepo.findLowStock();
 	}
-	async createProduct(e, t = 1) {
-		let n = L.parse(e);
-		if (await this.productRepo.findBySku(n.sku)) throw new M(`El SKU ${n.sku} ya se encuentra registrado.`);
-		if (n.category_id && !await this.categoryRepo.findById(n.category_id)) throw new A("Categoría");
-		let r = n.stock || 0, i = await this.productRepo.create(n);
-		return r > 0 && await this.productRepo.createMovement({
-			product_id: i.id,
+	async createProduct(data, userId = 1) {
+		const validated = productSchema.parse(data);
+		if (await this.productRepo.findBySku(validated.sku)) throw new ConflictError(`El SKU ${validated.sku} ya se encuentra registrado.`);
+		if (validated.category_id) {
+			if (!await this.categoryRepo.findById(validated.category_id)) throw new NotFoundError("Categoría");
+		}
+		const initialStock = validated.stock || 0;
+		const product = await this.productRepo.create(validated);
+		if (initialStock > 0) await this.productRepo.createMovement({
+			product_id: product.id,
 			type: "ENTRADA",
-			quantity: r,
+			quantity: initialStock,
 			reason: "INICIAL"
-		}), await this.auditLogRepo.create({
-			userId: t,
+		});
+		await this.auditLogRepo.create({
+			userId,
 			action: "CREATE_PRODUCT",
 			entity: "products",
-			entity_id: i.id
-		}), {
-			success: !0,
-			id: i.id
+			entity_id: product.id
+		});
+		return {
+			success: true,
+			id: product.id
 		};
 	}
-	async updateProduct(e, t, n = 1) {
-		let r = await this.productRepo.findById(e);
-		if (!r) throw new A("Producto");
-		let i = L.parse(t);
-		if (i.sku !== r.sku && await this.productRepo.findBySku(i.sku)) throw new M(`El SKU ${i.sku} ya se encuentra registrado.`);
-		if (i.category_id && !await this.categoryRepo.findById(i.category_id)) throw new A("Categoría");
-		let a = await this.productRepo.update(e, i);
-		return await this.auditLogRepo.create({
-			userId: n,
+	async updateProduct(id, data, userId = 1) {
+		const existingProduct = await this.productRepo.findById(id);
+		if (!existingProduct) throw new NotFoundError("Producto");
+		const validated = productSchema.parse(data);
+		if (validated.sku !== existingProduct.sku) {
+			if (await this.productRepo.findBySku(validated.sku)) throw new ConflictError(`El SKU ${validated.sku} ya se encuentra registrado.`);
+		}
+		if (validated.category_id) {
+			if (!await this.categoryRepo.findById(validated.category_id)) throw new NotFoundError("Categoría");
+		}
+		const product = await this.productRepo.update(id, validated);
+		await this.auditLogRepo.create({
+			userId,
 			action: "UPDATE_PRODUCT",
 			entity: "products",
-			entity_id: a.id
-		}), {
-			success: !0,
-			product: a
+			entity_id: product.id
+		});
+		return {
+			success: true,
+			product
 		};
 	}
-	async deleteProduct(e, t = 1) {
-		if (!await this.productRepo.findById(e)) throw new A("Producto");
-		let n = await this.productRepo.getSalesCount(e);
-		if (n > 0) throw new N(`No se puede eliminar el producto porque tiene ${n} venta(s) asociada(s).`);
-		return await this.productRepo.delete(e), await this.auditLogRepo.create({
-			userId: t,
+	async deleteProduct(id, userId = 1) {
+		if (!await this.productRepo.findById(id)) throw new NotFoundError("Producto");
+		const salesCount = await this.productRepo.getSalesCount(id);
+		if (salesCount > 0) throw new BusinessRuleError(`No se puede eliminar el producto porque tiene ${salesCount} venta(s) asociada(s).`);
+		await this.productRepo.delete(id);
+		await this.auditLogRepo.create({
+			userId,
 			action: "DELETE_PRODUCT",
 			entity: "products",
-			entity_id: e
-		}), { success: !0 };
+			entity_id: id
+		});
+		return { success: true };
 	}
-	async addStock(e, t, n = 1, r = "AJUSTE") {
-		if (!await this.productRepo.findById(e)) throw new A("Producto");
-		if (t <= 0) throw new j("La cantidad debe ser mayor a cero.");
-		return await this.productRepo.updateStock(e, t), await this.productRepo.createMovement({
-			product_id: e,
+	async addStock(productId, quantity, userId = 1, reason = "AJUSTE") {
+		if (!await this.productRepo.findById(productId)) throw new NotFoundError("Producto");
+		if (quantity <= 0) throw new ValidationError("La cantidad debe ser mayor a cero.");
+		await this.productRepo.updateStock(productId, quantity);
+		await this.productRepo.createMovement({
+			product_id: productId,
 			type: "ENTRADA",
-			quantity: t,
-			reason: r
-		}), await this.auditLogRepo.create({
-			userId: n,
+			quantity,
+			reason
+		});
+		await this.auditLogRepo.create({
+			userId,
 			action: "STOCK_ENTRADA",
 			entity: "products",
-			entity_id: e
-		}), { success: !0 };
+			entity_id: productId
+		});
+		return { success: true };
 	}
-	async removeStock(e, t, n = 1, r = "AJUSTE") {
-		let i = await this.productRepo.findById(e);
-		if (!i) throw new A("Producto");
-		if (t <= 0) throw new j("La cantidad debe ser mayor a cero.");
-		if (i.stock < t) throw new N(`Stock insuficiente. Stock actual: ${i.stock}, Cantidad solicitada: ${t}`);
-		await this.productRepo.updateStock(e, -t);
-		let a = await this.productRepo.findById(e);
-		if (a && a.stock < 0) throw new N("Error interno: el stock no puede ser negativo");
-		return await this.productRepo.createMovement({
-			product_id: e,
+	async removeStock(productId, quantity, userId = 1, reason = "AJUSTE") {
+		const product = await this.productRepo.findById(productId);
+		if (!product) throw new NotFoundError("Producto");
+		if (quantity <= 0) throw new ValidationError("La cantidad debe ser mayor a cero.");
+		if (product.stock < quantity) throw new BusinessRuleError(`Stock insuficiente. Stock actual: ${product.stock}, Cantidad solicitada: ${quantity}`);
+		await this.productRepo.updateStock(productId, -quantity);
+		const updated = await this.productRepo.findById(productId);
+		if (updated && updated.stock < 0) throw new BusinessRuleError("Error interno: el stock no puede ser negativo");
+		await this.productRepo.createMovement({
+			product_id: productId,
 			type: "SALIDA",
-			quantity: t,
-			reason: r
-		}), await this.auditLogRepo.create({
-			userId: n,
+			quantity,
+			reason
+		});
+		await this.auditLogRepo.create({
+			userId,
 			action: "STOCK_SALIDA",
 			entity: "products",
-			entity_id: e
-		}), { success: !0 };
+			entity_id: productId
+		});
+		return { success: true };
 	}
-	async getInventoryMovements(e, t = 50) {
-		if (!await this.productRepo.findById(e)) throw new A("Producto");
-		return this.productRepo.getMovements(e, t);
+	async getInventoryMovements(productId, limit = 50) {
+		if (!await this.productRepo.findById(productId)) throw new NotFoundError("Producto");
+		return this.productRepo.getMovements(productId, limit);
 	}
-}, Pe = class {
+};
+//#endregion
+//#region src/backend/services/ClientService.ts
+var ClientService = class {
 	clientRepo;
 	auditLogRepo;
-	constructor(e, t) {
-		this.clientRepo = e, this.auditLogRepo = t;
+	constructor(clientRepo, auditLogRepo) {
+		this.clientRepo = clientRepo;
+		this.auditLogRepo = auditLogRepo;
 	}
-	async getAllClients(e) {
-		return this.clientRepo.findAll(e);
+	async getAllClients(search) {
+		return this.clientRepo.findAll(search);
 	}
-	async getClientById(e) {
-		return await F(() => this.clientRepo.findById(e), "Cliente", e);
+	async getClientById(id) {
+		return await findOrThrow(() => this.clientRepo.findById(id), "Cliente", id);
 	}
-	async createClient(e, t = 1) {
-		let n = R.parse(e);
-		if (await this.clientRepo.findByDni(n.dni)) throw new M(`El DNI ${n.dni} ya se encuentra registrado.`);
-		if (await this.clientRepo.findByCode(n.code)) throw new M(`El código ${n.code} ya se encuentra registrado.`);
-		if (n.tax_id && await this.clientRepo.findByTaxId(n.tax_id)) throw new M(`El RUC ${n.tax_id} ya se encuentra registrado.`);
-		let r = await this.clientRepo.create(n);
-		return await this.auditLogRepo.create({
-			userId: t,
+	async createClient(data, userId = 1) {
+		const validated = clientSchema.parse(data);
+		if (await this.clientRepo.findByDni(validated.dni)) throw new ConflictError(`El DNI ${validated.dni} ya se encuentra registrado.`);
+		if (await this.clientRepo.findByCode(validated.code)) throw new ConflictError(`El código ${validated.code} ya se encuentra registrado.`);
+		if (validated.tax_id) {
+			if (await this.clientRepo.findByTaxId(validated.tax_id)) throw new ConflictError(`El RUC ${validated.tax_id} ya se encuentra registrado.`);
+		}
+		const client = await this.clientRepo.create(validated);
+		await this.auditLogRepo.create({
+			userId,
 			action: "CREATE_CLIENT",
 			entity: "clients",
-			entity_id: r.id
-		}), {
-			success: !0,
-			id: r.id
+			entity_id: client.id
+		});
+		return {
+			success: true,
+			id: client.id
 		};
 	}
-	async updateClient(e, t, n = 1) {
-		await F(() => this.clientRepo.findById(e), "Cliente", e);
-		let r = R.parse(t), i = await this.clientRepo.findByDni(r.dni);
-		if (i && i.id !== e) throw new M(`El DNI ${r.dni} ya se encuentra registrado.`);
-		let a = await this.clientRepo.findByCode(r.code);
-		if (a && a.id !== e) throw new M(`El código ${r.code} ya se encuentra registrado.`);
-		if (r.tax_id) {
-			let t = await this.clientRepo.findByTaxId(r.tax_id);
-			if (t && t.id !== e) throw new M(`El RUC ${r.tax_id} ya se encuentra registrado.`);
+	async updateClient(id, data, userId = 1) {
+		await findOrThrow(() => this.clientRepo.findById(id), "Cliente", id);
+		const validated = clientSchema.parse(data);
+		const existingDni = await this.clientRepo.findByDni(validated.dni);
+		if (existingDni && existingDni.id !== id) throw new ConflictError(`El DNI ${validated.dni} ya se encuentra registrado.`);
+		const existingCode = await this.clientRepo.findByCode(validated.code);
+		if (existingCode && existingCode.id !== id) throw new ConflictError(`El código ${validated.code} ya se encuentra registrado.`);
+		if (validated.tax_id) {
+			const existingTaxId = await this.clientRepo.findByTaxId(validated.tax_id);
+			if (existingTaxId && existingTaxId.id !== id) throw new ConflictError(`El RUC ${validated.tax_id} ya se encuentra registrado.`);
 		}
-		let o = await this.clientRepo.update(e, r);
-		return await this.auditLogRepo.create({
-			userId: n,
+		const client = await this.clientRepo.update(id, validated);
+		await this.auditLogRepo.create({
+			userId,
 			action: "UPDATE_CLIENT",
 			entity: "clients",
-			entity_id: o.id
-		}), {
-			success: !0,
-			client: o
+			entity_id: client.id
+		});
+		return {
+			success: true,
+			client
 		};
 	}
-	async deleteClient(e, t = 1) {
-		await F(() => this.clientRepo.findById(e), "Cliente", e);
-		let n = await this.clientRepo.getSalesCount(e);
-		if (n > 0) throw new N(`No se puede eliminar el cliente porque tiene ${n} venta(s) asociada(s).`);
-		return await this.clientRepo.delete(e), await this.auditLogRepo.create({
-			userId: t,
+	async deleteClient(id, userId = 1) {
+		await findOrThrow(() => this.clientRepo.findById(id), "Cliente", id);
+		const salesCount = await this.clientRepo.getSalesCount(id);
+		if (salesCount > 0) throw new BusinessRuleError(`No se puede eliminar el cliente porque tiene ${salesCount} venta(s) asociada(s).`);
+		await this.clientRepo.delete(id);
+		await this.auditLogRepo.create({
+			userId,
 			action: "DELETE_CLIENT",
 			entity: "clients",
-			entity_id: e
-		}), { success: !0 };
+			entity_id: id
+		});
+		return { success: true };
 	}
-}, Fe = class {
+};
+//#endregion
+//#region src/backend/services/SaleService.ts
+var SaleService = class {
 	saleRepo;
 	productRepo;
 	clientRepo;
@@ -2197,723 +2913,922 @@ var Ae = _.object({
 	auditLogRepo;
 	discountRepo;
 	dashboardService;
-	constructor(e, t, n, r, i, a, o, s) {
-		this.saleRepo = e, this.productRepo = t, this.clientRepo = n, this.cashRegisterRepo = r, this.settingsRepo = i, this.auditLogRepo = a, this.discountRepo = o, this.dashboardService = s;
+	constructor(saleRepo, productRepo, clientRepo, cashRegisterRepo, settingsRepo, auditLogRepo, discountRepo, dashboardService) {
+		this.saleRepo = saleRepo;
+		this.productRepo = productRepo;
+		this.clientRepo = clientRepo;
+		this.cashRegisterRepo = cashRegisterRepo;
+		this.settingsRepo = settingsRepo;
+		this.auditLogRepo = auditLogRepo;
+		this.discountRepo = discountRepo;
+		this.dashboardService = dashboardService;
 	}
-	async getAllSales(e, t, n, r, i, a) {
-		let o = {};
-		return e && (o.startDate = e), t && (o.endDate = t), n && (o.clientId = n), r && (o.cashRegisterId = r), i && (o.page = i), a && (o.pageSize = a), this.saleRepo.findAll(o);
+	async getAllSales(startDate, endDate, clientId, cashRegisterId, page, pageSize) {
+		const filter = {};
+		if (startDate) filter.startDate = startDate;
+		if (endDate) filter.endDate = endDate;
+		if (clientId) filter.clientId = clientId;
+		if (cashRegisterId) filter.cashRegisterId = cashRegisterId;
+		if (page) filter.page = page;
+		if (pageSize) filter.pageSize = pageSize;
+		return this.saleRepo.findAll(filter);
 	}
-	async getSaleDetails(e) {
-		let t = await this.saleRepo.findById(e);
-		if (!t) throw new A("Venta");
-		return t;
+	async getSaleDetails(id) {
+		const sale = await this.saleRepo.findById(id);
+		if (!sale) throw new NotFoundError("Venta");
+		return sale;
 	}
 	async getTodaySales() {
 		return this.saleRepo.findToday();
 	}
-	async getSalesStats(e, t) {
-		return this.saleRepo.getStats(e, t);
+	async getSalesStats(startDate, endDate) {
+		return this.saleRepo.getStats(startDate, endDate);
 	}
 	async getLastSale() {
 		return this.saleRepo.findLast();
 	}
-	async registerSale(e, t, n = 1) {
-		let r = we.parse({
-			...e,
-			items: t
+	async registerSale(saleData, itemsData, userId = 1) {
+		const validated = saleSchema.parse({
+			...saleData,
+			items: itemsData
 		});
-		if (!await this.cashRegisterRepo.findOpen()) throw new N("La caja no está abierta o no existe.");
-		let i = r.client_id;
-		if (r.client_dni && r.client_name && !i) {
-			let e = await this.clientRepo.findByDni(r.client_dni);
-			i = e ? e.id : (await this.clientRepo.create({
-				dni: r.client_dni,
-				name: r.client_name,
+		if (!await this.cashRegisterRepo.findOpen()) throw new BusinessRuleError("La caja no está abierta o no existe.");
+		let finalClientId = validated.client_id;
+		if (validated.client_dni && validated.client_name && !finalClientId) {
+			const existingClient = await this.clientRepo.findByDni(validated.client_dni);
+			if (existingClient) finalClientId = existingClient.id;
+			else finalClientId = (await this.clientRepo.create({
+				dni: validated.client_dni,
+				name: validated.client_name,
 				code: `CLI-${Date.now()}`
 			})).id;
 		}
-		if (i && !await this.clientRepo.findById(i)) throw new A("Cliente");
-		let a = r.items.map((e) => e.product_id), o = await this.productRepo.findByIds(a), s = new Map(o.map((e) => [e.id, e]));
-		for (let e of r.items) {
-			let t = s.get(e.product_id);
-			if (!t) throw new A("Producto", e.product_id);
-			if (t.stock < e.quantity) throw new N(`Stock insuficiente para "${t.name}". Stock actual: ${t.stock}, Cantidad solicitada: ${e.quantity}`);
+		if (finalClientId) {
+			if (!await this.clientRepo.findById(finalClientId)) throw new NotFoundError("Cliente");
 		}
-		let c = await Promise.all(r.items.map(async (e) => {
-			let t = s.get(e.product_id), n = 0, r = e.unit_price, i = null, a = null, o = null;
-			if (e.discount_id) {
-				let t = await this.discountRepo.findById(e.discount_id);
-				if (t && t.is_active) {
-					i = t.name, a = t.type, o = t.value;
-					let s = e.unit_price * e.quantity;
-					n = t.type === "PERCENTAGE" ? s * (t.value / 100) : Math.min(t.value, s), n = parseFloat(n.toFixed(2)), r = parseFloat(((s - n) / e.quantity).toFixed(2));
+		const productIds = validated.items.map((item) => item.product_id);
+		const products = await this.productRepo.findByIds(productIds);
+		const productMap = new Map(products.map((p) => [p.id, p]));
+		for (const item of validated.items) {
+			const product = productMap.get(item.product_id);
+			if (!product) throw new NotFoundError(`Producto`, item.product_id);
+			if (product.stock < item.quantity) throw new BusinessRuleError(`Stock insuficiente para "${product.name}". Stock actual: ${product.stock}, Cantidad solicitada: ${item.quantity}`);
+		}
+		const itemsWithPurchasePrice = await Promise.all(validated.items.map(async (item) => {
+			const product = productMap.get(item.product_id);
+			let discountAmount = 0;
+			let finalUnitPrice = item.unit_price;
+			let discountName = null;
+			let discountType = null;
+			let discountValue = null;
+			if (item.discount_id) {
+				const discount = await this.discountRepo.findById(item.discount_id);
+				if (discount && discount.is_active) {
+					discountName = discount.name;
+					discountType = discount.type;
+					discountValue = discount.value;
+					const lineTotal = item.unit_price * item.quantity;
+					if (discount.type === "PERCENTAGE") discountAmount = lineTotal * (discount.value / 100);
+					else discountAmount = Math.min(discount.value, lineTotal);
+					discountAmount = parseFloat(discountAmount.toFixed(2));
+					finalUnitPrice = parseFloat(((lineTotal - discountAmount) / item.quantity).toFixed(2));
 				}
 			}
 			return {
-				product_id: e.product_id,
-				quantity: e.quantity,
-				unit_price: e.unit_price,
-				purchase_price: t?.price_purchase || 0,
-				discount_name: i,
-				discount_type: a,
-				discount_value: o,
-				discount_amount: n,
-				final_unit_price: r
+				product_id: item.product_id,
+				quantity: item.quantity,
+				unit_price: item.unit_price,
+				purchase_price: product?.price_purchase || 0,
+				discount_name: discountName,
+				discount_type: discountType,
+				discount_value: discountValue,
+				discount_amount: discountAmount,
+				final_unit_price: finalUnitPrice
 			};
-		})), l = c.reduce((e, t) => e + t.unit_price * t.quantity, 0), u = c.reduce((e, t) => e + (t.discount_amount || 0), 0), d = await this.settingsRepo.getTaxSettings(), f = l - u;
-		f = parseFloat(f.toFixed(2));
-		let p = 0, m = f;
-		d.taxType !== "none" && d.taxRate > 0 && (p = parseFloat((f * d.taxRate).toFixed(2)), m = parseFloat((f + p).toFixed(2)));
-		let h = {
-			cash_register_id: r.cash_register_id,
-			client_id: i || 1,
-			subtotal: f,
-			tax_amount: p,
-			total: m,
-			discount_total: u,
-			items: c,
-			payment_method: r.payment_method,
-			exchange_rate: e.exchange_rate || 0
-		}, g = await this.saleRepo.registerSale(h);
-		return this.dashboardService.invalidateCache(), await this.auditLogRepo.create({
-			userId: n,
+		}));
+		const rawTotal = itemsWithPurchasePrice.reduce((acc, item) => acc + item.unit_price * item.quantity, 0);
+		const totalDiscount = itemsWithPurchasePrice.reduce((acc, item) => acc + (item.discount_amount || 0), 0);
+		const taxSettings = await this.settingsRepo.getTaxSettings();
+		let subtotal = rawTotal - totalDiscount;
+		subtotal = parseFloat(subtotal.toFixed(2));
+		let taxAmount = 0;
+		let total = subtotal;
+		if (taxSettings.taxType !== "none" && taxSettings.taxRate > 0) {
+			taxAmount = parseFloat((subtotal * taxSettings.taxRate).toFixed(2));
+			total = parseFloat((subtotal + taxAmount).toFixed(2));
+		}
+		const registerInput = {
+			cash_register_id: validated.cash_register_id,
+			client_id: finalClientId || 1,
+			subtotal,
+			tax_amount: taxAmount,
+			total,
+			discount_total: totalDiscount,
+			items: itemsWithPurchasePrice,
+			payment_method: validated.payment_method,
+			exchange_rate: saleData.exchange_rate || 0
+		};
+		const saleId = await this.saleRepo.registerSale(registerInput);
+		this.dashboardService.invalidateCache();
+		await this.auditLogRepo.create({
+			userId,
 			action: "CREATE_SALE",
 			entity: "sales",
-			entity_id: g
-		}), {
-			success: !0,
-			id: g
+			entity_id: saleId
+		});
+		return {
+			success: true,
+			id: saleId
 		};
 	}
-	async cancelSale(e, t = 1) {
-		if (!await this.saleRepo.findById(e)) throw new A("Venta");
-		return await this.saleRepo.cancelSale(e), this.dashboardService.invalidateCache(), await this.auditLogRepo.create({
-			userId: t,
+	async cancelSale(saleId, userId = 1) {
+		if (!await this.saleRepo.findById(saleId)) throw new NotFoundError("Venta");
+		await this.saleRepo.cancelSale(saleId);
+		this.dashboardService.invalidateCache();
+		await this.auditLogRepo.create({
+			userId,
 			action: "CANCEL_SALE",
 			entity: "sales",
-			entity_id: e
-		}), { success: !0 };
+			entity_id: saleId
+		});
+		return { success: true };
 	}
-}, Ie = class {
+};
+//#endregion
+//#region src/backend/services/CashRegisterService.ts
+var CashRegisterService = class {
 	cashRegisterRepo;
 	auditLogRepo;
-	constructor(e, t) {
-		this.cashRegisterRepo = e, this.auditLogRepo = t;
+	constructor(cashRegisterRepo, auditLogRepo) {
+		this.cashRegisterRepo = cashRegisterRepo;
+		this.auditLogRepo = auditLogRepo;
 	}
 	async getOpenRegister() {
 		return this.cashRegisterRepo.findOpen();
 	}
-	async getAllRegisters(e, t) {
-		return this.cashRegisterRepo.findAll(e, t);
+	async getAllRegisters(startDate, endDate) {
+		return this.cashRegisterRepo.findAll(startDate, endDate);
 	}
-	async getRegisterDetails(e) {
-		let t = await this.cashRegisterRepo.findById(e);
-		if (!t) throw new A("Caja");
-		return t;
+	async getRegisterDetails(id) {
+		const register = await this.cashRegisterRepo.findById(id);
+		if (!register) throw new NotFoundError("Caja");
+		return register;
 	}
-	async openRegister(e, t = 1) {
-		if (isNaN(e) || e < 0) throw new j("El monto de apertura no puede ser negativo.");
-		if (await this.cashRegisterRepo.findOpen()) throw new M("Ya hay una caja abierta para el día de hoy.");
-		let n = await this.cashRegisterRepo.create(e);
-		return await this.auditLogRepo.create({
-			userId: t,
+	async openRegister(openingAmount, userId = 1) {
+		if (isNaN(openingAmount) || openingAmount < 0) throw new ValidationError("El monto de apertura no puede ser negativo.");
+		if (await this.cashRegisterRepo.findOpen()) throw new ConflictError("Ya hay una caja abierta para el día de hoy.");
+		const cashRegister = await this.cashRegisterRepo.create(openingAmount);
+		await this.auditLogRepo.create({
+			userId,
 			action: "OPEN_CASH_REGISTER",
 			entity: "cash_registers",
-			entity_id: n.id
-		}), {
-			success: !0,
-			id: n.id
+			entity_id: cashRegister.id
+		});
+		return {
+			success: true,
+			id: cashRegister.id
 		};
 	}
-	async closeRegister(e, t, n = 1) {
-		if (isNaN(t) || t < 0) throw new j("El monto de cierre no puede ser negativo.");
-		let r = await this.cashRegisterRepo.findById(e);
-		if (!r) throw new A("Caja");
-		let i = Number(r.opening_amount) + Number(r.total_sales), a = Math.round((Number(t) - i) * 100) / 100, o = await this.cashRegisterRepo.getSalesCount(r.id, r.opened_at), s = a === 0 ? "PERFECT" : a > 0 ? "SURPLUS" : "MISSING";
-		return await this.cashRegisterRepo.close(r.id, Number(t), a, s), await this.auditLogRepo.create({
-			userId: n,
+	async closeRegister(registerId, closingAmount, userId = 1) {
+		if (isNaN(closingAmount) || closingAmount < 0) throw new ValidationError("El monto de cierre no puede ser negativo.");
+		const register = await this.cashRegisterRepo.findById(registerId);
+		if (!register) throw new NotFoundError("Caja");
+		const expectedCash = Number(register.opening_amount) + Number(register.total_sales);
+		const difference = Math.round((Number(closingAmount) - expectedCash) * 100) / 100;
+		const salesCount = await this.cashRegisterRepo.getSalesCount(register.id, register.opened_at);
+		const status = difference === 0 ? "PERFECT" : difference > 0 ? "SURPLUS" : "MISSING";
+		await this.cashRegisterRepo.close(register.id, Number(closingAmount), difference, status);
+		await this.auditLogRepo.create({
+			userId,
 			action: "CLOSE_CASH_REGISTER",
 			entity: "cash_registers",
-			entity_id: r.id
-		}), {
-			success: !0,
-			registerId: r.id,
-			openingAmount: r.opening_amount,
-			totalSales: r.total_sales,
-			expectedCash: i,
-			realCash: Number(t),
-			difference: a,
-			status: s,
-			salesCount: o
+			entity_id: register.id
+		});
+		return {
+			success: true,
+			registerId: register.id,
+			openingAmount: register.opening_amount,
+			totalSales: register.total_sales,
+			expectedCash,
+			realCash: Number(closingAmount),
+			difference,
+			status,
+			salesCount
 		};
 	}
-	async getDailySummary(e) {
-		return this.cashRegisterRepo.getDailySummary(e);
+	async getDailySummary(registerId) {
+		return this.cashRegisterRepo.getDailySummary(registerId);
 	}
-}, Le = class {
+};
+//#endregion
+//#region src/backend/services/SupplierService.ts
+var SupplierService = class {
 	supplierRepo;
 	auditLogRepo;
-	constructor(e, t) {
-		this.supplierRepo = e, this.auditLogRepo = t;
+	constructor(supplierRepo, auditLogRepo) {
+		this.supplierRepo = supplierRepo;
+		this.auditLogRepo = auditLogRepo;
 	}
-	async getAllSuppliers(e) {
+	async getAllSuppliers(search) {
 		try {
-			return await this.supplierRepo.findAll(e);
-		} catch (e) {
-			throw E.error("Get all suppliers error:", e), Error("Error al obtener proveedores");
+			return await this.supplierRepo.findAll(search);
+		} catch (error) {
+			logger.error("Get all suppliers error:", error);
+			throw new Error("Error al obtener proveedores");
 		}
 	}
-	async getSupplierById(e) {
+	async getSupplierById(id) {
 		try {
-			let t = await this.supplierRepo.findById(e);
-			if (!t) throw new A("Proveedor");
-			return t;
-		} catch (e) {
-			throw E.error("Get supplier by ID error:", e), e.code === "P2025" ? new A("Proveedor") : e;
+			const supplier = await this.supplierRepo.findById(id);
+			if (!supplier) throw new NotFoundError("Proveedor");
+			return supplier;
+		} catch (error) {
+			logger.error("Get supplier by ID error:", error);
+			if (error.code === "P2025") throw new NotFoundError("Proveedor");
+			throw error;
 		}
 	}
-	async createSupplier(e, t) {
+	async createSupplier(data, createdBy) {
 		try {
-			if (e.ruc && await this.supplierRepo.findByRuc(e.ruc)) throw new M(`El RUC ${e.ruc} ya está registrado`);
-			let n = await this.supplierRepo.create(e);
-			return await this.auditLogRepo.create({
-				userId: t,
+			if (data.ruc) {
+				if (await this.supplierRepo.findByRuc(data.ruc)) throw new ConflictError(`El RUC ${data.ruc} ya está registrado`);
+			}
+			const supplier = await this.supplierRepo.create(data);
+			await this.auditLogRepo.create({
+				userId: createdBy,
 				action: "CREATE_SUPPLIER",
 				entity: "suppliers",
-				entity_id: n.id
-			}), n;
-		} catch (e) {
-			throw E.error("Create supplier error:", e), e.code === "P2002" ? new M("El RUC ya está en uso") : e;
+				entity_id: supplier.id
+			});
+			return supplier;
+		} catch (error) {
+			logger.error("Create supplier error:", error);
+			if (error.code === "P2002") throw new ConflictError("El RUC ya está en uso");
+			throw error;
 		}
 	}
-	async updateSupplier(e, t, n) {
+	async updateSupplier(id, data, updatedBy) {
 		try {
-			let r = await this.supplierRepo.findById(e);
-			if (!r) throw new A("Proveedor");
-			if (t.ruc && t.ruc !== r.ruc && await this.supplierRepo.findByRuc(t.ruc)) throw new M(`El RUC ${t.ruc} ya está registrado`);
-			let i = await this.supplierRepo.update(e, t);
-			return await this.auditLogRepo.create({
-				userId: n,
+			const existing = await this.supplierRepo.findById(id);
+			if (!existing) throw new NotFoundError("Proveedor");
+			if (data.ruc && data.ruc !== existing.ruc) {
+				if (await this.supplierRepo.findByRuc(data.ruc)) throw new ConflictError(`El RUC ${data.ruc} ya está registrado`);
+			}
+			const supplier = await this.supplierRepo.update(id, data);
+			await this.auditLogRepo.create({
+				userId: updatedBy,
 				action: "UPDATE_SUPPLIER",
 				entity: "suppliers",
-				entity_id: e
-			}), i;
-		} catch (e) {
-			throw E.error("Update supplier error:", e), e.code === "P2025" ? new A("Proveedor") : e;
+				entity_id: id
+			});
+			return supplier;
+		} catch (error) {
+			logger.error("Update supplier error:", error);
+			if (error.code === "P2025") throw new NotFoundError("Proveedor");
+			throw error;
 		}
 	}
-	async deleteSupplier(e, t) {
+	async deleteSupplier(id, deletedBy) {
 		try {
-			if (!await this.supplierRepo.findById(e)) throw new A("Proveedor");
-			if (await this.supplierRepo.hasProducts(e)) throw new N("No se puede eliminar el proveedor porque tiene producto(s) asociado(s)");
-			if (await this.supplierRepo.hasPurchases(e)) throw new N("No se puede eliminar el proveedor porque tiene compra(s) asociada(s)");
-			return await this.supplierRepo.delete(e), await this.auditLogRepo.create({
-				userId: t,
+			if (!await this.supplierRepo.findById(id)) throw new NotFoundError("Proveedor");
+			if (await this.supplierRepo.hasProducts(id)) throw new BusinessRuleError("No se puede eliminar el proveedor porque tiene producto(s) asociado(s)");
+			if (await this.supplierRepo.hasPurchases(id)) throw new BusinessRuleError("No se puede eliminar el proveedor porque tiene compra(s) asociada(s)");
+			await this.supplierRepo.delete(id);
+			await this.auditLogRepo.create({
+				userId: deletedBy,
 				action: "DELETE_SUPPLIER",
 				entity: "suppliers",
-				entity_id: e
-			}), { success: !0 };
-		} catch (e) {
-			throw E.error("Delete supplier error:", e), e.code === "P2025" ? new A("Proveedor") : e;
+				entity_id: id
+			});
+			return { success: true };
+		} catch (error) {
+			logger.error("Delete supplier error:", error);
+			if (error.code === "P2025") throw new NotFoundError("Proveedor");
+			throw error;
 		}
 	}
-}, Re = class {
+};
+//#endregion
+//#region src/backend/services/PurchaseService.ts
+var PurchaseService = class {
 	purchaseRepo;
 	supplierRepo;
 	productRepo;
 	auditLogRepo;
-	constructor(e, t, n, r) {
-		this.purchaseRepo = e, this.supplierRepo = t, this.productRepo = n, this.auditLogRepo = r;
+	constructor(purchaseRepo, supplierRepo, productRepo, auditLogRepo) {
+		this.purchaseRepo = purchaseRepo;
+		this.supplierRepo = supplierRepo;
+		this.productRepo = productRepo;
+		this.auditLogRepo = auditLogRepo;
 	}
-	async getAllPurchases(e, t) {
+	async getAllPurchases(supplierId, status) {
 		try {
-			return await this.purchaseRepo.findAll(e, t);
-		} catch (e) {
-			throw E.error("Get all purchases error:", e), Error("Error al obtener compras");
+			return await this.purchaseRepo.findAll(supplierId, status);
+		} catch (error) {
+			logger.error("Get all purchases error:", error);
+			throw new Error("Error al obtener compras");
 		}
 	}
-	async getPurchaseById(e) {
+	async getPurchaseById(id) {
 		try {
-			let t = await this.purchaseRepo.findById(e);
-			if (!t) throw new A("Compra");
-			return t;
-		} catch (e) {
-			throw E.error("Get purchase by ID error:", e), e.code === "P2025" ? new A("Compra") : e;
+			const purchase = await this.purchaseRepo.findById(id);
+			if (!purchase) throw new NotFoundError("Compra");
+			return purchase;
+		} catch (error) {
+			logger.error("Get purchase by ID error:", error);
+			if (error.code === "P2025") throw new NotFoundError("Compra");
+			throw error;
 		}
 	}
-	async createPurchase(e, t) {
+	async createPurchase(data, createdBy) {
 		try {
-			if (!await this.supplierRepo.findById(e.supplier_id)) throw new A("Proveedor");
-			let n = e.items.map((e) => e.product_id);
-			if ((await this.productRepo.findByIds(n)).length !== n.length) throw new A("Producto", "uno o más productos no existen");
-			let r = await this.purchaseRepo.create(e);
-			return await this.auditLogRepo.create({
-				userId: t,
+			if (!await this.supplierRepo.findById(data.supplier_id)) throw new NotFoundError("Proveedor");
+			const productIds = data.items.map((item) => item.product_id);
+			if ((await this.productRepo.findByIds(productIds)).length !== productIds.length) throw new NotFoundError("Producto", "uno o más productos no existen");
+			const purchase = await this.purchaseRepo.create(data);
+			await this.auditLogRepo.create({
+				userId: createdBy,
 				action: "CREATE_PURCHASE",
 				entity: "purchases",
-				entity_id: r.id
-			}), r;
-		} catch (e) {
-			throw E.error("Create purchase error:", e), e;
+				entity_id: purchase.id
+			});
+			return purchase;
+		} catch (error) {
+			logger.error("Create purchase error:", error);
+			throw error;
 		}
 	}
-	async receivePurchase(e, t) {
+	async receivePurchase(purchaseId, receivedBy) {
 		try {
-			return await this.purchaseRepo.receive(e), await this.auditLogRepo.create({
-				userId: t,
+			await this.purchaseRepo.receive(purchaseId);
+			await this.auditLogRepo.create({
+				userId: receivedBy,
 				action: "RECEIVE_PURCHASE",
 				entity: "purchases",
-				entity_id: e
-			}), { success: !0 };
-		} catch (e) {
-			throw E.error("Receive purchase error:", e), e.code === "P2025" ? new A("Compra") : e;
+				entity_id: purchaseId
+			});
+			return { success: true };
+		} catch (error) {
+			logger.error("Receive purchase error:", error);
+			if (error.code === "P2025") throw new NotFoundError("Compra");
+			throw error;
 		}
 	}
-	async updatePaymentStatus(e, t) {
+	async updatePaymentStatus(purchaseId, paymentStatus) {
 		try {
-			return await this.purchaseRepo.updatePaymentStatus(e, t), { success: !0 };
-		} catch (e) {
-			throw E.error("Update payment status error:", e), e.code === "P2025" ? new A("Compra") : e;
+			await this.purchaseRepo.updatePaymentStatus(purchaseId, paymentStatus);
+			return { success: true };
+		} catch (error) {
+			logger.error("Update payment status error:", error);
+			if (error.code === "P2025") throw new NotFoundError("Compra");
+			throw error;
 		}
 	}
-	async cancelPurchase(e, t) {
+	async cancelPurchase(purchaseId, cancelledBy) {
 		try {
-			return await this.purchaseRepo.cancel(e), await this.auditLogRepo.create({
-				userId: t,
+			await this.purchaseRepo.cancel(purchaseId);
+			await this.auditLogRepo.create({
+				userId: cancelledBy,
 				action: "CANCEL_PURCHASE",
 				entity: "purchases",
-				entity_id: e
-			}), { success: !0 };
-		} catch (e) {
-			throw E.error("Cancel purchase error:", e), e.code === "P2025" ? new A("Compra") : e;
+				entity_id: purchaseId
+			});
+			return { success: true };
+		} catch (error) {
+			logger.error("Cancel purchase error:", error);
+			if (error.code === "P2025") throw new NotFoundError("Compra");
+			throw error;
 		}
 	}
-}, ze = class {
+};
+//#endregion
+//#region src/backend/services/SettingsService.ts
+var SettingsService = class {
 	settingsRepo;
-	constructor(e) {
-		this.settingsRepo = e;
+	constructor(settingsRepo) {
+		this.settingsRepo = settingsRepo;
 	}
 	async getSettings() {
 		return this.settingsRepo.getAll();
 	}
-	async updateSettings(e) {
-		return await this.settingsRepo.upsertMany(e), { success: !0 };
+	async updateSettings(settings) {
+		await this.settingsRepo.upsertMany(settings);
+		return { success: true };
 	}
-	async getSetting(e, t = "") {
-		return this.settingsRepo.get(e, t);
+	async getSetting(key, defaultValue = "") {
+		return this.settingsRepo.get(key, defaultValue);
 	}
 	async getTaxSettings() {
 		return this.settingsRepo.getTaxSettings();
 	}
-	async updateTaxSettings(e, t, n) {
-		return await this.settingsRepo.updateTaxSettings(e, t, n), { success: !0 };
+	async updateTaxSettings(taxRate, taxType, taxIncluded) {
+		await this.settingsRepo.updateTaxSettings(taxRate, taxType, taxIncluded);
+		return { success: true };
 	}
-}, Be = 8, Ve = /[A-Z]/, He = /[a-z]/, Ue = /[0-9]/, We = /[!@#$%^&*()_\-+=<>?/{}~|]/, Ge = `La contraseña debe tener al menos ${Be} caracteres, una mayúscula, un número y un carácter especial`;
-function z(e) {
-	return e.length < Be || !Ve.test(e) || !He.test(e) || !Ue.test(e) || !We.test(e) ? {
-		valid: !1,
-		error: Ge
-	} : {
-		valid: !0,
+};
+//#endregion
+//#region src/shared/validation.ts
+var MIN_LENGTH = 8;
+var UPPERCASE_RE = /[A-Z]/;
+var LOWERCASE_RE = /[a-z]/;
+var NUMBER_RE = /[0-9]/;
+var SPECIAL_RE = /[!@#$%^&*()_\-+=<>?/{}~|]/;
+var PASSWORD_ERROR = `La contraseña debe tener al menos ${MIN_LENGTH} caracteres, una mayúscula, un número y un carácter especial`;
+function validatePassword(password) {
+	if (password.length < MIN_LENGTH) return {
+		valid: false,
+		error: PASSWORD_ERROR
+	};
+	if (!UPPERCASE_RE.test(password)) return {
+		valid: false,
+		error: PASSWORD_ERROR
+	};
+	if (!LOWERCASE_RE.test(password)) return {
+		valid: false,
+		error: PASSWORD_ERROR
+	};
+	if (!NUMBER_RE.test(password)) return {
+		valid: false,
+		error: PASSWORD_ERROR
+	};
+	if (!SPECIAL_RE.test(password)) return {
+		valid: false,
+		error: PASSWORD_ERROR
+	};
+	return {
+		valid: true,
 		error: ""
 	};
 }
 //#endregion
 //#region src/backend/services/UserService.ts
-var Ke = class {
+var UserService = class {
 	userRepo;
 	auditLogRepo;
-	constructor(e, t) {
-		this.userRepo = e, this.auditLogRepo = t;
+	constructor(userRepo, auditLogRepo) {
+		this.userRepo = userRepo;
+		this.auditLogRepo = auditLogRepo;
 	}
 	async getAllUsers() {
 		try {
 			return await this.userRepo.findAll();
-		} catch (e) {
-			throw E.error("Get all users error:", e), Error("Error al obtener usuarios");
+		} catch (error) {
+			logger.error("Get all users error:", error);
+			throw new Error("Error al obtener usuarios");
 		}
 	}
-	async getUserById(e) {
+	async getUserById(id) {
 		try {
-			let t = await this.userRepo.findById(e);
-			if (!t) throw new A("Usuario");
-			return t;
-		} catch (e) {
-			throw E.error("Get user by ID error:", e), e.code === "P2025" ? new A("Usuario") : e;
+			const user = await this.userRepo.findById(id);
+			if (!user) throw new NotFoundError("Usuario");
+			return user;
+		} catch (error) {
+			logger.error("Get user by ID error:", error);
+			if (error.code === "P2025") throw new NotFoundError("Usuario");
+			throw error;
 		}
 	}
-	async createUser(e, t) {
+	async createUser(data, createdBy) {
 		try {
-			if (await this.userRepo.exists(e.username)) throw new M(`El usuario '${e.username}' ya existe`);
-			let n = z(e.password);
-			if (!n.valid) throw new j(n.error);
-			let r = await v.genSalt(10), i = await v.hash(e.password, r), a;
-			if (e.question && e.answer) {
-				let t = await v.genSalt(10);
-				a = await v.hash(e.answer.toLowerCase().trim(), t);
+			if (await this.userRepo.exists(data.username)) throw new ConflictError(`El usuario '${data.username}' ya existe`);
+			const pwCheck = validatePassword(data.password);
+			if (!pwCheck.valid) throw new ValidationError(pwCheck.error);
+			const salt = await bcrypt.genSalt(10);
+			const hashedPassword = await bcrypt.hash(data.password, salt);
+			let security_answer_hash;
+			if (data.question && data.answer) {
+				const answerSalt = await bcrypt.genSalt(10);
+				security_answer_hash = await bcrypt.hash(data.answer.toLowerCase().trim(), answerSalt);
 			}
-			let o = await this.userRepo.create({
-				username: e.username,
-				password_hash: i,
-				role: e.role,
-				security_question: e.question || null,
-				security_answer_hash: a || null
+			const user = await this.userRepo.create({
+				username: data.username,
+				password_hash: hashedPassword,
+				role: data.role,
+				security_question: data.question || null,
+				security_answer_hash: security_answer_hash || null
 			});
-			return await this.auditLogRepo.create({
-				userId: t,
+			await this.auditLogRepo.create({
+				userId: createdBy,
 				action: "CREATE_USER",
 				entity: "users",
-				entity_id: o.id
-			}), o;
-		} catch (e) {
-			throw E.error("Create user error:", e), e.code === "P2002" ? new M("El nombre de usuario ya está en uso") : e;
+				entity_id: user.id
+			});
+			return user;
+		} catch (error) {
+			logger.error("Create user error:", error);
+			if (error.code === "P2002") throw new ConflictError("El nombre de usuario ya está en uso");
+			throw error;
 		}
 	}
-	async updateUser(e, t, n) {
+	async updateUser(id, data, updatedBy) {
 		try {
-			if (t.username && await this.userRepo.exists(t.username, e)) throw new M(`El usuario '${t.username}' ya existe`);
-			let r = await this.userRepo.update(e, t);
-			return await this.auditLogRepo.create({
-				userId: n,
+			if (data.username) {
+				if (await this.userRepo.exists(data.username, id)) throw new ConflictError(`El usuario '${data.username}' ya existe`);
+			}
+			const user = await this.userRepo.update(id, data);
+			await this.auditLogRepo.create({
+				userId: updatedBy,
 				action: "UPDATE_USER",
 				entity: "users",
-				entity_id: e
-			}), r;
-		} catch (e) {
-			throw E.error("Update user error:", e), e.code === "P2025" ? new A("Usuario") : e;
+				entity_id: id
+			});
+			return user;
+		} catch (error) {
+			logger.error("Update user error:", error);
+			if (error.code === "P2025") throw new NotFoundError("Usuario");
+			throw error;
 		}
 	}
-	async deleteUser(e, t) {
+	async deleteUser(id, deletedBy) {
 		try {
-			if (!await this.userRepo.findById(e)) throw new A("Usuario");
-			if (e === t) throw new N("No puedes eliminar tu propio usuario");
-			return await this.userRepo.delete(e), await this.auditLogRepo.create({
-				userId: t,
+			if (!await this.userRepo.findById(id)) throw new NotFoundError("Usuario");
+			if (id === deletedBy) throw new BusinessRuleError("No puedes eliminar tu propio usuario");
+			await this.userRepo.delete(id);
+			await this.auditLogRepo.create({
+				userId: deletedBy,
 				action: "DELETE_USER",
 				entity: "users",
-				entity_id: e
-			}), { success: !0 };
-		} catch (e) {
-			throw E.error("Delete user error:", e), e.code === "P2025" ? new A("Usuario") : e;
+				entity_id: id
+			});
+			return { success: true };
+		} catch (error) {
+			logger.error("Delete user error:", error);
+			if (error.code === "P2025") throw new NotFoundError("Usuario");
+			throw error;
 		}
 	}
-	async changePassword(e, t, n) {
+	async changePassword(userId, newPassword, changedBy) {
 		try {
-			let r = z(t);
-			if (!r.valid) throw new j(r.error);
-			let i = await v.genSalt(10), a = await v.hash(t, i);
-			return await this.userRepo.update(e, { password_hash: a }), await this.auditLogRepo.create({
-				userId: n,
+			const pwCheck = validatePassword(newPassword);
+			if (!pwCheck.valid) throw new ValidationError(pwCheck.error);
+			const salt = await bcrypt.genSalt(10);
+			const hashedPassword = await bcrypt.hash(newPassword, salt);
+			await this.userRepo.update(userId, { password_hash: hashedPassword });
+			await this.auditLogRepo.create({
+				userId: changedBy,
 				action: "CHANGE_PASSWORD",
 				entity: "users",
-				entity_id: e
-			}), { success: !0 };
-		} catch (e) {
-			throw E.error("Change password error:", e), e.code === "P2025" ? new A("Usuario") : e;
+				entity_id: userId
+			});
+			return { success: true };
+		} catch (error) {
+			logger.error("Change password error:", error);
+			if (error.code === "P2025") throw new NotFoundError("Usuario");
+			throw error;
 		}
 	}
-}, B = 5, qe = 900 * 1e3, V = /* @__PURE__ */ new Map(), Je = class {
+};
+//#endregion
+//#region src/backend/services/AuthService.ts
+var MAX_ATTEMPTS = 5;
+var LOCKOUT_MS = 900 * 1e3;
+var recoveryTokens = /* @__PURE__ */ new Map();
+var AuthService = class {
 	userRepo;
-	constructor(e) {
-		this.userRepo = e;
+	constructor(userRepo) {
+		this.userRepo = userRepo;
 	}
-	async getSecurityQuestion(e) {
+	async getSecurityQuestion(username) {
 		try {
-			let t = await this.userRepo.findByUsername(e);
-			return !t || !t.security_question ? {
-				success: !1,
+			const user = await this.userRepo.findByUsername(username);
+			if (!user || !user.security_question) return {
+				success: false,
 				error: "Usuario no encontrado o no tiene pregunta de seguridad configurada"
-			} : {
-				success: !0,
-				question: t.security_question
 			};
-		} catch (e) {
-			return E.error({ err: e }, "Get security question error"), {
-				success: !1,
+			return {
+				success: true,
+				question: user.security_question
+			};
+		} catch (error) {
+			logger.error({ err: error }, "Get security question error");
+			return {
+				success: false,
 				error: "Error interno del servidor"
 			};
 		}
 	}
-	async verifySecurityAnswer(e, t) {
+	async verifySecurityAnswer(username, answer) {
 		try {
-			let n = await this.userRepo.findByUsername(e);
-			if (!n || !n.security_answer_hash) return {
-				success: !1,
+			const user = await this.userRepo.findByUsername(username);
+			if (!user || !user.security_answer_hash) return {
+				success: false,
 				error: "Usuario no encontrado o no tiene pregunta de seguridad configurada"
 			};
-			if (!await v.compare(t.toLowerCase().trim(), n.security_answer_hash)) return {
-				success: !1,
+			if (!await bcrypt.compare(answer.toLowerCase().trim(), user.security_answer_hash)) return {
+				success: false,
 				error: "Respuesta incorrecta"
 			};
-			let r = y.randomUUID();
-			return V.set(r, {
-				username: e,
+			const token = crypto.randomUUID();
+			recoveryTokens.set(token, {
+				username,
 				expiresAt: Date.now() + 600 * 1e3
-			}), {
-				success: !0,
-				token: r
-			};
-		} catch (e) {
-			return E.error({ err: e }, "Verify security answer error"), {
-				success: !1,
-				error: "Error interno del servidor"
-			};
-		}
-	}
-	async resetPassword(e, t) {
-		let n = V.get(e);
-		if (!n || n.expiresAt < Date.now()) return V.delete(e), {
-			success: !1,
-			error: "Token inválido o expirado"
-		};
-		let r = z(t);
-		if (!r.valid) return {
-			success: !1,
-			error: r.error
-		};
-		try {
-			let r = await v.genSalt(10), i = await v.hash(t, r);
-			return await this.userRepo.updateByUsername(n.username, { password_hash: i }), V.delete(e), { success: !0 };
-		} catch (e) {
-			return E.error({ err: e }, "Reset password error"), {
-				success: !1,
-				error: "Error interno del servidor"
-			};
-		}
-	}
-	async setSecurityQuestion(e, t, n) {
-		try {
-			let r = await v.genSalt(10), i = await v.hash(n.toLowerCase().trim(), r);
-			return await this.userRepo.update(e, {
-				security_question: t,
-				security_answer_hash: i
-			}), { success: !0 };
-		} catch (e) {
-			return E.error({ err: e }, "Set security question error"), {
-				success: !1,
-				error: "Error interno del servidor"
-			};
-		}
-	}
-	async login(e, t) {
-		try {
-			let n = await this.userRepo.findByUsername(e);
-			if (!n) return {
-				success: !1,
-				error: "Usuario no encontrado"
-			};
-			let r = Date.now();
-			if (n.locked_until && new Date(n.locked_until).getTime() > r) {
-				let e = new Date(n.locked_until).getTime() - r, t = Math.ceil(e / 6e4);
-				return {
-					success: !1,
-					error: `Demasiados intentos. Bloqueado por ${t} minuto${t > 1 ? "s" : ""}`,
-					remainingAttempts: 0,
-					locked: !0,
-					lockoutRemainingMs: e
-				};
-			}
-			if (n.failed_attempts >= B && await this.userRepo.resetLoginAttempts(e), !await v.compare(t, n.password_hash)) {
-				let t = n.failed_attempts + 1, i = B - t;
-				if (t >= B) {
-					let n = new Date(r + qe);
-					return await this.userRepo.updateLoginAttempts(e, t, n), {
-						success: !1,
-						error: "Demasiados intentos. Bloqueado por 15 minutos",
-						remainingAttempts: 0,
-						locked: !0,
-						lockoutRemainingMs: qe
-					};
-				}
-				return await this.userRepo.updateLoginAttempts(e, t, null), {
-					success: !1,
-					error: i > 0 ? `Contraseña incorrecta. Intentos restantes: ${i}` : "Contraseña incorrecta",
-					remainingAttempts: i
-				};
-			}
-			await this.userRepo.resetLoginAttempts(e);
-			let { password_hash: i, ...a } = n;
-			return {
-				success: !0,
-				user: a
-			};
-		} catch (e) {
-			return E.error({ err: e }, "Login error"), e.code === "P2025" ? {
-				success: !1,
-				error: "Usuario no encontrado",
-				remainingAttempts: 0
-			} : {
-				success: !1,
-				error: "Error interno del servidor"
-			};
-		}
-	}
-	async register(e) {
-		try {
-			if (await this.userRepo.exists(e.username)) return {
-				success: !1,
-				error: `El usuario '${e.username}' ya existe`
-			};
-			let t = z(e.password);
-			if (!t.valid) return {
-				success: !1,
-				error: t.error
-			};
-			let n = await v.genSalt(10), r = await v.hash(e.password, n), i;
-			if (e.security_question && e.security_answer) {
-				let t = await v.genSalt(10);
-				i = await v.hash(e.security_answer.toLowerCase().trim(), t);
-			}
-			let a = await this.userRepo.create({
-				username: e.username,
-				password_hash: r,
-				role: e.role,
-				security_question: e.security_question || null,
-				security_answer_hash: i || null
 			});
 			return {
-				success: !0,
-				user: {
-					id: a.id,
-					username: a.username,
-					role: a.role,
-					created_at: a.created_at,
-					updated_at: a.updated_at
-				}
+				success: true,
+				token
 			};
-		} catch (e) {
-			return E.error({ err: e }, "Register error"), e.code === "P2002" ? {
-				success: !1,
-				error: "El nombre de usuario ya está en uso"
-			} : {
-				success: !1,
-				error: "Error interno del servidor: " + (e.message || String(e))
-			};
-		}
-	}
-	async changePassword(e, t, n) {
-		try {
-			let r = await this.userRepo.findByIdWithPassword(e);
-			if (!r) return {
-				success: !1,
-				error: "Usuario no encontrado"
-			};
-			if (!await v.compare(t, r.password_hash)) return {
-				success: !1,
-				error: "Contraseña actual incorrecta"
-			};
-			let i = z(n);
-			if (!i.valid) return {
-				success: !1,
-				error: i.error
-			};
-			let a = await v.genSalt(10), o = await v.hash(n, a);
-			return await this.userRepo.update(e, { password_hash: o }), { success: !0 };
-		} catch (e) {
-			return E.error({ err: e }, "Change password error"), {
-				success: !1,
+		} catch (error) {
+			logger.error({ err: error }, "Verify security answer error");
+			return {
+				success: false,
 				error: "Error interno del servidor"
 			};
 		}
 	}
-}, Ye = class {
+	async resetPassword(token, newPassword) {
+		const session = recoveryTokens.get(token);
+		if (!session || session.expiresAt < Date.now()) {
+			recoveryTokens.delete(token);
+			return {
+				success: false,
+				error: "Token inválido o expirado"
+			};
+		}
+		const pwCheck = validatePassword(newPassword);
+		if (!pwCheck.valid) return {
+			success: false,
+			error: pwCheck.error
+		};
+		try {
+			const salt = await bcrypt.genSalt(10);
+			const hashedPassword = await bcrypt.hash(newPassword, salt);
+			await this.userRepo.updateByUsername(session.username, { password_hash: hashedPassword });
+			recoveryTokens.delete(token);
+			return { success: true };
+		} catch (error) {
+			logger.error({ err: error }, "Reset password error");
+			return {
+				success: false,
+				error: "Error interno del servidor"
+			};
+		}
+	}
+	async setSecurityQuestion(userId, question, answer) {
+		try {
+			const salt = await bcrypt.genSalt(10);
+			const hashedAnswer = await bcrypt.hash(answer.toLowerCase().trim(), salt);
+			await this.userRepo.update(userId, {
+				security_question: question,
+				security_answer_hash: hashedAnswer
+			});
+			return { success: true };
+		} catch (error) {
+			logger.error({ err: error }, "Set security question error");
+			return {
+				success: false,
+				error: "Error interno del servidor"
+			};
+		}
+	}
+	async login(username, password) {
+		try {
+			const user = await this.userRepo.findByUsername(username);
+			if (!user) return {
+				success: false,
+				error: "Usuario no encontrado"
+			};
+			const now = Date.now();
+			if (user.locked_until && new Date(user.locked_until).getTime() > now) {
+				const remainingMs = new Date(user.locked_until).getTime() - now;
+				const minutes = Math.ceil(remainingMs / 6e4);
+				return {
+					success: false,
+					error: `Demasiados intentos. Bloqueado por ${minutes} minuto${minutes > 1 ? "s" : ""}`,
+					remainingAttempts: 0,
+					locked: true,
+					lockoutRemainingMs: remainingMs
+				};
+			}
+			if (user.failed_attempts >= MAX_ATTEMPTS) await this.userRepo.resetLoginAttempts(username);
+			if (!await bcrypt.compare(password, user.password_hash)) {
+				const newAttempts = user.failed_attempts + 1;
+				const remaining = MAX_ATTEMPTS - newAttempts;
+				if (newAttempts >= MAX_ATTEMPTS) {
+					const lockedUntil = new Date(now + LOCKOUT_MS);
+					await this.userRepo.updateLoginAttempts(username, newAttempts, lockedUntil);
+					return {
+						success: false,
+						error: `Demasiados intentos. Bloqueado por 15 minutos`,
+						remainingAttempts: 0,
+						locked: true,
+						lockoutRemainingMs: LOCKOUT_MS
+					};
+				}
+				await this.userRepo.updateLoginAttempts(username, newAttempts, null);
+				return {
+					success: false,
+					error: remaining > 0 ? `Contraseña incorrecta. Intentos restantes: ${remaining}` : "Contraseña incorrecta",
+					remainingAttempts: remaining
+				};
+			}
+			await this.userRepo.resetLoginAttempts(username);
+			const { password_hash: _, ...userWithoutPassword } = user;
+			return {
+				success: true,
+				user: userWithoutPassword
+			};
+		} catch (error) {
+			logger.error({ err: error }, "Login error");
+			if (error.code === "P2025") return {
+				success: false,
+				error: "Usuario no encontrado",
+				remainingAttempts: 0
+			};
+			return {
+				success: false,
+				error: "Error interno del servidor"
+			};
+		}
+	}
+	async register(userData) {
+		try {
+			if (await this.userRepo.exists(userData.username)) return {
+				success: false,
+				error: `El usuario '${userData.username}' ya existe`
+			};
+			const pwCheck = validatePassword(userData.password);
+			if (!pwCheck.valid) return {
+				success: false,
+				error: pwCheck.error
+			};
+			const salt = await bcrypt.genSalt(10);
+			const hashedPassword = await bcrypt.hash(userData.password, salt);
+			let security_answer_hash;
+			if (userData.security_question && userData.security_answer) {
+				const answerSalt = await bcrypt.genSalt(10);
+				security_answer_hash = await bcrypt.hash(userData.security_answer.toLowerCase().trim(), answerSalt);
+			}
+			const user = await this.userRepo.create({
+				username: userData.username,
+				password_hash: hashedPassword,
+				role: userData.role,
+				security_question: userData.security_question || null,
+				security_answer_hash: security_answer_hash || null
+			});
+			return {
+				success: true,
+				user: {
+					id: user.id,
+					username: user.username,
+					role: user.role,
+					created_at: user.created_at,
+					updated_at: user.updated_at
+				}
+			};
+		} catch (error) {
+			logger.error({ err: error }, "Register error");
+			if (error.code === "P2002") return {
+				success: false,
+				error: "El nombre de usuario ya está en uso"
+			};
+			return {
+				success: false,
+				error: "Error interno del servidor: " + (error.message || String(error))
+			};
+		}
+	}
+	async changePassword(userId, oldPassword, newPassword) {
+		try {
+			const user = await this.userRepo.findByIdWithPassword(userId);
+			if (!user) return {
+				success: false,
+				error: "Usuario no encontrado"
+			};
+			if (!await bcrypt.compare(oldPassword, user.password_hash)) return {
+				success: false,
+				error: "Contraseña actual incorrecta"
+			};
+			const pwCheck = validatePassword(newPassword);
+			if (!pwCheck.valid) return {
+				success: false,
+				error: pwCheck.error
+			};
+			const salt = await bcrypt.genSalt(10);
+			const hashedPassword = await bcrypt.hash(newPassword, salt);
+			await this.userRepo.update(userId, { password_hash: hashedPassword });
+			return { success: true };
+		} catch (error) {
+			logger.error({ err: error }, "Change password error");
+			return {
+				success: false,
+				error: "Error interno del servidor"
+			};
+		}
+	}
+};
+//#endregion
+//#region src/backend/services/CategoryService.ts
+var CategoryService = class {
 	categoryRepo;
 	auditLogRepo;
-	constructor(e, t) {
-		this.categoryRepo = e, this.auditLogRepo = t;
+	constructor(categoryRepo, auditLogRepo) {
+		this.categoryRepo = categoryRepo;
+		this.auditLogRepo = auditLogRepo;
 	}
-	async getAllCategories(e) {
-		return await this.categoryRepo.findAll(e);
+	async getAllCategories(search) {
+		return await this.categoryRepo.findAll(search);
 	}
-	async getCategoryById(e) {
-		return await F(() => this.categoryRepo.findById(e), "Categoría", e);
+	async getCategoryById(id) {
+		return await findOrThrow(() => this.categoryRepo.findById(id), "Categoría", id);
 	}
-	async createCategory(e, t) {
-		if (await this.categoryRepo.findByName(e.name)) throw new M(`La categoría "${e.name}" ya existe.`);
-		let n = await this.categoryRepo.create(e);
-		return await this.auditLogRepo.create({
-			userId: t,
+	async createCategory(data, createdBy) {
+		if (await this.categoryRepo.findByName(data.name)) throw new ConflictError(`La categoría "${data.name}" ya existe.`);
+		const category = await this.categoryRepo.create(data);
+		await this.auditLogRepo.create({
+			userId: createdBy,
 			action: "CREATE_CATEGORY",
 			entity: "categories",
-			entity_id: n.id
-		}), n;
+			entity_id: category.id
+		});
+		return category;
 	}
-	async updateCategory(e, t, n) {
-		await F(() => this.categoryRepo.findById(e), "Categoría", e);
-		let r = await this.categoryRepo.findByName(t.name);
-		if (r && r.id !== e) throw new M(`La categoría "${t.name}" ya existe.`);
-		let i = await this.categoryRepo.update(e, t);
-		return await this.auditLogRepo.create({
-			userId: n,
+	async updateCategory(id, data, updatedBy) {
+		await findOrThrow(() => this.categoryRepo.findById(id), "Categoría", id);
+		const duplicate = await this.categoryRepo.findByName(data.name);
+		if (duplicate && duplicate.id !== id) throw new ConflictError(`La categoría "${data.name}" ya existe.`);
+		const category = await this.categoryRepo.update(id, data);
+		await this.auditLogRepo.create({
+			userId: updatedBy,
 			action: "UPDATE_CATEGORY",
 			entity: "categories",
-			entity_id: e
-		}), i;
+			entity_id: id
+		});
+		return category;
 	}
-	async deleteCategory(e, t) {
-		await F(() => this.categoryRepo.findById(e), "Categoría", e);
-		let n = await this.categoryRepo.getProductCount(e);
-		if (n > 0) throw new N(`No se puede eliminar la categoría porque tiene ${n} producto(s) asociado(s).`);
-		return await this.categoryRepo.delete(e), await this.auditLogRepo.create({
-			userId: t,
+	async deleteCategory(id, deletedBy) {
+		await findOrThrow(() => this.categoryRepo.findById(id), "Categoría", id);
+		const productCount = await this.categoryRepo.getProductCount(id);
+		if (productCount > 0) throw new BusinessRuleError(`No se puede eliminar la categoría porque tiene ${productCount} producto(s) asociado(s).`);
+		await this.categoryRepo.delete(id);
+		await this.auditLogRepo.create({
+			userId: deletedBy,
 			action: "DELETE_CATEGORY",
 			entity: "categories",
-			entity_id: e
-		}), { success: !0 };
+			entity_id: id
+		});
+		return { success: true };
 	}
-}, Xe = class {
+};
+//#endregion
+//#region src/backend/services/BackupService.ts
+var BackupService = class {
 	adapter;
-	constructor(e) {
-		this.adapter = e;
+	constructor(adapter) {
+		this.adapter = adapter;
 	}
-	async createBackup(e) {
-		return this.adapter.createBackup(e);
+	async createBackup(label) {
+		return this.adapter.createBackup(label);
 	}
 	async listBackups() {
 		return this.adapter.listBackups();
 	}
-	async restoreBackup(e) {
-		return this.adapter.restoreBackup(e);
+	async restoreBackup(backupPath) {
+		return this.adapter.restoreBackup(backupPath);
 	}
-	async deleteBackup(e) {
-		return this.adapter.deleteBackup(e);
+	async deleteBackup(backupPath) {
+		return this.adapter.deleteBackup(backupPath);
 	}
 	async createScheduledBackup() {
 		return this.adapter.createScheduledBackup();
 	}
-	async cleanupOldBackups(e) {
-		return this.adapter.cleanupOldBackups(e);
+	async cleanupOldBackups(keep) {
+		return this.adapter.cleanupOldBackups(keep);
 	}
-}, Ze = "dashboard:stats", Qe = class {
+};
+//#endregion
+//#region src/backend/services/DashboardService.ts
+var CACHE_KEY_STATS = "dashboard:stats";
+var DashboardService = class {
 	repo;
 	cache;
-	constructor(e, t) {
-		this.repo = e, this.cache = t;
+	constructor(repo, cache) {
+		this.repo = repo;
+		this.cache = cache;
 	}
-	async getStats(e, t) {
-		return e || t ? this.repo.getStats(e, t) : this.cache.getOrSet(Ze, () => this.repo.getStats());
+	async getStats(startDate, endDate) {
+		if (startDate || endDate) return this.repo.getStats(startDate, endDate);
+		return this.cache.getOrSet(CACHE_KEY_STATS, () => this.repo.getStats());
 	}
-	async getWeeklySales(e) {
-		return this.repo.getWeeklySales(e);
+	async getWeeklySales(days) {
+		return this.repo.getWeeklySales(days);
 	}
-	async getLowStockProducts(e) {
-		return this.repo.getLowStockProducts(e);
+	async getLowStockProducts(limit) {
+		return this.repo.getLowStockProducts(limit);
 	}
-	async getSalesByPaymentMethod(e, t) {
-		return this.repo.getSalesByPaymentMethod(e, t);
+	async getSalesByPaymentMethod(startDate, endDate) {
+		return this.repo.getSalesByPaymentMethod(startDate, endDate);
 	}
-	async getTopProducts(e, t, n) {
-		return this.repo.getTopProducts(e, t, n);
+	async getTopProducts(limit, startDate, endDate) {
+		return this.repo.getTopProducts(limit, startDate, endDate);
 	}
-	async getTopClients(e, t, n) {
-		return this.repo.getTopClients(e, t, n);
+	async getTopClients(limit, startDate, endDate) {
+		return this.repo.getTopClients(limit, startDate, endDate);
 	}
-	async getSalesByHour(e, t) {
-		return this.repo.getSalesByHour(e, t);
+	async getSalesByHour(startDate, endDate) {
+		return this.repo.getSalesByHour(startDate, endDate);
 	}
-	async getCashRegisterSummary(e, t) {
-		return this.repo.getCashRegisterSummary(e, t);
+	async getCashRegisterSummary(startDate, endDate) {
+		return this.repo.getCashRegisterSummary(startDate, endDate);
 	}
 	async getInventoryMetrics() {
 		return this.repo.getInventoryMetrics();
@@ -2924,23 +3839,30 @@ var Ke = class {
 	invalidateCache() {
 		this.cache.invalidate();
 	}
-}, $e = class {
+};
+//#endregion
+//#region src/backend/services/CacheService.ts
+var CacheService = class {
 	cache = /* @__PURE__ */ new Map();
 	defaultTTL;
-	constructor(e = 3e4) {
-		this.defaultTTL = e;
+	constructor(defaultTTL = 3e4) {
+		this.defaultTTL = defaultTTL;
 	}
-	async getOrSet(e, t, n) {
-		let r = Date.now(), i = n ?? this.defaultTTL, a = this.cache.get(e);
-		if (a && r - a.timestamp < i) return a.data;
-		let o = await t();
-		return this.cache.set(e, {
-			data: o,
-			timestamp: r
-		}), o;
+	async getOrSet(key, fn, ttl) {
+		const now = Date.now();
+		const effectiveTTL = ttl ?? this.defaultTTL;
+		const entry = this.cache.get(key);
+		if (entry && now - entry.timestamp < effectiveTTL) return entry.data;
+		const data = await fn();
+		this.cache.set(key, {
+			data,
+			timestamp: now
+		});
+		return data;
 	}
-	invalidate(e) {
-		e ? this.cache.delete(e) : this.cache.clear();
+	invalidate(key) {
+		if (key) this.cache.delete(key);
+		else this.cache.clear();
 	}
 	clear() {
 		this.cache.clear();
@@ -2948,7 +3870,10 @@ var Ke = class {
 	get size() {
 		return this.cache.size;
 	}
-}, et = class {
+};
+//#endregion
+//#region src/backend/services/ReportService.ts
+var ReportService = class {
 	pdfGenerator;
 	excelGenerator;
 	dashboardService;
@@ -2956,142 +3881,171 @@ var Ke = class {
 	productService;
 	cashRegisterService;
 	settingsService;
-	constructor(e, t, n, r, i, a, o) {
-		this.pdfGenerator = e, this.excelGenerator = t, this.dashboardService = n, this.saleService = r, this.productService = i, this.cashRegisterService = a, this.settingsService = o;
+	constructor(pdfGenerator, excelGenerator, dashboardService, saleService, productService, cashRegisterService, settingsService) {
+		this.pdfGenerator = pdfGenerator;
+		this.excelGenerator = excelGenerator;
+		this.dashboardService = dashboardService;
+		this.saleService = saleService;
+		this.productService = productService;
+		this.cashRegisterService = cashRegisterService;
+		this.settingsService = settingsService;
 	}
-	async generateReport(e) {
-		let t = e.format === "pdf" ? this.pdfGenerator : this.excelGenerator, n = e.title ?? this.getDefaultTitle(e.type);
-		switch (e.type) {
-			case "daily_sales": return this.generateSalesReport(t, e, n, !0);
-			case "sales_summary": return this.generateSalesReport(t, e, n, !1);
-			case "profit_summary": return this.generateProfitReport(t, e, n);
-			case "inventory": return this.generateInventoryReport(t, !1, n);
-			case "low_stock": return this.generateInventoryReport(t, !0, n);
-			case "top_products": return this.generateTopProductsReport(t, e, n);
-			case "sale_receipt": return this.generateSaleReceipt(e);
-			case "cash_close": return this.generateCashCloseReport(t, e, n);
+	async generateReport(request) {
+		const generator = request.format === "pdf" ? this.pdfGenerator : this.excelGenerator;
+		const title = request.title ?? this.getDefaultTitle(request.type);
+		switch (request.type) {
+			case "daily_sales": return this.generateSalesReport(generator, request, title, true);
+			case "sales_summary": return this.generateSalesReport(generator, request, title, false);
+			case "profit_summary": return this.generateProfitReport(generator, request, title);
+			case "inventory": return this.generateInventoryReport(generator, false, title);
+			case "low_stock": return this.generateInventoryReport(generator, true, title);
+			case "top_products": return this.generateTopProductsReport(generator, request, title);
+			case "sale_receipt": return this.generateSaleReceipt(request);
+			case "cash_close": return this.generateCashCloseReport(generator, request, title);
 		}
 	}
-	async generateSalesReport(e, t, n, r = !0) {
-		let i = await this.saleService.getAllSales(t.startDate, t.endDate), a = await this.saleService.getSalesStats(t.startDate, t.endDate), o = await this.dashboardService.getSalesByPaymentMethod(t.startDate, t.endDate), s = o.find((e) => e.payment_method === "CASH"), c = o.find((e) => e.payment_method === "CARD"), l = {
-			totalSales: a.totalSales,
-			totalRevenue: a.totalRevenue,
-			averageSale: a.averageSale,
-			cashSales: s?._count?.id ?? 0,
-			cashRevenue: s?._sum?.total ?? 0,
-			cardSales: c?._count?.id ?? 0,
-			cardRevenue: c?._sum?.total ?? 0
-		}, u = i.map((e) => {
-			let t = e.created_at instanceof Date ? e.created_at : new Date(e.created_at), n = e;
+	async generateSalesReport(generator, request, title, showTable = true) {
+		const sales = await this.saleService.getAllSales(request.startDate, request.endDate);
+		const stats = await this.saleService.getSalesStats(request.startDate, request.endDate);
+		const paymentBreakdown = await this.dashboardService.getSalesByPaymentMethod(request.startDate, request.endDate);
+		const cash = paymentBreakdown.find((p) => p.payment_method === "CASH");
+		const card = paymentBreakdown.find((p) => p.payment_method === "CARD");
+		const totals = {
+			totalSales: stats.totalSales,
+			totalRevenue: stats.totalRevenue,
+			averageSale: stats.averageSale,
+			cashSales: cash?._count?.id ?? 0,
+			cashRevenue: cash?._sum?.total ?? 0,
+			cardSales: card?._count?.id ?? 0,
+			cardRevenue: card?._sum?.total ?? 0
+		};
+		const rows = sales.map((s) => {
+			const date = s.created_at instanceof Date ? s.created_at : new Date(s.created_at);
+			const saleWithCount = s;
 			return {
-				date: t.toLocaleDateString("es-PE"),
-				invoiceNumber: e.id,
-				client: e.client?.name ?? "N/A",
-				itemsCount: n._count?.items ?? 0,
-				subtotal: Number(e.subtotal),
-				tax: Number(e.tax_amount),
-				total: Number(e.total),
-				paymentMethod: e.payment_method ?? "N/A"
+				date: date.toLocaleDateString("es-PE"),
+				invoiceNumber: s.id,
+				client: s.client?.name ?? "N/A",
+				itemsCount: saleWithCount._count?.items ?? 0,
+				subtotal: Number(s.subtotal),
+				tax: Number(s.tax_amount),
+				total: Number(s.total),
+				paymentMethod: s.payment_method ?? "N/A"
 			};
 		});
-		return e.generateSalesReport(u, l, n, r);
+		return generator.generateSalesReport(rows, totals, title, showTable);
 	}
-	async generateProfitReport(e, t, n) {
-		let r = await this.dashboardService.getStats(t.startDate, t.endDate), i = {
-			totalSales: r.totalSales,
-			totalRevenue: r.totalRevenue,
-			averageSale: r.averageSale
-		}, a = [{
-			date: `${t.startDate?.toLocaleDateString("es-PE") ?? "Inicio"} - ${t.endDate?.toLocaleDateString("es-PE") ?? "Hoy"}`,
+	async generateProfitReport(generator, request, title) {
+		const stats = await this.dashboardService.getStats(request.startDate, request.endDate);
+		const totals = {
+			totalSales: stats.totalSales,
+			totalRevenue: stats.totalRevenue,
+			averageSale: stats.averageSale
+		};
+		const rows = [{
+			date: `${request.startDate?.toLocaleDateString("es-PE") ?? "Inicio"} - ${request.endDate?.toLocaleDateString("es-PE") ?? "Hoy"}`,
 			invoiceNumber: 0,
 			client: "-",
 			itemsCount: 0,
 			subtotal: 0,
 			tax: 0,
-			total: r.totalRevenue,
+			total: stats.totalRevenue,
 			paymentMethod: "-"
 		}];
-		return e.generateSalesReport(a, i, n);
+		return generator.generateSalesReport(rows, totals, title);
 	}
-	async generateInventoryReport(e, t, n) {
-		let r = await this.productService.getAllProducts(), i = await this.dashboardService.getInventoryMetrics(), a = (t ? r.filter((e) => e.stock <= (e.min_stock ?? 5) || e.stock === 0) : r).map((e) => ({
-			sku: e.sku,
-			name: e.name,
-			category: e.category?.name ?? "Sin categoría",
-			stock: e.stock,
-			minStock: e.min_stock,
-			purchasePrice: Number(e.price_purchase),
-			salePrice: Number(e.price_sale),
-			status: e.stock === 0 ? "out" : e.min_stock !== null && e.stock <= e.min_stock ? "low" : "ok"
+	async generateInventoryReport(generator, lowStockOnly, title) {
+		const products = await this.productService.getAllProducts();
+		const metrics = await this.dashboardService.getInventoryMetrics();
+		const rows = (lowStockOnly ? products.filter((p) => p.stock <= (p.min_stock ?? 5) || p.stock === 0) : products).map((p) => ({
+			sku: p.sku,
+			name: p.name,
+			category: p.category?.name ?? "Sin categoría",
+			stock: p.stock,
+			minStock: p.min_stock,
+			purchasePrice: Number(p.price_purchase),
+			salePrice: Number(p.price_sale),
+			status: p.stock === 0 ? "out" : p.min_stock !== null && p.stock <= p.min_stock ? "low" : "ok"
 		}));
-		return e.generateInventoryReport(a, i, n);
+		return generator.generateInventoryReport(rows, metrics, title);
 	}
-	async generateTopProductsReport(e, t, n) {
-		let r = await this.dashboardService.getTopProducts(50, t.startDate, t.endDate), i = await this.dashboardService.getInventoryMetrics(), a = r.map((e) => ({
-			sku: e.product_sku,
-			name: e.product_name,
-			category: e.category,
-			stock: e.total_quantity,
+	async generateTopProductsReport(generator, request, title) {
+		const topProducts = await this.dashboardService.getTopProducts(50, request.startDate, request.endDate);
+		const metrics = await this.dashboardService.getInventoryMetrics();
+		const rows = topProducts.map((p) => ({
+			sku: p.product_sku,
+			name: p.product_name,
+			category: p.category,
+			stock: p.total_quantity,
 			minStock: null,
 			purchasePrice: 0,
-			salePrice: e.avg_price,
+			salePrice: p.avg_price,
 			status: "ok"
 		}));
-		return e.generateInventoryReport(a, i, n);
+		return generator.generateInventoryReport(rows, metrics, title);
 	}
-	async generateSaleReceipt(e) {
-		if (!e.saleId) throw Error("Se requiere saleId para generar un comprobante");
-		let t = await this.saleService.getSaleDetails(e.saleId), n = await this.settingsService.getSettings(), r = (t.items || []).map((e) => ({
-			quantity: e.quantity,
-			productName: e.product?.name ?? "Producto",
-			unitPrice: Number(e.unit_price),
-			totalPrice: Number(e.unit_price) * e.quantity,
-			discountName: e.discount_name ?? null,
-			discountAmount: e.discount_amount == null ? null : Number(e.discount_amount),
-			finalPrice: e.final_unit_price == null ? null : Number(e.final_unit_price) * e.quantity
-		})), i = await this.settingsService.getTaxSettings(), a = {
-			saleId: t.id,
-			businessName: n.business_name || "INVENTARIO-POS",
-			businessAddress: n.business_address || "",
-			businessPhone: n.business_phone || "",
-			businessTaxId: n.business_tax_id || "",
-			ticketFooter: n.ticket_footer || "Gracias por su compra",
-			logoBase64: n.business_logo || void 0,
-			clientName: t.client?.name ?? "Cliente General",
-			clientDni: t.client?.dni ?? "",
-			clientTaxId: t.client?.tax_id ?? null,
-			createdAt: t.created_at,
-			paymentMethod: t.payment_method ?? "CASH",
-			items: r,
-			subtotal: Number(t.subtotal),
-			discountTotal: t.discount_total == null ? void 0 : Number(t.discount_total),
-			taxAmount: Number(t.tax_amount),
-			taxType: i.taxType || "iva",
-			taxRate: i.taxRate || 0,
-			total: Number(t.total)
+	async generateSaleReceipt(request) {
+		if (!request.saleId) throw new Error("Se requiere saleId para generar un comprobante");
+		const sale = await this.saleService.getSaleDetails(request.saleId);
+		const settings = await this.settingsService.getSettings();
+		const items = (sale.items || []).map((item) => ({
+			quantity: item.quantity,
+			productName: item.product?.name ?? "Producto",
+			unitPrice: Number(item.unit_price),
+			totalPrice: Number(item.unit_price) * item.quantity,
+			discountName: item.discount_name ?? null,
+			discountAmount: item.discount_amount != null ? Number(item.discount_amount) : null,
+			finalPrice: item.final_unit_price != null ? Number(item.final_unit_price) * item.quantity : null
+		}));
+		const taxSettings = await this.settingsService.getTaxSettings();
+		const receiptData = {
+			saleId: sale.id,
+			businessName: settings.business_name || "INVENTARIO-POS",
+			businessAddress: settings.business_address || "",
+			businessPhone: settings.business_phone || "",
+			businessTaxId: settings.business_tax_id || "",
+			ticketFooter: settings.ticket_footer || "Gracias por su compra",
+			logoBase64: settings.business_logo || void 0,
+			clientName: sale.client?.name ?? "Cliente General",
+			clientDni: sale.client?.dni ?? "",
+			clientTaxId: sale.client?.tax_id ?? null,
+			createdAt: sale.created_at,
+			paymentMethod: sale.payment_method ?? "CASH",
+			items,
+			subtotal: Number(sale.subtotal),
+			discountTotal: sale.discount_total != null ? Number(sale.discount_total) : void 0,
+			taxAmount: Number(sale.tax_amount),
+			taxType: taxSettings.taxType || "iva",
+			taxRate: taxSettings.taxRate || 0,
+			total: Number(sale.total)
 		};
-		return this.pdfGenerator.generateSaleReceipt(a);
+		return this.pdfGenerator.generateSaleReceipt(receiptData);
 	}
-	async generateCashCloseReport(e, t, n) {
-		if (!t.registerId) throw Error("Se requiere registerId para generar reporte de cierre");
-		let r = await this.cashRegisterService.getRegisterDetails(t.registerId), i = await this.settingsService.getSettings(), a = r.sales?.filter((e) => e.payment_method === "CASH").reduce((e, t) => e + Number(t.total), 0) ?? 0, o = r.sales?.filter((e) => e.payment_method === "CARD").reduce((e, t) => e + Number(t.total), 0) ?? 0, s = Number(r.opening_amount) + Number(r.total_sales), c = {
-			registerId: r.id,
-			openDate: r.opened_at,
-			closeDate: r.closed_at || r.updated_at,
-			openingAmount: Number(r.opening_amount),
-			totalSales: Number(r.total_sales),
-			cashSales: a,
-			cardSales: o,
-			salesCount: r.sales?.length ?? 0,
-			expectedCash: s,
-			realCash: Number(r.closing_amount) || s,
-			difference: Number(r.difference) || 0,
-			status: r.status || "PERFECT",
-			businessName: i.business_name || "INVENTARIO-POS"
+	async generateCashCloseReport(generator, request, title) {
+		if (!request.registerId) throw new Error("Se requiere registerId para generar reporte de cierre");
+		const details = await this.cashRegisterService.getRegisterDetails(request.registerId);
+		const settings = await this.settingsService.getSettings();
+		const totalCash = details.sales?.filter((s) => s.payment_method === "CASH").reduce((sum, s) => sum + Number(s.total), 0) ?? 0;
+		const totalCard = details.sales?.filter((s) => s.payment_method === "CARD").reduce((sum, s) => sum + Number(s.total), 0) ?? 0;
+		const expectedCash = Number(details.opening_amount) + Number(details.total_sales);
+		const cashCloseData = {
+			registerId: details.id,
+			openDate: details.opened_at,
+			closeDate: details.closed_at || details.updated_at,
+			openingAmount: Number(details.opening_amount),
+			totalSales: Number(details.total_sales),
+			cashSales: totalCash,
+			cardSales: totalCard,
+			salesCount: details.sales?.length ?? 0,
+			expectedCash,
+			realCash: Number(details.closing_amount) || expectedCash,
+			difference: Number(details.difference) || 0,
+			status: details.status || "PERFECT",
+			businessName: settings.business_name || "INVENTARIO-POS"
 		};
-		return e.generateCashCloseReport(c);
+		return generator.generateCashCloseReport(cashCloseData);
 	}
-	getDefaultTitle(e) {
+	getDefaultTitle(type) {
 		return {
 			daily_sales: "Reporte de Ventas del Día",
 			sales_summary: "Resumen de Ventas",
@@ -3101,259 +4055,587 @@ var Ke = class {
 			top_products: "Productos Más Vendidos",
 			sale_receipt: "Comprobante de Venta",
 			cash_close: "Reporte de Cierre de Caja"
-		}[e] ?? "Reporte";
+		}[type] ?? "Reporte";
 	}
-}, tt = "scheduler_", nt = class {
+};
+//#endregion
+//#region src/backend/services/SchedulerService.ts
+var SCHEDULER_PREFIX = "scheduler_";
+var SchedulerService = class {
 	reportService;
 	backupService;
 	dailyTimer = null;
 	weeklyTimer = null;
 	statePath;
-	constructor(e, t) {
-		this.reportService = e, this.backupService = t, this.statePath = S(process.cwd(), "scheduler-state.json");
+	constructor(reportService, backupService) {
+		this.reportService = reportService;
+		this.backupService = backupService;
+		this.statePath = join$1(process.cwd(), "scheduler-state.json");
 	}
 	start() {
-		E.info("Starting scheduled tasks"), this.scheduleDailyReport(), this.scheduleWeeklyReport(), this.scheduleDailyBackup();
+		logger.info("Starting scheduled tasks");
+		this.scheduleDailyReport();
+		this.scheduleWeeklyReport();
+		this.scheduleDailyBackup();
 	}
 	stop() {
-		this.dailyTimer && clearInterval(this.dailyTimer), this.weeklyTimer && clearInterval(this.weeklyTimer), E.info("Stopped scheduled tasks");
+		if (this.dailyTimer) clearInterval(this.dailyTimer);
+		if (this.weeklyTimer) clearInterval(this.weeklyTimer);
+		logger.info("Stopped scheduled tasks");
 	}
 	scheduleDailyReport() {
-		let e = async () => {
+		const runDaily = async () => {
 			try {
-				let e = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
-				if (this.getLastRun("daily_report") === e) return;
-				E.info("Generating daily report"), await this.reportService.generateReport({
+				const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+				if (this.getLastRun("daily_report") === today) return;
+				logger.info("Generating daily report");
+				await this.reportService.generateReport({
 					type: "daily_sales",
 					format: "pdf",
 					title: `Reporte Diario - ${(/* @__PURE__ */ new Date()).toLocaleDateString("es-PE")}`
-				}), this.setLastRun("daily_report", e), E.info("Daily report saved");
-			} catch (e) {
-				E.error({ err: e }, "Error generating daily report");
+				});
+				this.setLastRun("daily_report", today);
+				logger.info("Daily report saved");
+			} catch (err) {
+				logger.error({ err }, "Error generating daily report");
 			}
 		};
-		e(), this.dailyTimer = setInterval(e, 3600 * 1e3);
+		runDaily();
+		this.dailyTimer = setInterval(runDaily, 3600 * 1e3);
 	}
 	scheduleWeeklyReport() {
-		let e = async () => {
+		const runWeekly = async () => {
 			try {
-				let e = /* @__PURE__ */ new Date(), t = this.getWeekNumber(e);
-				if (this.getLastRun("weekly_report") === String(t)) return;
-				let n = new Date(e);
-				n.setDate(e.getDate() - e.getDay()), n.setHours(0, 0, 0, 0), E.info("Generating weekly report"), await this.reportService.generateReport({
+				const now = /* @__PURE__ */ new Date();
+				const weekNum = this.getWeekNumber(now);
+				if (this.getLastRun("weekly_report") === String(weekNum)) return;
+				const startOfWeek = new Date(now);
+				startOfWeek.setDate(now.getDate() - now.getDay());
+				startOfWeek.setHours(0, 0, 0, 0);
+				logger.info("Generating weekly report");
+				await this.reportService.generateReport({
 					type: "sales_summary",
 					format: "pdf",
-					startDate: n,
-					endDate: e,
-					title: `Reporte Semanal - Semana ${t}`
-				}), this.setLastRun("weekly_report", String(t)), E.info("Weekly report saved");
-			} catch (e) {
-				E.error({ err: e }, "Error generating weekly report");
+					startDate: startOfWeek,
+					endDate: now,
+					title: `Reporte Semanal - Semana ${weekNum}`
+				});
+				this.setLastRun("weekly_report", String(weekNum));
+				logger.info("Weekly report saved");
+			} catch (err) {
+				logger.error({ err }, "Error generating weekly report");
 			}
 		};
-		e(), this.weeklyTimer = setInterval(e, 360 * 60 * 1e3);
+		runWeekly();
+		this.weeklyTimer = setInterval(runWeekly, 360 * 60 * 1e3);
 	}
 	scheduleDailyBackup() {
-		let e = async () => {
+		const runBackup = async () => {
 			try {
-				let e = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
-				if (this.getLastRun("daily_backup") === e) return;
-				E.info("Creating daily backup"), await this.backupService.createBackup(`auto-${e}`), this.setLastRun("daily_backup", e), E.info("Daily backup created");
-			} catch (e) {
-				E.error({ err: e }, "Error creating daily backup");
+				const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+				if (this.getLastRun("daily_backup") === today) return;
+				logger.info("Creating daily backup");
+				await this.backupService.createBackup(`auto-${today}`);
+				this.setLastRun("daily_backup", today);
+				logger.info("Daily backup created");
+			} catch (err) {
+				logger.error({ err }, "Error creating daily backup");
 			}
 		};
-		e(), setInterval(e, 3600 * 1e3);
+		runBackup();
+		setInterval(runBackup, 3600 * 1e3);
 	}
-	getLastRun(e) {
+	getLastRun(key) {
 		try {
-			return b(this.statePath) ? JSON.parse(x(this.statePath, "utf-8"))[tt + e] ?? "" : "";
+			if (!existsSync$1(this.statePath)) return "";
+			return JSON.parse(readFileSync$1(this.statePath, "utf-8"))[SCHEDULER_PREFIX + key] ?? "";
 		} catch {
 			return "";
 		}
 	}
-	setLastRun(e, t) {
+	setLastRun(key, value) {
 		try {
-			let n = {};
-			b(this.statePath) && (n = JSON.parse(x(this.statePath, "utf-8"))), n[tt + e] = t, te(this.statePath, JSON.stringify(n, null, 2));
+			let data = {};
+			if (existsSync$1(this.statePath)) data = JSON.parse(readFileSync$1(this.statePath, "utf-8"));
+			data[SCHEDULER_PREFIX + key] = value;
+			writeFileSync$1(this.statePath, JSON.stringify(data, null, 2));
 		} catch {}
 	}
-	getWeekNumber(e) {
-		let t = new Date(e.getFullYear(), 0, 1), n = e.getTime() - t.getTime();
-		return Math.ceil((n / 864e5 + t.getDay() + 1) / 7);
+	getWeekNumber(date) {
+		const startOfYear = new Date(date.getFullYear(), 0, 1);
+		const diff = date.getTime() - startOfYear.getTime();
+		return Math.ceil((diff / 864e5 + startOfYear.getDay() + 1) / 7);
 	}
-}, rt = class {
+};
+//#endregion
+//#region src/backend/services/DiscountService.ts
+var DiscountService = class {
 	discountRepo;
-	constructor(e) {
-		this.discountRepo = e;
+	constructor(discountRepo) {
+		this.discountRepo = discountRepo;
 	}
-	async getAllDiscounts(e) {
-		return this.discountRepo.findAll(e);
+	async getAllDiscounts(activeOnly) {
+		return this.discountRepo.findAll(activeOnly);
 	}
-	async getDiscountById(e) {
-		let t = await this.discountRepo.findById(e);
-		if (!t) throw new A("Descuento");
-		return t;
+	async getDiscountById(id) {
+		const discount = await this.discountRepo.findById(id);
+		if (!discount) throw new NotFoundError("Descuento");
+		return discount;
 	}
-	async createDiscount(e, t = 1) {
+	async createDiscount(data, userId = 1) {
 		return {
-			success: !0,
-			id: (await this.discountRepo.create(e)).id
+			success: true,
+			id: (await this.discountRepo.create(data)).id
 		};
 	}
-	async updateDiscount(e, t) {
-		return await this.getDiscountById(e), {
-			success: !0,
-			discount: await this.discountRepo.update(e, t)
-		};
-	}
-	async deleteDiscount(e) {
-		return await this.getDiscountById(e), await this.discountRepo.delete(e), { success: !0 };
-	}
-	async getApplicableDiscounts(e, t) {
-		return this.discountRepo.findApplicableToProduct(e, t);
-	}
-	calculateDiscount(e, t, n) {
-		let r = e.price_sale * n, i;
-		i = t.type === "PERCENTAGE" ? r * (t.value / 100) : Math.min(t.value, r), i = parseFloat(i.toFixed(2));
-		let a = r - i;
+	async updateDiscount(id, data) {
+		await this.getDiscountById(id);
 		return {
-			finalUnitPrice: parseFloat((a / n).toFixed(2)),
-			discountAmount: i
+			success: true,
+			discount: await this.discountRepo.update(id, data)
 		};
 	}
-}, it = class {
+	async deleteDiscount(id) {
+		await this.getDiscountById(id);
+		await this.discountRepo.delete(id);
+		return { success: true };
+	}
+	async getApplicableDiscounts(productId, totalAmount) {
+		return this.discountRepo.findApplicableToProduct(productId, totalAmount);
+	}
+	calculateDiscount(product, discount, quantity) {
+		const lineTotal = product.price_sale * quantity;
+		let discountAmount;
+		if (discount.type === "PERCENTAGE") discountAmount = lineTotal * (discount.value / 100);
+		else discountAmount = Math.min(discount.value, lineTotal);
+		discountAmount = parseFloat(discountAmount.toFixed(2));
+		const finalLineTotal = lineTotal - discountAmount;
+		return {
+			finalUnitPrice: parseFloat((finalLineTotal / quantity).toFixed(2)),
+			discountAmount
+		};
+	}
+};
+//#endregion
+//#region src/backend/services/AiService.ts
+var AiService = class {
 	aiProvider;
 	dashboardService;
 	productService;
 	clientService;
-	constructor(e, t, n, r) {
-		this.aiProvider = e, this.dashboardService = t, this.productService = n, this.clientService = r;
+	aiTrainingLogRepo;
+	neuralOrchestrator = null;
+	unifiedQueryService = null;
+	neuralEnabled = false;
+	validationPipeline = null;
+	constructor(aiProvider, dashboardService, productService, clientService, aiTrainingLogRepo) {
+		this.aiProvider = aiProvider;
+		this.dashboardService = dashboardService;
+		this.productService = productService;
+		this.clientService = clientService;
+		this.aiTrainingLogRepo = aiTrainingLogRepo;
 	}
-	async processCommand(e) {
-		let t = e.toLowerCase();
-		if (/^sku[\s]*[:]?\s*[\w-]+/i.test(t)) return this.handleStockQuery(e);
-		if (/costoso|caro|precio\.?mas|mayor\.?precio|mas\.?caro|mas caro/i.test(t) && !/crear|nuevo/.test(t)) return this.handleMostExpensiveProduct();
-		if (/barato|mas\.?barato|menor\.?precio|economico|mas economico/i.test(t) && !/crear|nuevo/.test(t)) return this.handleCheapestProduct();
-		if (/cuantos?\s+clientes/i.test(t)) return this.handleClientCount();
-		if (/cuantos?\s+(categorías|categorias)/i.test(t)) return this.handleCategoryCount();
-		if (/cuantos?\s+proveedores/i.test(t)) return this.handleSupplierCount();
-		if (/cuantos?\s+productos\s+(tengo|hay|en|registrados)/i.test(t)) return this.handleProductCount();
-		if (/cuantos?\s+ventas/i.test(t)) return this.handleSalesSummary(e);
-		let n = await this.classifyWithLLM(e);
-		if (!n) return this.handleGeneralQuery(e);
-		switch (n.intent) {
-			case "product_query": return this.handleStockQuery(e);
-			case "sales_summary": return this.handleSalesSummary(e);
-			case "entity_count": {
-				let t = n.entities?.entity_type || "";
-				return t.includes("producto") || t === "product" ? this.handleProductCount() : t.includes("cliente") || t === "client" ? this.handleClientCount() : t.includes("categoria") || t === "category" ? this.handleCategoryCount() : t.includes("proveedor") || t === "supplier" ? this.handleSupplierCount() : this.handleGeneralQuery(e);
+	setNeuralOrchestrator(orchestrator) {
+		this.neuralOrchestrator = orchestrator;
+	}
+	setUnifiedQueryService(service) {
+		this.unifiedQueryService = service;
+	}
+	setValidationPipeline(pipeline) {
+		this.validationPipeline = pipeline;
+	}
+	async enableNeuralClassifier() {
+		if (!this.neuralOrchestrator) return false;
+		const loaded = await this.neuralOrchestrator.isModelLoaded();
+		this.neuralEnabled = loaded;
+		if (loaded) logger.info("Neural classifier enabled");
+		return loaded;
+	}
+	async processCommand(userInput) {
+		let intent = null;
+		let entities = {};
+		if (this.unifiedQueryService) try {
+			const uqs = await this.unifiedQueryService.query(userInput);
+			if (uqs.source === "cache" || uqs.source === "neural") {
+				intent = uqs.intent;
+				uqs.confidence;
 			}
-			case "entity_creation": return this.handleEntityCreation(e, n.entities);
-			case "sale_draft": return this.handleSaleDraft(e, n.entities);
-			default: return this.handleGeneralQuery(e);
+		} catch {
+			logger.warn("[AiService] UQS failed, falling back to neural");
+		}
+		if (!intent && this.neuralEnabled && this.neuralOrchestrator) try {
+			const nn = await this.neuralOrchestrator.classify(userInput);
+			if (nn.source === "neural" || nn.source === "cache") {
+				intent = nn.intent;
+				nn.confidence;
+			}
+		} catch {
+			logger.warn("[AiService] Neural classifier failed");
+		}
+		if (!intent) {
+			const llm = await this.classifyWithLLM(userInput);
+			if (llm?.intent) {
+				intent = llm.intent;
+				entities = llm.entities ?? {};
+			}
+		}
+		if (intent) return this.routeByIntent(intent, userInput, entities);
+		return this.handleGeneralQuery(userInput);
+	}
+	async routeByIntent(intent, userInput, entities) {
+		switch (intent) {
+			case "product_query": return this.handleStockQuery(userInput);
+			case "sales_summary": return this.handleSalesSummary(userInput);
+			case "entity_count": {
+				const q = userInput.toLowerCase();
+				const type = entities?.entity_type || "";
+				if (/proveedor/.test(q) || type.includes("proveedor") || type === "supplier") return this.handleSupplierCount();
+				if (/categor/.test(q) || type.includes("categoria") || type === "category") return this.handleCategoryCount();
+				if (/cliente/.test(q) || type.includes("cliente") || type === "client") return this.handleClientCount();
+				if (/producto/.test(q) || type.includes("producto") || type === "product") return this.handleProductCount();
+				return this.handleGeneralQuery(userInput);
+			}
+			case "entity_creation": return this.handleEntityCreation(userInput, entities);
+			case "data_modification": return this.handleDataModification(entities);
+			case "data_deletion": return this.handleDataDeletion(entities);
+			case "sale_draft": return this.handleSaleDraft(userInput, entities);
+			default: return this.handleGeneralQuery(userInput);
 		}
 	}
-	async classifyWithLLM(e) {
-		let t = await this.aiProvider.classifyIntent(e, "Eres un clasificador de intenciones para un sistema POS. Responde SOLO un JSON con intent y entities.\n\nIntents posibles:\n- product_query: preguntas sobre precio, stock, SKU, búsqueda de productos\n- sales_summary: resumen de ventas, ganancias, ingresos\n- entity_count: cuántos productos/clientes/categorías existen\n- entity_creation: crear o registrar un nuevo producto, cliente, categoría\n- sale_draft: preparar un carrito de venta\n- general: cualquier otra consulta\n\nEjemplos:\nUsuario: cuales son los productos con poco stock\n{\"intent\":\"product_query\",\"entities\":{\"query_type\":\"low_stock\"}}\n\nUsuario: cuanto se vendio ayer\n{\"intent\":\"sales_summary\",\"entities\":{\"period\":\"yesterday\"}}\n\nUsuario: quiero saber el producto mas caro\n{\"intent\":\"product_query\",\"entities\":{\"query_type\":\"most_expensive\"}}\n\nUsuario: registra un producto nuevo llamado te verde\n{\"intent\":\"entity_creation\",\"entities\":{\"entity_type\":\"product\",\"name\":\"Te verde\"}}\n\nUsuario: crea un cliente llamado juan perez con dni 12345678\n{\"intent\":\"entity_creation\",\"entities\":{\"entity_type\":\"client\",\"name\":\"Juan Perez\",\"dni\":\"12345678\"}}\n\nUsuario: registra un cliente nuevo maria lopez\n{\"intent\":\"entity_creation\",\"entities\":{\"entity_type\":\"client\",\"name\":\"Maria Lopez\"}}\n\nUsuario: crear producto castañas precio compra 1.30 precio venta 2\n{\"intent\":\"entity_creation\",\"entities\":{\"entity_type\":\"product\",\"name\":\"Castañas\",\"price_purchase\":1.30,\"price_sale\":2}}\n\nUsuario: cuantos productos hay en total\n{\"intent\":\"entity_count\",\"entities\":{\"entity_type\":\"product\"}}\n\nUsuario: dame el precio del SKU BEB-001\n{\"intent\":\"product_query\",\"entities\":{\"query_type\":\"sku\",\"sku\":\"BEB-001\"}}\n\nUsuario: vende 2 cafes a juan perez\n{\"intent\":\"sale_draft\",\"entities\":{\"producto\":\"cafe\",\"cantidad\":2,\"cliente\":\"juan perez\"}}\n\nUsuario: quiero comprar 3 arroz\n{\"intent\":\"sale_draft\",\"entities\":{\"producto\":\"arroz\",\"cantidad\":3}}\n\nUsuario: vende una leche a maria\n{\"intent\":\"sale_draft\",\"entities\":{\"producto\":\"leche\",\"cantidad\":1,\"cliente\":\"maria\"}}\n\nUsuario: prepara carrito con pan y mantequilla\n{\"intent\":\"sale_draft\",\"entities\":{\"producto\":\"pan mantequilla\",\"cantidad\":1}}\n\nUsuario: cuales son las categorias que tengo\n{\"intent\":\"entity_count\",\"entities\":{\"entity_type\":\"category\"}}\n\nUsuario: que productos estan por vencer\n{\"intent\":\"general\"}\n\nUsuario: quien compro la ultima venta\n{\"intent\":\"general\"}");
-		return !t || typeof t.intent != "string" ? null : t;
+	async classifyWithLLM(input) {
+		const prompt = `Eres un clasificador de intenciones para un sistema POS. Tu única tarea es elegir un intent y extraer entidades clave. NO generes texto libre, NO respondas preguntas, SOLO clasifica.
+
+## REGLAS DE CLASIFICACIÓN
+
+### 1. product_query — Consultas sobre productos existentes
+- Preguntas por precio, stock, SKU, productos caros/baratos, poco stock, buscar productos
+- Incluye: "cuanto vale", "precio del", "dame el producto mas ...", "productos con poco stock", busqueda por SKU
+- NO incluye: crear productos nuevos, contar productos
+
+### 2. entity_count — Preguntar cuántos existen
+- "cuantos productos", "cuantas categorias", "cuantos clientes", "cuantos proveedores"
+- Palabras clave: cuantos, cuantas, total, registrados, existen, hay
+- entity_type puede ser: "product", "client", "category", "supplier"
+
+### 3. entity_creation — Crear/registrar un nuevo producto o cliente
+- Producto: menciona "producto", "precio de compra", "precio de venta", "sku"
+- Cliente: menciona "cliente", "persona", "dni", "documento"
+- entity_type: "product" o "client"
+- SI menciona "cliente" o "persona" SIN precios de compra/venta → entity_type = "client"
+- SI menciona "precio de compra" o "precio de venta" → entity_type = "product"
+- NUNCA uses entity_creation para modificar o borrar
+
+### 4. data_modification — Modificar/editar/actualizar datos existentes
+- "modificar", "editar", "actualizar", "cambiar precio", "cambiar nombre"
+- Este intent NO tiene handler real, solo clasifica para dar mensaje
+
+### 5. data_deletion — Eliminar/borrar datos existentes
+- "eliminar", "borrar", "quitar", "dar de baja", "remover"
+- Este intent NO tiene handler real, solo clasifica para dar mensaje
+
+### 6. sale_draft — Preparar un carrito de venta
+- "vender", "comprar", "carrito", "prepara venta", "arma venta"
+- Incluye producto(s) y opcionalmente cliente
+- Entities: producto (string), cantidad (number), cliente (string opcional)
+
+### 7. sales_summary — Resumen de ventas/ganancias
+- "cuanto se vendio", "resumen de ventas", "ganancias", "ingresos", "ventas del dia"
+
+### 8. general — Cualquier cosa que no encaje arriba
+- Saludos, preguntas existenciales, consultas no relacionadas al POS
+
+## FORMATO DE RESPUESTA
+Siempre responde SOLO un JSON: {"intent":"...","entities":{...}}
+Si no hay entidades relevantes, entities puede ser {} u omitirse.
+
+## EJEMPLOS\n
+product_query:
+- cuales son los productos con poco stock → {"intent":"product_query","entities":{"query_type":"low_stock"}}
+- quiero saber el producto mas caro → {"intent":"product_query","entities":{"query_type":"most_expensive"}}
+- dame el precio del SKU BEB-001 → {"intent":"product_query","entities":{"query_type":"sku","sku":"BEB-001"}}
+- cuanto vale el arroz → {"intent":"product_query"}
+- cuales son los productos mas vendidos → {"intent":"product_query","entities":{"query_type":"top_sold"}}
+
+entity_count:
+- cuantos productos hay en total → {"intent":"entity_count","entities":{"entity_type":"product"}}
+- cuantas categorias tengo → {"intent":"entity_count","entities":{"entity_type":"category"}}
+- cuantos clientes registrados → {"intent":"entity_count","entities":{"entity_type":"client"}}
+- cuantos proveedores existen → {"intent":"entity_count","entities":{"entity_type":"supplier"}}
+
+entity_creation:
+- registra un producto nuevo llamado te verde → {"intent":"entity_creation","entities":{"entity_type":"product","name":"Te verde"}}
+- crea un cliente llamado juan perez con dni 12345678 → {"intent":"entity_creation","entities":{"entity_type":"client","name":"Juan Perez","dni":"12345678"}}
+- registra un cliente nuevo maria lopez → {"intent":"entity_creation","entities":{"entity_type":"client","name":"Maria Lopez"}}
+- crear producto castañas precio compra 1.30 precio venta 2 → {"intent":"entity_creation","entities":{"entity_type":"product","name":"Castañas","price_purchase":1.30,"price_sale":2}}
+
+data_modification:
+- modifica el precio del arroz → {"intent":"data_modification","entities":{"entity_type":"product","name":"arroz"}}
+- actualiza el stock de la leche → {"intent":"data_modification","entities":{"entity_type":"product","name":"leche"}}
+- cambiar nombre del cliente juan → {"intent":"data_modification","entities":{"entity_type":"client","name":"juan"}}
+
+data_deletion:
+- elimina el producto cafe → {"intent":"data_deletion","entities":{"entity_type":"product","name":"cafe"}}
+- borrar cliente pedro → {"intent":"data_deletion","entities":{"entity_type":"client","name":"pedro"}}
+
+sale_draft:
+- vende 2 cafes a juan perez → {"intent":"sale_draft","entities":{"producto":"cafe","cantidad":2,"cliente":"juan perez"}}
+- quiero comprar 3 arroz → {"intent":"sale_draft","entities":{"producto":"arroz","cantidad":3}}
+- vende una leche a maria → {"intent":"sale_draft","entities":{"producto":"leche","cantidad":1,"cliente":"maria"}}
+- prepara carrito con pan y mantequilla → {"intent":"sale_draft","entities":{"producto":"pan mantequilla","cantidad":1}}
+
+sales_summary:
+- cuanto se vendio ayer → {"intent":"sales_summary","entities":{"period":"yesterday"}}
+- resumen de ventas de esta semana → {"intent":"sales_summary","entities":{"period":"week"}}
+- dame las ganancias del dia → {"intent":"sales_summary"}
+
+general:
+- que productos estan por vencer → {"intent":"general"}
+- quien compro la ultima venta → {"intent":"general"}
+- hola como estas → {"intent":"general"}\n\nUsuario: ${input}\n\nJSON:`;
+		const raw = await this.aiProvider.classifyIntent(input, prompt);
+		if (!raw || typeof raw.intent !== "string") return null;
+		return raw;
 	}
-	async askAssistant(e) {
-		return this.processCommand(e);
+	async askAssistant(query, userId) {
+		const response = await this.processCommand(query);
+		await this.logInteraction(query, response, userId);
+		return response;
 	}
-	extractKeywords(e) {
-		let t = /* @__PURE__ */ "el.la.los.las.un.una.de.del.en.con.por.para.y.e.o.a.su.que.es.se.no.lo.como.más.pero.sus.le.ya.este.entre.porque.cuando.muy.sin.sobre.también.me.mi.tu.te.si.nos.les.hay.cual.cuales.dime.busca.encuentra.saber.puedes.podrias.quiero.necesito".split(".");
-		return e.toLowerCase().replace(/[¿?¡!,.;:]/g, "").split(/\s+/).filter((e) => e.length > 1 && !t.includes(e));
+	extractKeywords(input) {
+		const stopWords = [
+			"el",
+			"la",
+			"los",
+			"las",
+			"un",
+			"una",
+			"de",
+			"del",
+			"en",
+			"con",
+			"por",
+			"para",
+			"y",
+			"e",
+			"o",
+			"a",
+			"su",
+			"que",
+			"es",
+			"se",
+			"no",
+			"lo",
+			"como",
+			"más",
+			"pero",
+			"sus",
+			"le",
+			"ya",
+			"este",
+			"entre",
+			"porque",
+			"cuando",
+			"muy",
+			"sin",
+			"sobre",
+			"también",
+			"me",
+			"mi",
+			"tu",
+			"te",
+			"si",
+			"nos",
+			"les",
+			"hay",
+			"cual",
+			"cuales",
+			"dime",
+			"busca",
+			"encuentra",
+			"saber",
+			"puedes",
+			"podrias",
+			"quiero",
+			"necesito"
+		];
+		return input.toLowerCase().replace(/[¿?¡!,.;:]/g, "").split(/\s+/).filter((w) => w.length > 1 && !stopWords.includes(w));
 	}
-	async handleSalesSummary(e) {
-		let t = await this.dashboardService.getStats(), n = await this.dashboardService.getTopProducts(3), r = await this.dashboardService.getSalesByPaymentMethod();
-		if (t.todaySalesCount === 0) return {
+	async handleSalesSummary(input) {
+		const q = input.toLowerCase();
+		if (/cliente\s+(que\s+)?(mas|más|top|mayor)\s+(compro|compró|gasto|gastó|compra)/i.test(q)) {
+			const top = await this.dashboardService.getTopClients(1);
+			if (top.length > 0) {
+				const t = top[0];
+				return {
+					type: "TEXT",
+					content: `🥇 **${t.client_name}** es el cliente que más compró hoy:\n• ${t.total_purchases} compras\n• Total: S/ ${t.total_spent.toFixed(2)}\n• Promedio: S/ ${t.avg_purchase.toFixed(2)} por compra`
+				};
+			}
+			return {
+				type: "TEXT",
+				content: "No hay ventas con clientes registrados hoy."
+			};
+		}
+		if (/a nombre de|comprador|cliente.*venta|quien.*compro|quien.*compró/i.test(q)) {
+			const last = await this.dashboardService.getLastSaleWithClient();
+			if (last?.client_name) return {
+				type: "TEXT",
+				content: `La última venta fue a nombre de **${last.client_name}**${last.client_dni ? ` (${last.client_dni})` : ""}.`
+			};
+			if ((await this.dashboardService.getStats()).todaySalesCount > 0) return {
+				type: "TEXT",
+				content: "La última venta del día no tiene cliente registrado (venta al mostrador)."
+			};
+			return {
+				type: "TEXT",
+				content: "No hay ventas registradas hoy."
+			};
+		}
+		const stats = await this.dashboardService.getStats();
+		const topProducts = await this.dashboardService.getTopProducts(3);
+		const paymentMethods = await this.dashboardService.getSalesByPaymentMethod();
+		if (stats.todaySalesCount === 0) return {
 			type: "TEXT",
 			content: `No hay ventas registradas hoy.
 
-📊 Totales históricos — Ingresos: S/ ${t.totalRevenue.toFixed(2)} | Ventas: ${t.totalSales} | Ganancia: S/ ${t.totalProfit.toFixed(2)}`
+📊 Totales históricos — Ingresos: S/ ${stats.totalRevenue.toFixed(2)} | Ventas: ${stats.totalSales} | Ganancia: S/ ${stats.totalProfit.toFixed(2)}`
 		};
-		let i = n.map((e, t) => `${t + 1}. ${e.product_name} (${e.total_quantity} uds)`).join("\n"), a = r.map((e) => `${e.payment_method === "CASH" ? "Efectivo" : "Tarjeta"}: S/ ${(e._sum.total ?? 0).toFixed(2)}`).join(" | ");
+		const top3 = topProducts.map((p, i) => `${i + 1}. ${p.product_name} (${p.total_quantity} uds)`).join("\n");
+		const pagos = paymentMethods.map((m) => `${m.payment_method === "CASH" ? "Efectivo" : "Tarjeta"}: S/ ${(m._sum.total ?? 0).toFixed(2)}`).join(" | ");
 		return {
 			type: "TEXT",
 			content: `📊 **Resumen de ventas - Hoy**
-• Ingresos: S/ ${t.todayRevenue.toFixed(2)}
-• Transacciones: ${t.todaySalesCount}
-• Ganancia: S/ ${t.todayProfit.toFixed(2)}
-• Ticket promedio: S/ ${t.averageSale.toFixed(2)}
+• Ingresos: S/ ${stats.todayRevenue.toFixed(2)}
+• Transacciones: ${stats.todaySalesCount}
+• Ganancia: S/ ${stats.todayProfit.toFixed(2)}
+• Ticket promedio: S/ ${stats.averageSale.toFixed(2)}
 
 🥇 **Top 3 productos:**
-${i}
+${top3}
 
-💳 ${a}
+💳 ${pagos}
 
-📈 Totales históricos: S/ ${t.totalRevenue.toFixed(2)} en ${t.totalSales} ventas`
+📈 Totales históricos: S/ ${stats.totalRevenue.toFixed(2)} en ${stats.totalSales} ventas`
 		};
 	}
-	async handleStockQuery(e) {
-		let t = e.toLowerCase();
-		if (/costoso|caro|precio.mas|mayor.precio|mas.caro/.test(t)) return this.handleMostExpensiveProduct();
-		if (/barato|menor.precio|mas.barato|economico/.test(t)) return this.handleCheapestProduct();
-		let n = t.match(/sku[\s]*[:]?[\s]*([\w-]+)/i);
-		if (n) {
-			let e = n[1].toUpperCase(), t = (await this.productService.getAllProducts()).find((t) => t.sku.toUpperCase() === e);
-			return t ? {
+	async handleStockQuery(input) {
+		const q = input.toLowerCase();
+		if (/costoso|caro|precio.mas|mayor.precio|mas.caro/.test(q)) return this.handleMostExpensiveProduct();
+		if (/barato|menor.precio|mas.barato|economico/.test(q)) return this.handleCheapestProduct();
+		const skuMatch = q.match(/sku[\s]*[:]?[\s]*([\w-]+)/i);
+		if (skuMatch) {
+			const sku = skuMatch[1].toUpperCase();
+			const found = (await this.productService.getAllProducts()).find((p) => p.sku.toUpperCase() === sku);
+			if (found) return {
 				type: "TEXT",
-				content: `**${t.name}** (SKU: ${t.sku})
-• Precio venta: **S/ ${t.price_sale.toFixed(2)}**
-• Precio compra: S/ ${t.price_purchase.toFixed(2)}
-• Stock: ${t.stock} unidades
-• Stock mínimo: ${t.min_stock ?? 5}
-• Categoría: ${t.category?.name ?? "Sin categoría"}`
-			} : {
+				content: `**${found.name}** (SKU: ${found.sku})
+• Precio venta: **S/ ${found.price_sale.toFixed(2)}**
+• Precio compra: S/ ${found.price_purchase.toFixed(2)}
+• Stock: ${found.stock} unidades
+• Stock mínimo: ${found.min_stock ?? 5}
+• Categoría: ${found.category?.name ?? "Sin categoría"}`
+			};
+			return {
 				type: "TEXT",
-				content: `No encontré ningún producto con el SKU "${e}".`
+				content: `No encontré ningún producto con el SKU "${sku}".`
 			};
 		}
-		let r = t.replace(/[¿?¡!.,;:]/g, "").trim(), i = /* @__PURE__ */ "cuanto.cuanta.cuantos.cuantas.hay.tengo.dime.busca.encuentra.saber.puedes.quiero.necesito.stock.inventario.producto.productos.precio.precios.cual.cuales.el.la.los.las.de.del.que.me.te.se.le.un.una.con.por.para.como.mas.pero.tiene.tienen.esta.este".split("."), a = r.split(/\s+/).filter((e) => e.length > 2 && !i.includes(e)).join(" "), o = await this.productService.getAllProducts(a || r), s = o.length > 0 ? o : a ? (await this.productService.getAllProducts()).filter((e) => e.name.toLowerCase().includes(a) || e.sku.toLowerCase().includes(a)) : [];
-		return s.length === 0 ? {
+		const raw = q.replace(/[¿?¡!.,;:]/g, "").trim();
+		const garbageWords = [
+			"cuanto",
+			"cuanta",
+			"cuantos",
+			"cuantas",
+			"hay",
+			"tengo",
+			"dime",
+			"busca",
+			"encuentra",
+			"saber",
+			"puedes",
+			"quiero",
+			"necesito",
+			"stock",
+			"inventario",
+			"producto",
+			"productos",
+			"precio",
+			"precios",
+			"cual",
+			"cuales",
+			"el",
+			"la",
+			"los",
+			"las",
+			"de",
+			"del",
+			"que",
+			"me",
+			"te",
+			"se",
+			"le",
+			"un",
+			"una",
+			"con",
+			"por",
+			"para",
+			"como",
+			"mas",
+			"pero",
+			"tiene",
+			"tienen",
+			"esta",
+			"este"
+		];
+		const searchTerm = raw.split(/\s+/).filter((w) => w.length > 2 && !garbageWords.includes(w)).join(" ");
+		const allProducts = await this.productService.getAllProducts(searchTerm || raw);
+		const found = allProducts.length > 0 ? allProducts : searchTerm ? (await this.productService.getAllProducts()).filter((p) => p.name.toLowerCase().includes(searchTerm) || p.sku.toLowerCase().includes(searchTerm)) : [];
+		if (found.length === 0) return {
 			type: "TEXT",
-			content: `No encontré productos que coincidan con "${a || r}".`
-		} : {
+			content: `No encontré productos que coincidan con "${searchTerm || raw}".`
+		};
+		return {
 			type: "TEXT",
-			content: `Productos encontrados:\n${[...s].sort((e, t) => t.stock - e.stock).slice(0, 10).map((e) => `• ${e.name} — S/ ${e.price_sale.toFixed(2)} — Stock: ${e.stock}${e.stock <= (e.min_stock ?? 5) ? " ⚠️" : ""}`).join("\n")}`
+			content: `Productos encontrados:\n${[...found].sort((a, b) => b.stock - a.stock).slice(0, 10).map((p) => `• ${p.name} — S/ ${p.price_sale.toFixed(2)} — Stock: ${p.stock}${p.stock <= (p.min_stock ?? 5) ? " ⚠️" : ""}`).join("\n")}`
 		};
 	}
 	async handleMostExpensiveProduct() {
-		let e = await this.productService.getAllProducts();
-		if (e.length === 0) return {
+		const allProducts = await this.productService.getAllProducts();
+		if (allProducts.length === 0) return {
 			type: "TEXT",
 			content: "No hay productos registrados en el inventario."
 		};
-		let t = [...e].sort((e, t) => t.price_sale - e.price_sale).slice(0, 5), n = t[0];
+		const top5 = [...allProducts].sort((a, b) => b.price_sale - a.price_sale).slice(0, 5);
+		const maxProduct = top5[0];
 		return {
 			type: "TEXT",
-			content: `El producto más costoso del inventario es **${n.name}** (SKU: ${n.sku}) con un precio de venta de **S/ ${n.price_sale.toFixed(2)}** (precio de compra: S/ ${n.price_purchase.toFixed(2)}). Stock actual: ${n.stock} unidades.
+			content: `El producto más costoso del inventario es **${maxProduct.name}** (SKU: ${maxProduct.sku}) con un precio de venta de **S/ ${maxProduct.price_sale.toFixed(2)}** (precio de compra: S/ ${maxProduct.price_purchase.toFixed(2)}). Stock actual: ${maxProduct.stock} unidades.
 
 Otros productos de alto valor:
-${t.slice(1).map((e, t) => `${t + 2}. ${e.name} — S/ ${e.price_sale.toFixed(2)}`).join("\n")}`
+${top5.slice(1).map((p, i) => `${i + 2}. ${p.name} — S/ ${p.price_sale.toFixed(2)}`).join("\n")}`
 		};
 	}
 	async handleCheapestProduct() {
-		let e = await this.productService.getAllProducts();
-		if (e.length === 0) return {
+		const allProducts = await this.productService.getAllProducts();
+		if (allProducts.length === 0) return {
 			type: "TEXT",
 			content: "No hay productos registrados en el inventario."
 		};
-		let t = [...e].sort((e, t) => e.price_sale - t.price_sale).slice(0, 5), n = t[0];
+		const top5 = [...allProducts].sort((a, b) => a.price_sale - b.price_sale).slice(0, 5);
+		const minProduct = top5[0];
 		return {
 			type: "TEXT",
-			content: `El producto más económico del inventario es **${n.name}** (SKU: ${n.sku}) con un precio de venta de **S/ ${n.price_sale.toFixed(2)}**. Stock actual: ${n.stock} unidades.
+			content: `El producto más económico del inventario es **${minProduct.name}** (SKU: ${minProduct.sku}) con un precio de venta de **S/ ${minProduct.price_sale.toFixed(2)}**. Stock actual: ${minProduct.stock} unidades.
 
 Otros productos económicos:
-${t.slice(1).map((e, t) => `${t + 2}. ${e.name} — S/ ${e.price_sale.toFixed(2)}`).join("\n")}`
+${top5.slice(1).map((p, i) => `${i + 2}. ${p.name} — S/ ${p.price_sale.toFixed(2)}`).join("\n")}`
 		};
 	}
 	async handleProductCount() {
-		let e = await this.productService.getAllProducts();
+		const products = await this.productService.getAllProducts();
 		return {
 			type: "TEXT",
-			content: `📦 **${e.length} productos** en total.\n• Con stock: ${e.filter((e) => e.stock > 0).length}\n• Stock bajo: ${e.filter((e) => e.stock <= (e.min_stock ?? 5)).length}`
+			content: `📦 **${products.length} productos** en total.\n• Con stock: ${products.filter((p) => p.stock > 0).length}\n• Stock bajo: ${products.filter((p) => p.stock <= (p.min_stock ?? 5)).length}`
 		};
 	}
 	async handleClientCount() {
@@ -3371,10 +4653,10 @@ ${t.slice(1).map((e, t) => `${t + 2}. ${e.name} — S/ ${e.price_sale.toFixed(2)
 	}
 	async handleCategoryCount() {
 		try {
-			let { getContainer: e } = await Promise.resolve().then(() => H);
+			const { getContainer } = await Promise.resolve().then(() => registry_exports);
 			return {
 				type: "TEXT",
-				content: `📂 **${(await e().categoryService.getAllCategories()).length} categorías** registradas.`
+				content: `📂 **${(await getContainer().categoryService.getAllCategories()).length} categorías** registradas.`
 			};
 		} catch {
 			return {
@@ -3385,10 +4667,10 @@ ${t.slice(1).map((e, t) => `${t + 2}. ${e.name} — S/ ${e.price_sale.toFixed(2)
 	}
 	async handleSupplierCount() {
 		try {
-			let { getContainer: e } = await Promise.resolve().then(() => H);
+			const { getContainer } = await Promise.resolve().then(() => registry_exports);
 			return {
 				type: "TEXT",
-				content: `🏢 **${(await e().supplierService.getAllSuppliers()).length} proveedores** registrados.`
+				content: `🏢 **${(await getContainer().supplierService.getAllSuppliers()).length} proveedores** registrados.`
 			};
 		} catch {
 			return {
@@ -3397,707 +4679,1096 @@ ${t.slice(1).map((e, t) => `${t + 2}. ${e.name} — S/ ${e.price_sale.toFixed(2)
 			};
 		}
 	}
-	handleEntityCreation(e, t) {
-		let n = e.toLowerCase(), r = (t?.entity_type || "").toLowerCase(), i = () => {
-			let e = n.match(/(?:llamado|llamada|nombre)\s+["""]?([a-záéíóúñ]+(?:\s+[a-záéíóúñ]+)*?)(?:["""]?\s+(?:con|de|y|precio|un|una)|["""]?\s*$|,|\.)/i)?.[1]?.trim();
-			if (!e || e.length <= 1) return null;
-			let t = n.match(/precio\s*(?:de\s*)?compra\s*(?:de\s*)?(?:S\/|s\/|\$)?\s*([0-9]+(?:\.[0-9]+)?)/i), r = n.match(/precio\s*(?:de\s*)?venta\s*(?:de\s*)?(?:S\/|s\/|\$)?\s*([0-9]+(?:\.[0-9]+)?)/i);
+	async handleEntityCreation(input, entities) {
+		const q = input.toLowerCase();
+		const entityType = (entities?.entity_type || "").toLowerCase();
+		const extractProduct = () => {
+			const name = q.match(/(?:llamado|llamada|nombre)\s+["""]?([a-záéíóúñ]+(?:\s+[a-záéíóúñ]+)*?)(?:["""]?\s+(?:con|de|y|precio|un|una)|["""]?\s*$|,|\.)/i)?.[1]?.trim();
+			if (!name || name.length <= 1) return null;
+			const ppMatch = q.match(/precio\s*(?:de\s*)?compra\s*(?:de\s*)?(?:S\/|s\/|\$)?\s*([0-9]+(?:\.[0-9]+)?)/i);
+			const pvMatch = q.match(/precio\s*(?:de\s*)?venta\s*(?:de\s*)?(?:S\/|s\/|\$)?\s*([0-9]+(?:\.[0-9]+)?)/i);
 			return {
-				type: "ACTION",
 				action: "DRAFT_PRODUCT",
 				payload: {
-					name: e.charAt(0).toUpperCase() + e.slice(1),
-					price_purchase: t ? parseFloat(t[1]) : 0,
-					price_sale: r ? parseFloat(r[1]) : 0,
+					name: name.charAt(0).toUpperCase() + name.slice(1),
+					price_purchase: ppMatch ? parseFloat(ppMatch[1]) : 0,
+					price_sale: pvMatch ? parseFloat(pvMatch[1]) : 0,
 					stock: 0,
 					min_stock: 5
 				}
 			};
-		}, a = () => {
-			let e = n.match(/\b(\d{6,11})\b/), t = n.match(/(?:llamado|llamada|nombre|cliente|persona)\s+["""]?([a-záéíóúñ]+(?:\s+[a-záéíóúñ]+)*?)(?:["""]?\s+(?:con|de|y|dni)|["""]?\s*$|,|\.)/i);
-			return !t && !e ? null : {
-				type: "ACTION",
+		};
+		const extractClient = () => {
+			const dniMatch = q.match(/\b(\d{6,11})\b/);
+			const clName = q.match(/(?:llamado|llamada|nombre|cliente|persona)\s+["""]?([a-záéíóúñ]+(?:\s+[a-záéíóúñ]+)*?)(?:["""]?\s+(?:con|de|y|dni)|["""]?\s*$|,|\.)/i);
+			if (!clName && !dniMatch) return null;
+			return {
 				action: "DRAFT_CLIENT",
 				payload: {
-					name: t?.[1] ? t[1].charAt(0).toUpperCase() + t[1].slice(1) : "",
-					dni: e?.[1] || "",
+					name: clName?.[1] ? clName[1].charAt(0).toUpperCase() + clName[1].slice(1) : "",
+					dni: dniMatch?.[1] || "",
 					phone: null
 				}
 			};
 		};
-		if (r.includes("cliente") || r === "client") {
-			let e = a();
-			if (e) return Promise.resolve(e);
-		}
-		if (r.includes("producto") || r === "product") {
-			let e = i();
-			if (e) return Promise.resolve(e);
-		}
-		if (/cliente|persona/.test(n) && !/precio\s*(?:de\s*)?(?:compra|venta)/.test(n)) {
-			let e = a();
-			if (e) return Promise.resolve(e);
-		}
-		if (!/cliente|persona/.test(n) || /precio|producto|sku/.test(n)) {
-			let e = i();
-			if (e) return Promise.resolve(e);
-		}
-		let o = a();
-		return o ? Promise.resolve(o) : Promise.resolve({
+		let draft = null;
+		if (entityType.includes("cliente") || entityType === "client") draft = extractClient();
+		else if (entityType.includes("producto") || entityType === "product") draft = extractProduct();
+		if (!draft) if (/cliente|persona/.test(q) && !/precio/.test(q)) draft = extractClient();
+		else if (!/cliente|persona/.test(q) || /precio|producto|sku/.test(q)) draft = extractProduct();
+		else draft = extractClient();
+		if (!draft) return {
 			type: "TEXT",
 			content: "No pude entender los datos para crear. Especifica nombre, precio de compra y precio de venta del producto, o nombre y DNI del cliente."
+		};
+		if (!this.validationPipeline) return {
+			type: "ACTION",
+			action: draft.action,
+			payload: draft.payload
+		};
+		const rateCheck = this.validationPipeline.checkRateLimit();
+		if (!rateCheck.allowed) return {
+			type: "TEXT",
+			content: `Límite de solicitudes alcanzado. Espera ${Math.ceil(rateCheck.resetMs / 1e3)}s antes de crear más.`
+		};
+		const processed = await this.validationPipeline.processDraft(draft.action, draft.payload, entities?.confidence ?? 0, void 0, "neural");
+		if (processed.autoApproved) try {
+			draft.action === "DRAFT_PRODUCT" ? await this.productService.createProduct(draft.payload) : (await this.clientService.createClient(draft.payload)).id;
+			return {
+				type: "TEXT",
+				content: `✅ ${draft.action === "DRAFT_PRODUCT" ? "Producto" : "Cliente"} creado automáticamente (alta confianza).`
+			};
+		} catch {
+			return {
+				type: "TEXT",
+				content: `No se pudo crear automáticamente. Revisa los datos en el formulario.`,
+				draftId: processed.draft.id
+			};
+		}
+		return {
+			type: "ACTION",
+			action: draft.action,
+			payload: draft.payload,
+			draftId: processed.draft.id,
+			autoApproved: false
+		};
+	}
+	handleDataModification(entities) {
+		const entityType = (entities?.entity_type || "").toLowerCase();
+		const name = entities?.name || "";
+		if (entityType === "client" || entityType.includes("cliente")) return Promise.resolve({
+			type: "TEXT",
+			content: `Para modificar el cliente "${name}", ve a la sección Clientes y usa el botón Editar. El asistente IA solo puede consultar y crear datos, no modificarlos.`
+		});
+		return Promise.resolve({
+			type: "TEXT",
+			content: `Para modificar ${name ? `"${name}"` : "datos"}, ve a la sección correspondiente y usa el botón Editar. El asistente IA solo puede consultar y crear datos, no modificarlos.`
 		});
 	}
-	async handleSaleDraft(e, t) {
-		let n = typeof t?.producto == "string" ? t.producto.trim() : "", r = typeof t?.cliente == "string" ? t.cliente.trim() : "", i = typeof t?.cantidad == "number" ? t.cantidad : typeof t?.cantidad == "string" && parseInt(t.cantidad, 10) || 0;
-		if (n || r) {
-			let [e, t] = await Promise.all([r ? this.clientService.getAllClients(r) : Promise.resolve([]), n ? this.productService.getAllProducts(n) : Promise.resolve([])]);
-			return e.length === 0 && t.length === 0 ? {
+	handleDataDeletion(entities) {
+		const entityType = (entities?.entity_type || "").toLowerCase();
+		const name = entities?.name || "";
+		if (entityType === "client" || entityType.includes("cliente")) return Promise.resolve({
+			type: "TEXT",
+			content: `Para eliminar al cliente "${name}", ve a la sección Clientes y usa el botón Eliminar. El asistente IA no puede borrar datos por seguridad.`
+		});
+		return Promise.resolve({
+			type: "TEXT",
+			content: `Para eliminar ${name ? `"${name}"` : "datos"}, ve a la sección correspondiente y usa el botón Eliminar. El asistente IA no puede borrar datos por seguridad.`
+		});
+	}
+	async handleSaleDraft(input, entities) {
+		const productName = typeof entities?.producto === "string" ? entities.producto.trim() : "";
+		const clientName = typeof entities?.cliente === "string" ? entities.cliente.trim() : "";
+		const quantity = typeof entities?.cantidad === "number" ? entities.cantidad : typeof entities?.cantidad === "string" ? parseInt(entities.cantidad, 10) || 0 : 0;
+		if (productName || clientName) {
+			const [clients, products] = await Promise.all([clientName ? this.clientService.getAllClients(clientName) : Promise.resolve([]), productName ? this.productService.getAllProducts(productName) : Promise.resolve([])]);
+			if (clients.length === 0 && products.length === 0) return {
 				type: "TEXT",
-				content: r ? `No encontré "${r}" como cliente ni "${n}" como producto.` : `No encontré ningún producto llamado "${n}".`
-			} : {
+				content: clientName ? `No encontré "${clientName}" como cliente ni "${productName}" como producto.` : `No encontré ningún producto llamado "${productName}".`
+			};
+			return {
 				type: "ACTION",
 				action: "DRAFT_SALE",
 				payload: {
-					client_id: e.length > 0 ? e[0].id : null,
-					client_name: e.length > 0 ? e[0].name : "",
-					items: t.map((e) => ({
-						product_id: e.id,
-						product_name: e.name,
-						quantity: i > 0 ? i : 1,
-						unit_price: e.price_sale
+					client_id: clients.length > 0 ? clients[0].id : null,
+					client_name: clients.length > 0 ? clients[0].name : "",
+					items: products.map((p) => ({
+						product_id: p.id,
+						product_name: p.name,
+						quantity: quantity > 0 ? quantity : 1,
+						unit_price: p.price_sale
 					}))
 				}
 			};
 		}
-		let a = this.extractKeywords(e).join(" ");
-		if (!a) return {
+		const searchTerm = this.extractKeywords(input).join(" ");
+		if (!searchTerm) return {
 			type: "TEXT",
 			content: "Especifica qué producto y/o cliente para armar el carrito. Ej: \"vende 2 cafes a juan perez\"."
 		};
-		let [o, s] = await Promise.all([this.clientService.getAllClients(a), this.productService.getAllProducts(a)]);
-		return o.length === 0 && s.length === 0 ? {
+		const [clients, products] = await Promise.all([this.clientService.getAllClients(searchTerm), this.productService.getAllProducts(searchTerm)]);
+		if (clients.length === 0 && products.length === 0) return {
 			type: "TEXT",
 			content: "No encontré clientes ni productos que coincidan con tu búsqueda."
-		} : {
+		};
+		return {
 			type: "ACTION",
 			action: "DRAFT_SALE",
 			payload: {
-				client_id: o.length > 0 ? o[0].id : null,
-				client_name: o.length > 0 ? o[0].name : "",
-				items: s.map((e) => ({
-					product_id: e.id,
-					product_name: e.name,
+				client_id: clients.length > 0 ? clients[0].id : null,
+				client_name: clients.length > 0 ? clients[0].name : "",
+				items: products.map((p) => ({
+					product_id: p.id,
+					product_name: p.name,
 					quantity: 1,
-					unit_price: e.price_sale
+					unit_price: p.price_sale
 				}))
 			}
 		};
 	}
-	async handleGeneralQuery(e) {
-		let t = e.toLowerCase();
-		if (/a nombre de|comprador|cliente.*venta|quien.*compro|quien.*compró/.test(t)) {
-			let e = await this.dashboardService.getLastSaleWithClient();
-			return e?.client_name ? {
-				type: "TEXT",
-				content: `La última venta fue a nombre de **${e.client_name}**${e.client_dni ? ` (${e.client_dni})` : ""}.`
-			} : (await this.dashboardService.getStats()).todaySalesCount > 0 ? {
-				type: "TEXT",
-				content: "La última venta del día no tiene cliente registrado (venta al mostrador)."
-			} : {
-				type: "TEXT",
-				content: "No hay ventas registradas hoy."
-			};
+	async logInteraction(query, response, userId) {
+		if (!this.aiTrainingLogRepo || !userId) return;
+		try {
+			const nlu = response.type === "ACTION" ? JSON.stringify({
+				intent: "entity_creation",
+				action: response.action,
+				payload: response.payload
+			}) : null;
+			await this.aiTrainingLogRepo.create({
+				usuario_id: userId,
+				mensaje_usuario: query,
+				nlu_output: nlu,
+				respuesta_sistema: response.type === "TEXT" ? response.content : `[ACTION: ${response.action}]`
+			});
+		} catch {}
+	}
+	async handleGeneralQuery(input) {
+		const stats = await this.dashboardService.getStats();
+		const products = await this.productService.getAllProducts();
+		const q = input.toLowerCase();
+		const masCaro = products.length > 0 ? [...products].sort((a, b) => b.price_sale - a.price_sale)[0] : null;
+		const masBarato = products.length > 0 ? [...products].sort((a, b) => a.price_sale - b.price_sale)[0] : null;
+		const lines = [];
+		if (/producto|inventario/.test(q)) {
+			lines.push(`📦 **${products.length} productos** en inventario.`);
+			if (masCaro) lines.push(`💰 Más costoso: **${masCaro.name}** — S/ ${masCaro.price_sale.toFixed(2)}`);
+			if (masBarato) lines.push(`💵 Más barato: **${masBarato.name}** — S/ ${masBarato.price_sale.toFixed(2)}`);
 		}
-		let n = await this.dashboardService.getStats(), r = await this.productService.getAllProducts(), i = r.length > 0 ? [...r].sort((e, t) => t.price_sale - e.price_sale)[0] : null, a = r.length > 0 ? [...r].sort((e, t) => e.price_sale - t.price_sale)[0] : null, o = [];
-		return /producto|inventario/.test(t) && (o.push(`📦 **${r.length} productos** en inventario.`), i && o.push(`💰 Más costoso: **${i.name}** — S/ ${i.price_sale.toFixed(2)}`), a && o.push(`💵 Más barato: **${a.name}** — S/ ${a.price_sale.toFixed(2)}`)), (/venta|ganancia|ingreso/.test(t) || o.length === 0) && o.push(`📊 Hoy: S/ ${n.todayRevenue.toFixed(2)} ingresos, ${n.todaySalesCount} ventas, S/ ${n.todayProfit.toFixed(2)} ganancia.`), {
+		if (/venta|ganancia|ingreso/.test(q) || lines.length === 0) lines.push(`📊 Hoy: S/ ${stats.todayRevenue.toFixed(2)} ingresos, ${stats.todaySalesCount} ventas, S/ ${stats.todayProfit.toFixed(2)} ganancia.`);
+		return {
 			type: "TEXT",
-			content: o.join("\n")
+			content: lines.join("\n")
 		};
 	}
 };
 //#endregion
+//#region src/backend/services/AiMonitorService.ts
+var AiMonitorService = class {
+	unifiedQuery = null;
+	setUnifiedQueryService(service) {
+		this.unifiedQuery = service;
+		logger.info("[AiMonitor] Service registered");
+	}
+	getSnapshot() {
+		if (!this.unifiedQuery) return null;
+		try {
+			const stats = this.unifiedQuery.getStats();
+			return {
+				timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+				decisionStats: stats.decisionStats,
+				llmStatus: {
+					available: stats.llmStats.circuitOpen !== void 0 ? !stats.llmStats.circuitOpen : true,
+					circuitOpen: stats.llmStats.circuitOpen ?? false,
+					consecutiveFailures: stats.llmStats.consecutiveFailures ?? 0
+				},
+				ragStats: {
+					documents: stats.ragStats.documents ?? 0,
+					totalQueries: stats.ragStats.totalQueries ?? 0,
+					hitRate: stats.ragStats.hitRate ?? 0
+				},
+				modelLoaded: stats.orchestratorStats.classifierInfo?.isLoaded ?? false,
+				config: stats.config
+			};
+		} catch (error) {
+			logger.error({ err: error }, "[AiMonitor] Failed to get snapshot");
+			return null;
+		}
+	}
+	getHistory(limit) {
+		if (!this.unifiedQuery) return [];
+		return this.unifiedQuery.getDecisionLogger().getHistory(limit);
+	}
+	getRecentErrors(limit = 10) {
+		if (!this.unifiedQuery) return [];
+		return this.unifiedQuery.getDecisionLogger().getRecentBySource("error", limit);
+	}
+	resetHistory() {
+		if (!this.unifiedQuery) return;
+		this.unifiedQuery.getDecisionLogger().clear();
+		logger.info("[AiMonitor] History reset");
+	}
+	isAvailable() {
+		return this.unifiedQuery !== null;
+	}
+};
+//#endregion
 //#region src/backend/di/container.ts
-function at(e) {
-	let t = new ie(e), n = new ae(e), r = new oe(e), i = new se(e), a = new ce(e), o = new le(e), s = new ue(e), c = new de(e), l = new fe(e), u = new pe(e), d = new me(e), f = new he(e), p = new ge(e), m = new $e(), h = new ye(), g = new be(), ee = new xe(), _ = new Qe(d, m), v = new Ne(t, l, u), y = new Pe(n, u), b = new Ie(i, u), x = new ze(s), te = new Ke(c, u), S = new Je(c), ne = new Le(a, u), C = new Re(o, a, t, u), w = new rt(f), T = new Fe(r, t, n, i, s, u, f, _), E = new Xe(h), D = new Ye(l, u), O = new et(g, ee, _, T, v, b, x);
+function buildContainer(prisma) {
+	const productRepo = new PrismaProductRepository(prisma);
+	const clientRepo = new PrismaClientRepository(prisma);
+	const saleRepo = new PrismaSaleRepository(prisma);
+	const cashRegisterRepo = new PrismaCashRegisterRepository(prisma);
+	const supplierRepo = new PrismaSupplierRepository(prisma);
+	const purchaseRepo = new PrismaPurchaseRepository(prisma);
+	const settingsRepo = new PrismaSettingsRepository(prisma);
+	const userRepo = new PrismaUserRepository(prisma);
+	const categoryRepo = new PrismaCategoryRepository(prisma);
+	const auditLogRepo = new PrismaAuditLogRepository(prisma);
+	const dashboardRepo = new PrismaDashboardRepository(prisma);
+	const discountRepo = new PrismaDiscountRepository(prisma);
+	const movementRepo = new PrismaInventoryMovementRepository(prisma);
+	const aiTrainingLogRepo = new PrismaAiTrainingLogRepository(prisma);
+	const cacheService = new CacheService();
+	const backupAdapter = new ElectronBackupService();
+	const pdfReportGenerator = new PDFReportGenerator();
+	const excelReportGenerator = new ExcelReportGenerator();
+	const dashboardService = new DashboardService(dashboardRepo, cacheService);
+	const productService = new ProductService(productRepo, categoryRepo, auditLogRepo);
+	const clientService = new ClientService(clientRepo, auditLogRepo);
+	const cashRegisterService = new CashRegisterService(cashRegisterRepo, auditLogRepo);
+	const settingsService = new SettingsService(settingsRepo);
+	const userService = new UserService(userRepo, auditLogRepo);
+	const authService = new AuthService(userRepo);
+	const supplierService = new SupplierService(supplierRepo, auditLogRepo);
+	const purchaseService = new PurchaseService(purchaseRepo, supplierRepo, productRepo, auditLogRepo);
+	const discountService = new DiscountService(discountRepo);
+	const saleService = new SaleService(saleRepo, productRepo, clientRepo, cashRegisterRepo, settingsRepo, auditLogRepo, discountRepo, dashboardService);
+	const backupService = new BackupService(backupAdapter);
+	const categoryService = new CategoryService(categoryRepo, auditLogRepo);
+	const reportService = new ReportService(pdfReportGenerator, excelReportGenerator, dashboardService, saleService, productService, cashRegisterService, settingsService);
+	const schedulerService = new SchedulerService(reportService, backupService);
+	const aiProvider = new OllamaAiProvider();
+	const aiService = new AiService(aiProvider, dashboardService, productService, clientService, aiTrainingLogRepo);
+	const aiMonitorService = new AiMonitorService();
+	const aiAuditService = new AiAuditService(aiTrainingLogRepo, auditLogRepo);
+	const validationPipeline = new ValidationPipeline(new ReviewQueue(), aiAuditService);
+	aiService.setValidationPipeline(validationPipeline);
 	return {
-		prisma: e,
-		userRepo: c,
-		productService: v,
-		clientService: y,
-		saleService: T,
-		cashRegisterService: b,
-		settingsService: x,
-		userService: te,
-		authService: S,
-		supplierService: ne,
-		purchaseService: C,
-		categoryService: D,
-		dashboardService: _,
-		backupService: E,
-		reportService: O,
-		schedulerService: new nt(O, E),
-		discountService: w,
-		cacheService: m,
-		movementRepo: p,
-		aiService: new it(new Se(), _, v, y)
+		prisma,
+		userRepo,
+		productService,
+		clientService,
+		saleService,
+		cashRegisterService,
+		settingsService,
+		userService,
+		authService,
+		supplierService,
+		purchaseService,
+		categoryService,
+		dashboardService,
+		backupService,
+		reportService,
+		schedulerService,
+		discountService,
+		cacheService,
+		movementRepo,
+		aiTrainingLogRepo,
+		aiProvider,
+		aiService,
+		aiMonitorService,
+		aiAuditService,
+		validationPipeline
 	};
 }
 //#endregion
 //#region src/backend/di/registry.ts
-var H = /* @__PURE__ */ T({
-	getContainer: () => ot,
-	setContainer: () => st
-}), U = null;
-function ot() {
-	if (!U) throw Error("Container not initialized");
-	return U;
+var registry_exports = /* @__PURE__ */ __exportAll({
+	getContainer: () => getContainer,
+	setContainer: () => setContainer
+});
+var _container = null;
+function getContainer() {
+	if (!_container) throw new Error("Container not initialized");
+	return _container;
 }
-function st(e) {
-	U = e;
+function setContainer(c) {
+	_container = c;
 }
 //#endregion
 //#region src/backend/utils/ipcWrapper.ts
-function ct(e) {
-	return e instanceof ee ? {
-		success: !1,
-		message: "Error de validación: " + e.issues.map((e) => e.message).join(", "),
-		errors: e.issues.map((e) => `${e.path.join(".")}: ${e.message}`),
+function formatError(error) {
+	if (error instanceof ZodError) return {
+		success: false,
+		message: "Error de validación: " + error.issues.map((e) => e.message).join(", "),
+		errors: error.issues.map((e) => `${e.path.join(".")}: ${e.message}`),
 		code: "VALIDATION"
-	} : e instanceof k ? {
-		success: !1,
-		message: e.message,
-		code: e.code,
-		errors: e instanceof j ? e.errors : void 0
-	} : (E.error({ err: e }, "Unhandled IPC Error"), {
-		success: !1,
+	};
+	if (error instanceof DomainError) return {
+		success: false,
+		message: error.message,
+		code: error.code,
+		errors: error instanceof ValidationError ? error.errors : void 0
+	};
+	logger.error({ err: error }, "Unhandled IPC Error");
+	return {
+		success: false,
 		message: "Ocurrió un error inesperado en el sistema",
 		code: "INTERNAL"
-	});
-}
-function W(e, t = "Error interno") {
-	return E.error({ err: e }, `[SafeHandler] Error: ${t}`), {
-		success: !1,
-		message: t
 	};
 }
-function G(e, t) {
-	return async (n, ...r) => {
+function sanitizedCatch(error, genericMessage = "Error interno") {
+	logger.error({ err: error }, `[SafeHandler] Error: ${genericMessage}`);
+	return {
+		success: false,
+		message: genericMessage
+	};
+}
+function wrapIpc(handler, schema) {
+	return async (_event, ...args) => {
 		try {
-			if (t && r.length > 0) {
-				let e = t.safeParse(r[0]);
-				if (!e.success) return {
-					success: !1,
-					message: "Error de validación: " + e.error.issues.map((e) => e.message).join(", "),
-					errors: e.error.issues.map((e) => `${e.path.join(".")}: ${e.message}`),
+			if (schema && args.length > 0) {
+				const result = schema.safeParse(args[0]);
+				if (!result.success) return {
+					success: false,
+					message: "Error de validación: " + result.error.issues.map((e) => e.message).join(", "),
+					errors: result.error.issues.map((e) => `${e.path.join(".")}: ${e.message}`),
 					code: "VALIDATION"
 				};
-				r[0] = e.data;
+				args[0] = result.data;
 			}
-			let n = await e(...r);
-			return n && typeof n == "object" && "success" in n ? n : {
-				success: !0,
-				data: n
+			const data = await handler(...args);
+			if (data && typeof data === "object" && "success" in data) return data;
+			return {
+				success: true,
+				data
 			};
-		} catch (e) {
-			return ct(e);
+		} catch (error) {
+			return formatError(error);
 		}
 	};
 }
 //#endregion
 //#region src/backend/auth/session.ts
-var K = null;
-function lt(e) {
-	K = e;
+var currentUser = null;
+function setCurrentUser(user) {
+	currentUser = user;
 }
-function q() {
-	return K;
+function getCurrentUser() {
+	return currentUser;
 }
-function ut() {
-	K = null;
+function clearCurrentUser() {
+	currentUser = null;
 }
 //#endregion
 //#region src/backend/auth/authorize.ts
-var J = class extends k {
+var UnauthorizedError = class extends DomainError {
 	code = "UNAUTHORIZED";
 	constructor() {
 		super("No autenticado");
 	}
-}, Y = class extends k {
+};
+var ForbiddenError = class extends DomainError {
 	code = "FORBIDDEN";
-	constructor(e) {
-		super(`Acceso denegado. Se requiere rol: ${e.join(" o ")}`);
+	constructor(roles) {
+		super(`Acceso denegado. Se requiere rol: ${roles.join(" o ")}`);
 	}
 };
-function X(...e) {
-	return function(t) {
-		return (async (...n) => {
-			let r = q();
-			if (!r) throw new J();
-			if (!e.includes(r.role)) throw new Y(e);
-			return t(...n);
+/**
+* Wraps an IPC handler to require specific roles.
+* Must be placed BETWEEN the handler function and wrapIpc:
+*
+*   ipcMain.handle("users:create", wrapIpc(requireRole('ADMIN')(data => userService.createUser(data))));
+*/
+function requireRole(...roles) {
+	return function(handler) {
+		const wrapped = (async (...args) => {
+			const user = getCurrentUser();
+			if (!user) throw new UnauthorizedError();
+			if (!roles.includes(user.role)) throw new ForbiddenError(roles);
+			return handler(...args);
 		});
+		return wrapped;
 	};
 }
 //#endregion
 //#region src/backend/ipc.ts
-var Z = new Proxy({}, { get(e, t) {
-	return ot()[t];
+var $ = new Proxy({}, { get(_, prop) {
+	return getContainer()[prop];
 } });
-function dt() {
-	r.handle("dialog:showConfirm", async (e, t) => (await n.showMessageBox({
-		type: "question",
-		buttons: ["Sí", "No"],
-		defaultId: 0,
-		cancelId: 1,
-		title: t.title || "Confirmación",
-		message: t.message
-	})).response === 0), r.handle("health:check", async () => {
+function setupIpcHandlers() {
+	/**
+	* HEALTH CHECK
+	*/
+	ipcMain.handle("dialog:showConfirm", async (_, options) => {
+		return (await dialog.showMessageBox({
+			type: "question",
+			buttons: ["Sí", "No"],
+			defaultId: 0,
+			cancelId: 1,
+			title: options.title || "Confirmación",
+			message: options.message
+		})).response === 0;
+	});
+	ipcMain.handle("health:check", async () => {
 		try {
-			return await Z.prisma.$queryRaw`SELECT 1`, {
-				success: !0,
+			await $.prisma.$queryRaw`SELECT 1`;
+			return {
+				success: true,
 				database: "connected",
 				timestamp: (/* @__PURE__ */ new Date()).toISOString()
 			};
-		} catch (e) {
-			return E.error("[Health] Database check failed:", e), {
-				success: !1,
+		} catch (error) {
+			logger.error("[Health] Database check failed:", error);
+			return {
+				success: false,
 				database: "disconnected",
 				timestamp: (/* @__PURE__ */ new Date()).toISOString()
 			};
 		}
-	}), r.handle("dashboard:getStats", async (e, t, n) => {
+	});
+	/**
+	* DASHBOARD
+	*/
+	ipcMain.handle("dashboard:getStats", async (_, startDate, endDate) => {
 		try {
-			return await Z.dashboardService.getStats(t, n);
-		} catch (e) {
-			return E.error("[Dashboard] getStats error:", e), W(e, "Error al obtener estadísticas del dashboard");
+			return await $.dashboardService.getStats(startDate, endDate);
+		} catch (error) {
+			logger.error("[Dashboard] getStats error:", error);
+			return sanitizedCatch(error, "Error al obtener estadísticas del dashboard");
 		}
-	}), r.handle("dashboard:getWeeklySales", async (e, t) => {
+	});
+	ipcMain.handle("dashboard:getWeeklySales", async (_, days) => {
 		try {
-			return await Z.dashboardService.getWeeklySales(t);
-		} catch (e) {
-			return E.error("[Dashboard] getWeeklySales error:", e), [];
+			return await $.dashboardService.getWeeklySales(days);
+		} catch (error) {
+			logger.error("[Dashboard] getWeeklySales error:", error);
+			return [];
 		}
-	}), r.handle("dashboard:getLowStock", async (e, t) => {
+	});
+	ipcMain.handle("dashboard:getLowStock", async (_, limit) => {
 		try {
-			return await Z.dashboardService.getLowStockProducts(t || 50);
-		} catch (e) {
-			return E.error("[Dashboard] getLowStock error:", e), [];
+			return await $.dashboardService.getLowStockProducts(limit || 50);
+		} catch (error) {
+			logger.error("[Dashboard] getLowStock error:", error);
+			return [];
 		}
-	}), r.handle("dashboard:getSalesByPayment", async (e, t, n) => {
+	});
+	ipcMain.handle("dashboard:getSalesByPayment", async (_, startDate, endDate) => {
 		try {
-			return await Z.dashboardService.getSalesByPaymentMethod(t, n);
-		} catch (e) {
-			return E.error("[Dashboard] getSalesByPayment error:", e), [];
+			return await $.dashboardService.getSalesByPaymentMethod(startDate, endDate);
+		} catch (error) {
+			logger.error("[Dashboard] getSalesByPayment error:", error);
+			return [];
 		}
-	}), r.handle("dashboard:getTopProducts", async (e, t, n, r) => {
+	});
+	ipcMain.handle("dashboard:getTopProducts", async (_, limit, startDate, endDate) => {
 		try {
-			return await Z.dashboardService.getTopProducts(t, n, r);
-		} catch (e) {
-			return E.error("[Dashboard] getTopProducts error:", e), [];
+			return await $.dashboardService.getTopProducts(limit, startDate, endDate);
+		} catch (error) {
+			logger.error("[Dashboard] getTopProducts error:", error);
+			return [];
 		}
-	}), r.handle("dashboard:getTopClients", async (e, t, n, r) => {
+	});
+	ipcMain.handle("dashboard:getTopClients", async (_, limit, startDate, endDate) => {
 		try {
-			return await Z.dashboardService.getTopClients(t, n, r);
-		} catch (e) {
-			return E.error("[Dashboard] getTopClients error:", e), [];
+			return await $.dashboardService.getTopClients(limit, startDate, endDate);
+		} catch (error) {
+			logger.error("[Dashboard] getTopClients error:", error);
+			return [];
 		}
-	}), r.handle("dashboard:getSalesByHour", async (e, t, n) => {
+	});
+	ipcMain.handle("dashboard:getSalesByHour", async (_, startDate, endDate) => {
 		try {
-			return await Z.dashboardService.getSalesByHour(t, n);
-		} catch (e) {
-			return E.error("[Dashboard] getSalesByHour error:", e), [];
+			return await $.dashboardService.getSalesByHour(startDate, endDate);
+		} catch (error) {
+			logger.error("[Dashboard] getSalesByHour error:", error);
+			return [];
 		}
-	}), r.handle("dashboard:getCashSummary", async (e, t, n) => {
+	});
+	ipcMain.handle("dashboard:getCashSummary", async (_, startDate, endDate) => {
 		try {
-			return await Z.dashboardService.getCashRegisterSummary(t, n);
-		} catch (e) {
-			return E.error("[Dashboard] getCashSummary error:", e), W(e, "Error al obtener resumen de caja");
+			return await $.dashboardService.getCashRegisterSummary(startDate, endDate);
+		} catch (error) {
+			logger.error("[Dashboard] getCashSummary error:", error);
+			return sanitizedCatch(error, "Error al obtener resumen de caja");
 		}
-	}), r.handle("dashboard:getInventoryMetrics", async () => {
+	});
+	ipcMain.handle("dashboard:getInventoryMetrics", async () => {
 		try {
-			return await Z.dashboardService.getInventoryMetrics();
-		} catch (e) {
-			return E.error("[Dashboard] getInventoryMetrics error:", e), W(e, "Error al obtener métricas de inventario");
+			return await $.dashboardService.getInventoryMetrics();
+		} catch (error) {
+			logger.error("[Dashboard] getInventoryMetrics error:", error);
+			return sanitizedCatch(error, "Error al obtener métricas de inventario");
 		}
-	}), r.handle("dashboard:invalidateCache", async () => {
+	});
+	ipcMain.handle("dashboard:invalidateCache", async () => {
 		try {
-			return Z.dashboardService.invalidateCache(), { success: !0 };
-		} catch (e) {
-			return E.error("[Dashboard] invalidateCache error:", e), W(e, "Error al limpiar caché");
+			$.dashboardService.invalidateCache();
+			return { success: true };
+		} catch (error) {
+			logger.error("[Dashboard] invalidateCache error:", error);
+			return sanitizedCatch(error, "Error al limpiar caché");
 		}
-	}), r.handle("settings:getAll", async () => {
+	});
+	/**
+	* SETTINGS
+	*/
+	ipcMain.handle("settings:getAll", async () => {
 		try {
-			let e = q();
-			if (!e) throw new J();
-			if (e.role !== "ADMIN") throw new Y(["ADMIN"]);
-			return await Z.settingsService.getSettings();
-		} catch (e) {
-			return E.error("[Settings] getAll error:", e), W(e, "Error al obtener configuración");
+			const user = getCurrentUser();
+			if (!user) throw new UnauthorizedError();
+			if (user.role !== "ADMIN") throw new ForbiddenError(["ADMIN"]);
+			return await $.settingsService.getSettings();
+		} catch (error) {
+			logger.error("[Settings] getAll error:", error);
+			return sanitizedCatch(error, "Error al obtener configuración");
 		}
-	}), r.handle("settings:update", async (e, t) => {
+	});
+	ipcMain.handle("settings:update", async (_, settings) => {
 		try {
-			let e = q();
-			if (!e) throw new J();
-			if (e.role !== "ADMIN") throw new Y(["ADMIN"]);
-			let n = Me.safeParse(t);
-			return n.success ? (await Z.settingsService.updateSettings(n.data), E.info("Settings saved successfully"), { success: !0 }) : {
-				success: !1,
-				message: "Error de validación: " + n.error.issues.map((e) => e.message).join(", ")
+			const user = getCurrentUser();
+			if (!user) throw new UnauthorizedError();
+			if (user.role !== "ADMIN") throw new ForbiddenError(["ADMIN"]);
+			const parsed = settingsSchema.safeParse(settings);
+			if (!parsed.success) return {
+				success: false,
+				message: "Error de validación: " + parsed.error.issues.map((e) => e.message).join(", ")
 			};
-		} catch (e) {
-			return E.error({
-				err: e,
-				settings: Object.keys(t)
-			}, "[Settings] update error"), W(e, "Error al guardar configuración");
+			await $.settingsService.updateSettings(parsed.data);
+			logger.info("Settings saved successfully");
+			return { success: true };
+		} catch (error) {
+			logger.error({
+				err: error,
+				settings: Object.keys(settings)
+			}, "[Settings] update error");
+			return sanitizedCatch(error, "Error al guardar configuración");
 		}
-	}), r.handle("cash:getOpen", async () => {
+	});
+	/**
+	* CASH REGISTERS
+	*/
+	ipcMain.handle("cash:getOpen", async () => {
 		try {
-			return await Z.cashRegisterService.getOpenRegister();
-		} catch {
+			return await $.cashRegisterService.getOpenRegister();
+		} catch (error) {
 			return null;
 		}
-	}), r.handle("cash:getAll", async (e, t, n) => {
+	});
+	ipcMain.handle("cash:getAll", async (_, startDate, endDate) => {
 		try {
-			let e = q();
-			if (!e) throw new J();
-			if (e.role !== "ADMIN") throw new Y(["ADMIN"]);
-			return await Z.cashRegisterService.getAllRegisters(t, n);
-		} catch (e) {
-			return E.error("[Cash] getAll error:", e), W(e, "Error al obtener cajas");
+			const user = getCurrentUser();
+			if (!user) throw new UnauthorizedError();
+			if (user.role !== "ADMIN") throw new ForbiddenError(["ADMIN"]);
+			return await $.cashRegisterService.getAllRegisters(startDate, endDate);
+		} catch (error) {
+			logger.error("[Cash] getAll error:", error);
+			return sanitizedCatch(error, "Error al obtener cajas");
 		}
-	}), r.handle("cash:getDetails", async (e, t) => {
+	});
+	ipcMain.handle("cash:getDetails", async (_, id) => {
 		try {
-			let e = q();
-			if (!e) throw new J();
-			if (e.role !== "ADMIN") throw new Y(["ADMIN"]);
-			return await Z.cashRegisterService.getRegisterDetails(t);
-		} catch (e) {
-			return E.error("[Cash] getDetails error:", e), W(e, "Error al obtener detalles de caja");
+			const user = getCurrentUser();
+			if (!user) throw new UnauthorizedError();
+			if (user.role !== "ADMIN") throw new ForbiddenError(["ADMIN"]);
+			return await $.cashRegisterService.getRegisterDetails(id);
+		} catch (error) {
+			logger.error("[Cash] getDetails error:", error);
+			return sanitizedCatch(error, "Error al obtener detalles de caja");
 		}
-	}), r.handle("cash:getDailySummary", async (e, t) => {
+	});
+	ipcMain.handle("cash:getDailySummary", async (_, registerId) => {
 		try {
-			let e = q();
-			if (!e) throw new J();
-			if (e.role !== "ADMIN") throw new Y(["ADMIN"]);
-			return await Z.cashRegisterService.getDailySummary(t);
-		} catch (e) {
-			return E.error("[Cash] getDailySummary error:", e), W(e, "Error al obtener resumen del día");
+			const user = getCurrentUser();
+			if (!user) throw new UnauthorizedError();
+			if (user.role !== "ADMIN") throw new ForbiddenError(["ADMIN"]);
+			return await $.cashRegisterService.getDailySummary(registerId);
+		} catch (error) {
+			logger.error("[Cash] getDailySummary error:", error);
+			return sanitizedCatch(error, "Error al obtener resumen del día");
 		}
-	}), r.handle("cash:open", G(X("ADMIN")((e, t) => Z.cashRegisterService.openRegister(e, t)))), r.handle("cash:close", G(X("ADMIN")((e, t, n) => Z.cashRegisterService.closeRegister(e, t, n)))), r.handle("auth:login", async (e, t, n) => {
+	});
+	ipcMain.handle("cash:open", wrapIpc(requireRole("ADMIN")((amount, userId) => $.cashRegisterService.openRegister(amount, userId))));
+	ipcMain.handle("cash:close", wrapIpc(requireRole("ADMIN")((id, amount, userId) => $.cashRegisterService.closeRegister(id, amount, userId))));
+	/**
+	* AUTH
+	*/
+	ipcMain.handle("auth:login", async (_, username, password) => {
 		try {
-			let e = await Z.authService.login(t, n);
-			return e.success && e.user && lt({
-				id: e.user.id,
-				username: e.user.username,
-				role: e.user.role
-			}), e;
-		} catch (e) {
-			return E.error("[Auth] Login error:", e), W(e, "Error de autenticación");
+			const result = await $.authService.login(username, password);
+			if (result.success && result.user) setCurrentUser({
+				id: result.user.id,
+				username: result.user.username,
+				role: result.user.role
+			});
+			return result;
+		} catch (error) {
+			logger.error("[Auth] Login error:", error);
+			return sanitizedCatch(error, "Error de autenticación");
 		}
-	}), r.handle("auth:logout", async () => (ut(), { success: !0 })), r.handle("auth:checkSession", async () => {
-		let e = q();
+	});
+	ipcMain.handle("auth:logout", async () => {
+		clearCurrentUser();
+		return { success: true };
+	});
+	ipcMain.handle("auth:checkSession", async () => {
+		const user = getCurrentUser();
 		return {
-			authenticated: !!e,
-			user: e
+			authenticated: !!user,
+			user
 		};
-	}), r.handle("auth:getSecurityQuestion", async (e, t) => {
+	});
+	ipcMain.handle("auth:getSecurityQuestion", async (_, username) => {
 		try {
-			return await Z.authService.getSecurityQuestion(t);
-		} catch (e) {
-			return W(e, "Error al obtener pregunta de seguridad");
+			return await $.authService.getSecurityQuestion(username);
+		} catch (error) {
+			return sanitizedCatch(error, "Error al obtener pregunta de seguridad");
 		}
-	}), r.handle("auth:verifySecurityAnswer", async (e, t, n) => {
+	});
+	ipcMain.handle("auth:verifySecurityAnswer", async (_, username, answer) => {
 		try {
-			return await Z.authService.verifySecurityAnswer(t, n);
-		} catch (e) {
-			return W(e, "Error al verificar respuesta");
+			return await $.authService.verifySecurityAnswer(username, answer);
+		} catch (error) {
+			return sanitizedCatch(error, "Error al verificar respuesta");
 		}
-	}), r.handle("auth:resetPassword", async (e, t, n) => {
+	});
+	ipcMain.handle("auth:resetPassword", async (_, token, newPassword) => {
 		try {
-			return await Z.authService.resetPassword(t, n);
-		} catch (e) {
-			return W(e, "Error al restablecer contraseña");
+			return await $.authService.resetPassword(token, newPassword);
+		} catch (error) {
+			return sanitizedCatch(error, "Error al restablecer contraseña");
 		}
-	}), r.handle("auth:setSecurityQuestion", G(X("ADMIN")(async (e, t, n, r) => await Z.authService.setSecurityQuestion(t, n, r)))), r.handle("setup:status", async () => {
+	});
+	ipcMain.handle("auth:setSecurityQuestion", wrapIpc(requireRole("ADMIN")(async (_, userId, question, answer) => {
+		return await $.authService.setSecurityQuestion(userId, question, answer);
+	})));
+	/**
+	* SETUP (First-run wizard)
+	*/
+	ipcMain.handle("setup:status", async () => {
 		try {
-			return { needsSetup: await Z.userRepo.count() === 0 };
-		} catch (e) {
-			return E.error("[Setup] Status error:", e), { needsSetup: !0 };
+			return { needsSetup: await $.userRepo.count() === 0 };
+		} catch (error) {
+			logger.error("[Setup] Status error:", error);
+			return { needsSetup: true };
 		}
-	}), r.handle("setup:complete", async (e, t) => {
+	});
+	ipcMain.handle("setup:complete", async (_, data) => {
 		try {
-			let e = await Z.authService.register({
-				username: t.user.username,
-				password: t.user.password,
+			const result = await $.authService.register({
+				username: data.user.username,
+				password: data.user.password,
 				role: "ADMIN",
 				password_hash: "",
-				security_question: t.user.security_question,
-				security_answer: t.user.security_answer
-			}), n;
-			if (e.success && e.user) n = e.user, E.info({ userId: n.id }, "User created during setup");
-			else if (e.error?.includes("ya existe")) {
-				let e = await Z.userRepo.findByUsername(t.user.username);
-				if (!e) return {
-					success: !1,
+				security_question: data.user.security_question,
+				security_answer: data.user.security_answer
+			});
+			let user;
+			if (result.success && result.user) {
+				user = result.user;
+				logger.info({ userId: user.id }, "User created during setup");
+			} else if (result.error?.includes("ya existe")) {
+				const existing = await $.userRepo.findByUsername(data.user.username);
+				if (!existing) return {
+					success: false,
 					message: "Error al verificar el usuario existente"
 				};
-				n = {
-					id: e.id,
-					username: e.username,
-					role: e.role
-				}, E.info({ userId: n.id }, "User already exists, reusing");
+				user = {
+					id: existing.id,
+					username: existing.username,
+					role: existing.role
+				};
+				logger.info({ userId: user.id }, "User already exists, reusing");
 			} else return {
-				success: !1,
-				message: e.error || "Error al crear el usuario"
+				success: false,
+				message: result.error || "Error al crear el usuario"
 			};
-			lt({
-				id: n.id,
-				username: n.username,
-				role: n.role
+			setCurrentUser({
+				id: user.id,
+				username: user.username,
+				role: user.role
 			});
 			try {
-				await Z.settingsService.updateSettings(t.settings), E.info({ settings: Object.keys(t.settings) }, "Settings saved during setup");
-			} catch (e) {
-				return E.error({
-					err: e,
-					settings: Object.keys(t.settings)
-				}, "[Setup] Settings save error"), {
-					success: !1,
-					message: "Error al guardar la configuración del negocio: " + (e?.message || String(e))
+				await $.settingsService.updateSettings(data.settings);
+				logger.info({ settings: Object.keys(data.settings) }, "Settings saved during setup");
+			} catch (settingsErr) {
+				logger.error({
+					err: settingsErr,
+					settings: Object.keys(data.settings)
+				}, "[Setup] Settings save error");
+				return {
+					success: false,
+					message: "Error al guardar la configuración del negocio: " + (settingsErr?.message || String(settingsErr))
 				};
 			}
 			return {
-				success: !0,
-				user: n
+				success: true,
+				user
 			};
-		} catch (e) {
-			return E.error({ err: e }, "[Setup] Complete error"), W(e, "Error durante la configuración inicial");
+		} catch (error) {
+			logger.error({ err: error }, "[Setup] Complete error");
+			return sanitizedCatch(error, "Error durante la configuración inicial");
 		}
-	}), r.handle("clients:getAll", async (e, t) => {
+	});
+	/**
+	* CLIENTS
+	*/
+	ipcMain.handle("clients:getAll", async (_, search) => {
 		try {
-			return await Z.clientService.getAllClients(t);
-		} catch (e) {
-			return E.error("[Clients] getAll error:", e), W(e, "Error al obtener clientes");
+			return await $.clientService.getAllClients(search);
+		} catch (error) {
+			logger.error("[Clients] getAll error:", error);
+			return sanitizedCatch(error, "Error al obtener clientes");
 		}
-	}), r.handle("clients:getById", async (e, t) => {
+	});
+	ipcMain.handle("clients:getById", async (_, id) => {
 		try {
-			return await Z.clientService.getClientById(t);
-		} catch (e) {
-			return E.error("[Clients] getById error:", e), W(e, "Error al obtener cliente");
+			return await $.clientService.getClientById(id);
+		} catch (error) {
+			logger.error("[Clients] getById error:", error);
+			return sanitizedCatch(error, "Error al obtener cliente");
 		}
-	}), r.handle("clients:create", G((e, t) => Z.clientService.createClient(e, t), R)), r.handle("clients:update", G((e, t, n) => Z.clientService.updateClient(e, t, n))), r.handle("clients:delete", async (e, t, n) => {
+	});
+	ipcMain.handle("clients:create", wrapIpc((clientData, userId) => $.clientService.createClient(clientData, userId), clientSchema));
+	ipcMain.handle("clients:update", wrapIpc((id, clientData, userId) => $.clientService.updateClient(id, clientData, userId)));
+	ipcMain.handle("clients:delete", async (_, id, userId) => {
 		try {
-			return await Z.clientService.deleteClient(t, n);
-		} catch (e) {
-			return E.error("[Clients] delete error:", e), W(e, "Error al eliminar cliente");
+			return await $.clientService.deleteClient(id, userId);
+		} catch (error) {
+			logger.error("[Clients] delete error:", error);
+			return sanitizedCatch(error, "Error al eliminar cliente");
 		}
-	}), r.handle("products:getAll", async (e, t, n) => {
+	});
+	/**
+	* PRODUCTS
+	*/
+	ipcMain.handle("products:getAll", async (_, search, categoryId) => {
 		try {
-			return await Z.productService.getAllProducts(t, n);
-		} catch (e) {
-			return E.error("[Products] getAll error:", e), W(e, "Error al obtener productos");
+			return await $.productService.getAllProducts(search, categoryId);
+		} catch (error) {
+			logger.error("[Products] getAll error:", error);
+			return sanitizedCatch(error, "Error al obtener productos");
 		}
-	}), r.handle("products:getById", async (e, t) => {
+	});
+	ipcMain.handle("products:getById", async (_, id) => {
 		try {
-			return await Z.productService.getProductById(t);
-		} catch (e) {
-			return E.error("[Products] getById error:", e), W(e, "Error al obtener producto");
+			return await $.productService.getProductById(id);
+		} catch (error) {
+			logger.error("[Products] getById error:", error);
+			return sanitizedCatch(error, "Error al obtener producto");
 		}
-	}), r.handle("products:getLowStock", async () => {
+	});
+	ipcMain.handle("products:getLowStock", async () => {
 		try {
-			return await Z.dashboardService.getLowStockProducts(50);
-		} catch (e) {
-			return E.error("Get low stock products error:", e), [];
+			return await $.dashboardService.getLowStockProducts(50);
+		} catch (error) {
+			logger.error("Get low stock products error:", error);
+			return [];
 		}
-	}), r.handle("products:create", G((e, t) => Z.productService.createProduct(e, t), L)), r.handle("products:update", G((e, t, n) => Z.productService.updateProduct(e, t, n))), r.handle("products:delete", async (e, t, n) => {
+	});
+	ipcMain.handle("products:create", wrapIpc((productData, userId) => $.productService.createProduct(productData, userId), productSchema));
+	ipcMain.handle("products:update", wrapIpc((id, productData, userId) => $.productService.updateProduct(id, productData, userId)));
+	ipcMain.handle("products:delete", async (_, id, userId) => {
 		try {
-			return await Z.productService.deleteProduct(t, n);
-		} catch (e) {
-			return E.error("[Products] delete error:", e), W(e, "Error al eliminar producto");
+			return await $.productService.deleteProduct(id, userId);
+		} catch (error) {
+			logger.error("[Products] delete error:", error);
+			return sanitizedCatch(error, "Error al eliminar producto");
 		}
-	}), r.handle("products:addStock", async (e, t, n, r, i) => {
+	});
+	ipcMain.handle("products:addStock", async (_, productId, quantity, userId, reason) => {
 		try {
-			return await Z.productService.addStock(t, n, r, i);
-		} catch (e) {
-			return E.error("[Products] addStock error:", e), W(e, "Error al añadir stock");
+			return await $.productService.addStock(productId, quantity, userId, reason);
+		} catch (error) {
+			logger.error("[Products] addStock error:", error);
+			return sanitizedCatch(error, "Error al añadir stock");
 		}
-	}), r.handle("products:removeStock", async (e, t, n, r, i) => {
+	});
+	ipcMain.handle("products:removeStock", async (_, productId, quantity, userId, reason) => {
 		try {
-			return await Z.productService.removeStock(t, n, r, i);
-		} catch (e) {
-			return E.error("[Products] removeStock error:", e), W(e, "Error al reducir stock");
+			return await $.productService.removeStock(productId, quantity, userId, reason);
+		} catch (error) {
+			logger.error("[Products] removeStock error:", error);
+			return sanitizedCatch(error, "Error al reducir stock");
 		}
-	}), r.handle("products:getMovements", async (e, t, n) => {
+	});
+	ipcMain.handle("products:getMovements", async (_, productId, limit) => {
 		try {
-			return await Z.productService.getInventoryMovements(t, n);
-		} catch (e) {
-			return E.error("[Products] getMovements error:", e), W(e, "Error al obtener movimientos");
+			return await $.productService.getInventoryMovements(productId, limit);
+		} catch (error) {
+			logger.error("[Products] getMovements error:", error);
+			return sanitizedCatch(error, "Error al obtener movimientos");
 		}
-	}), r.handle("discounts:getAll", async (e, t) => {
+	});
+	/**
+	* DISCOUNTS
+	*/
+	ipcMain.handle("discounts:getAll", async (_, activeOnly) => {
 		try {
-			if (!q()) throw new J();
-			return await Z.discountService.getAllDiscounts(t);
-		} catch (e) {
-			return E.error("[Discounts] getAll error:", e), W(e, "Error al obtener descuentos");
+			if (!getCurrentUser()) throw new UnauthorizedError();
+			return await $.discountService.getAllDiscounts(activeOnly);
+		} catch (error) {
+			logger.error("[Discounts] getAll error:", error);
+			return sanitizedCatch(error, "Error al obtener descuentos");
 		}
-	}), r.handle("discounts:getById", async (e, t) => {
+	});
+	ipcMain.handle("discounts:getById", async (_, id) => {
 		try {
-			if (!q()) throw new J();
-			return await Z.discountService.getDiscountById(t);
-		} catch (e) {
-			return E.error("[Discounts] getById error:", e), W(e, "Error al obtener descuento");
+			if (!getCurrentUser()) throw new UnauthorizedError();
+			return await $.discountService.getDiscountById(id);
+		} catch (error) {
+			logger.error("[Discounts] getById error:", error);
+			return sanitizedCatch(error, "Error al obtener descuento");
 		}
-	}), r.handle("discounts:create", G(X("ADMIN")(async (e) => {
-		let t = Ae.parse(e);
-		return await Z.discountService.createDiscount(t);
-	}))), r.handle("discounts:update", G(X("ADMIN")(async (e, t) => {
-		let n = Ae.partial().parse(t);
-		return await Z.discountService.updateDiscount(e, n);
-	}))), r.handle("discounts:delete", G(X("ADMIN")(async (e) => await Z.discountService.deleteDiscount(e)))), r.handle("discounts:getApplicable", async (e, t, n) => {
+	});
+	ipcMain.handle("discounts:create", wrapIpc(requireRole("ADMIN")(async (data) => {
+		const parsed = discountSchema.parse(data);
+		return await $.discountService.createDiscount(parsed);
+	})));
+	ipcMain.handle("discounts:update", wrapIpc(requireRole("ADMIN")(async (id, data) => {
+		const parsed = discountSchema.partial().parse(data);
+		return await $.discountService.updateDiscount(id, parsed);
+	})));
+	ipcMain.handle("discounts:delete", wrapIpc(requireRole("ADMIN")(async (id) => {
+		return await $.discountService.deleteDiscount(id);
+	})));
+	ipcMain.handle("discounts:getApplicable", async (_, productId, totalAmount) => {
 		try {
-			if (!q()) throw new J();
-			return await Z.discountService.getApplicableDiscounts(t, n);
-		} catch (e) {
-			return E.error("[Discounts] getApplicable error:", e), [];
+			if (!getCurrentUser()) throw new UnauthorizedError();
+			return await $.discountService.getApplicableDiscounts(productId, totalAmount);
+		} catch (error) {
+			logger.error("[Discounts] getApplicable error:", error);
+			return [];
 		}
-	}), r.handle("sales:getAll", async (e, t, n, r, i, a, o) => {
+	});
+	/**
+	* SALES
+	*/
+	ipcMain.handle("sales:getAll", async (_, startDate, endDate, clientId, cashRegisterId, page, pageSize) => {
 		try {
-			return await Z.saleService.getAllSales(t, n, r, i, a, o);
-		} catch (e) {
-			return E.error("[Sales] getAll error:", e), W(e, "Error al obtener ventas");
+			return await $.saleService.getAllSales(startDate, endDate, clientId, cashRegisterId, page, pageSize);
+		} catch (error) {
+			logger.error("[Sales] getAll error:", error);
+			return sanitizedCatch(error, "Error al obtener ventas");
 		}
-	}), r.handle("sales:getToday", async () => {
+	});
+	ipcMain.handle("sales:getToday", async () => {
 		try {
-			return await Z.saleService.getTodaySales();
-		} catch (e) {
-			return E.error("[Sales] getToday error:", e), W(e, "Error al obtener ventas del día");
+			return await $.saleService.getTodaySales();
+		} catch (error) {
+			logger.error("[Sales] getToday error:", error);
+			return sanitizedCatch(error, "Error al obtener ventas del día");
 		}
-	}), r.handle("sales:getLast", async () => {
+	});
+	ipcMain.handle("sales:getLast", async () => {
 		try {
-			return await Z.saleService.getLastSale();
-		} catch (e) {
-			return E.error("[Sales] getLast error:", e), null;
+			return await $.saleService.getLastSale();
+		} catch (error) {
+			logger.error("[Sales] getLast error:", error);
+			return null;
 		}
-	}), r.handle("sales:getStats", async (e, t, n) => {
+	});
+	ipcMain.handle("sales:getStats", async (_, startDate, endDate) => {
 		try {
-			return await Z.saleService.getSalesStats(t, n);
-		} catch (e) {
-			return E.error("[Sales] getStats error:", e), W(e, "Error al obtener estadísticas");
+			return await $.saleService.getSalesStats(startDate, endDate);
+		} catch (error) {
+			logger.error("[Sales] getStats error:", error);
+			return sanitizedCatch(error, "Error al obtener estadísticas");
 		}
-	}), r.handle("sales:getDetails", async (e, t) => {
+	});
+	ipcMain.handle("sales:getDetails", async (_, saleId) => {
 		try {
-			return await Z.saleService.getSaleDetails(t);
-		} catch (e) {
-			return E.error("[Sales] getDetails error:", e), W(e, "Error al obtener detalles de venta");
+			return await $.saleService.getSaleDetails(saleId);
+		} catch (error) {
+			logger.error("[Sales] getDetails error:", error);
+			return sanitizedCatch(error, "Error al obtener detalles de venta");
 		}
-	}), r.handle("sales:register", G(async (e, t, n) => Z.saleService.registerSale(e, t, n), we.omit({ items: !0 }))), r.handle("sales:cancel", async (e, t, n) => {
+	});
+	ipcMain.handle("sales:register", wrapIpc(async (saleData, itemsData, userId) => {
+		return $.saleService.registerSale(saleData, itemsData, userId);
+	}, saleSchema.omit({ items: true })));
+	ipcMain.handle("sales:cancel", async (_, saleId, userId) => {
 		try {
-			return await Z.saleService.cancelSale(t, n);
-		} catch (e) {
-			return E.error("[Sales] cancel error:", e), W(e, "Error al cancelar venta");
+			return await $.saleService.cancelSale(saleId, userId);
+		} catch (error) {
+			logger.error("[Sales] cancel error:", error);
+			return sanitizedCatch(error, "Error al cancelar venta");
 		}
-	}), r.handle("categories:getAll", async (e, t) => await Z.categoryService.getAllCategories(t)), r.handle("categories:getById", async (e, t) => {
+	});
+	/**
+	* CATEGORIES
+	*/
+	ipcMain.handle("categories:getAll", async (_, search) => {
+		return await $.categoryService.getAllCategories(search);
+	});
+	ipcMain.handle("categories:getById", async (_, id) => {
 		try {
-			return await Z.categoryService.getCategoryById(t);
-		} catch (e) {
-			return E.error("[Categories] getById error:", e), W(e, "Error al obtener categoría");
+			return await $.categoryService.getCategoryById(id);
+		} catch (error) {
+			logger.error("[Categories] getById error:", error);
+			return sanitizedCatch(error, "Error al obtener categoría");
 		}
-	}), r.handle("categories:create", G(X("ADMIN")(async (e, t) => await Z.categoryService.createCategory(e, t)), Te)), r.handle("categories:update", G(X("ADMIN")(async (e, t, n) => {
-		let r = Te.parse(t);
-		return await Z.categoryService.updateCategory(e, r, n);
-	}))), r.handle("categories:delete", G(X("ADMIN")(async (e, t) => await Z.categoryService.deleteCategory(e, t)))), r.handle("users:getAll", async () => {
+	});
+	ipcMain.handle("categories:create", wrapIpc(requireRole("ADMIN")(async (categoryData, userId) => {
+		return await $.categoryService.createCategory(categoryData, userId);
+	}), categorySchema));
+	ipcMain.handle("categories:update", wrapIpc(requireRole("ADMIN")(async (id, categoryData, userId) => {
+		const parsed = categorySchema.parse(categoryData);
+		return await $.categoryService.updateCategory(id, parsed, userId);
+	})));
+	ipcMain.handle("categories:delete", wrapIpc(requireRole("ADMIN")(async (id, userId) => {
+		return await $.categoryService.deleteCategory(id, userId);
+	})));
+	/**
+	* USERS
+	*/
+	ipcMain.handle("users:getAll", async () => {
 		try {
-			return await X("ADMIN")(async () => await Z.userService.getAllUsers())();
-		} catch (e) {
-			return E.error("[Users] getAll error:", e), W(e, "Error al obtener usuarios");
+			return await requireRole("ADMIN")(async () => {
+				return await $.userService.getAllUsers();
+			})();
+		} catch (error) {
+			logger.error("[Users] getAll error:", error);
+			return sanitizedCatch(error, "Error al obtener usuarios");
 		}
-	}), r.handle("users:getById", async (e, t) => {
+	});
+	ipcMain.handle("users:getById", async (_, id) => {
 		try {
-			return await X("ADMIN")(async () => await Z.userService.getUserById(t))();
-		} catch (e) {
-			return E.error("[Users] getById error:", e), W(e, "Error al obtener usuario");
+			return await requireRole("ADMIN")(async () => {
+				return await $.userService.getUserById(id);
+			})();
+		} catch (error) {
+			logger.error("[Users] getById error:", error);
+			return sanitizedCatch(error, "Error al obtener usuario");
 		}
-	}), r.handle("users:create", G(X("ADMIN")((e, t) => Z.userService.createUser(e, t)), ke)), r.handle("users:update", G(X("ADMIN")(async (e, t, n) => {
-		let r = ke.partial().parse(t);
-		return await Z.userService.updateUser(e, r, n);
-	}))), r.handle("users:delete", G(X("ADMIN")((e, t) => Z.userService.deleteUser(e, t)))), r.handle("users:changePassword", G(X("ADMIN")((e, t, n) => Z.userService.changePassword(e, t, n)))), r.handle("movements:getAll", async (e, t, n, r, i, a, o, s) => {
+	});
+	ipcMain.handle("users:create", wrapIpc(requireRole("ADMIN")((userData, createdBy) => $.userService.createUser(userData, createdBy)), userCreateSchema));
+	ipcMain.handle("users:update", wrapIpc(requireRole("ADMIN")(async (id, userData, updatedBy) => {
+		const parsed = userCreateSchema.partial().parse(userData);
+		return await $.userService.updateUser(id, parsed, updatedBy);
+	})));
+	ipcMain.handle("users:delete", wrapIpc(requireRole("ADMIN")((id, deletedBy) => $.userService.deleteUser(id, deletedBy))));
+	ipcMain.handle("users:changePassword", wrapIpc(requireRole("ADMIN")((userId, newPassword, changedBy) => $.userService.changePassword(userId, newPassword, changedBy))));
+	/**
+	* INVENTORY MOVEMENTS
+	*/
+	ipcMain.handle("movements:getAll", async (_, page, pageSize, productId, type, reason, startDate, endDate) => {
 		try {
-			let e = q();
-			if (!e) throw new J();
-			if (e.role !== "ADMIN") throw new Y(["ADMIN"]);
-			return await Z.movementRepo.findAll({
-				page: t,
-				pageSize: n,
-				productId: r,
-				type: i,
-				reason: a,
-				startDate: o,
-				endDate: s
+			const user = getCurrentUser();
+			if (!user) throw new UnauthorizedError();
+			if (user.role !== "ADMIN") throw new ForbiddenError(["ADMIN"]);
+			return await $.movementRepo.findAll({
+				page,
+				pageSize,
+				productId,
+				type,
+				reason,
+				startDate,
+				endDate
 			});
-		} catch {
+		} catch (error) {
 			return [];
 		}
-	}), r.handle("suppliers:getAll", async (e, t) => {
+	});
+	/**
+	* SUPPLIERS
+	*/
+	ipcMain.handle("suppliers:getAll", async (_, search) => {
 		try {
-			return await Z.supplierService.getAllSuppliers(t);
-		} catch {
+			return await $.supplierService.getAllSuppliers(search);
+		} catch (error) {
 			return [];
 		}
-	}), r.handle("suppliers:getById", async (e, t) => {
+	});
+	ipcMain.handle("suppliers:getById", async (_, id) => {
 		try {
-			return await Z.supplierService.getSupplierById(t);
-		} catch {
+			return await $.supplierService.getSupplierById(id);
+		} catch (error) {
 			return null;
 		}
-	}), r.handle("suppliers:create", G(X("ADMIN")((e, t) => Z.supplierService.createSupplier(e, t)), Ee)), r.handle("suppliers:update", G(X("ADMIN")(async (e, t, n) => {
-		let r = Ee.partial().parse(t);
-		return await Z.supplierService.updateSupplier(e, r, n);
-	}))), r.handle("suppliers:delete", G(X("ADMIN")((e, t) => Z.supplierService.deleteSupplier(e, t)))), r.handle("purchases:getAll", async (e, t, n) => {
+	});
+	ipcMain.handle("suppliers:create", wrapIpc(requireRole("ADMIN")((data, userId) => $.supplierService.createSupplier(data, userId)), supplierSchema));
+	ipcMain.handle("suppliers:update", wrapIpc(requireRole("ADMIN")(async (id, data, userId) => {
+		const parsed = supplierSchema.partial().parse(data);
+		return await $.supplierService.updateSupplier(id, parsed, userId);
+	})));
+	ipcMain.handle("suppliers:delete", wrapIpc(requireRole("ADMIN")((id, userId) => $.supplierService.deleteSupplier(id, userId))));
+	/**
+	* PURCHASES
+	*/
+	ipcMain.handle("purchases:getAll", async (_, supplierId, status) => {
 		try {
-			return await Z.purchaseService.getAllPurchases(t, n);
-		} catch {
+			return await $.purchaseService.getAllPurchases(supplierId, status);
+		} catch (error) {
 			return [];
 		}
-	}), r.handle("purchases:getById", async (e, t) => {
+	});
+	ipcMain.handle("purchases:getById", async (_, id) => {
 		try {
-			return await Z.purchaseService.getPurchaseById(t);
-		} catch {
+			return await $.purchaseService.getPurchaseById(id);
+		} catch (error) {
 			return null;
 		}
-	}), r.handle("purchases:create", G(X("ADMIN")((e, t) => Z.purchaseService.createPurchase(e, t)), Oe)), r.handle("purchases:receive", G(X("ADMIN")((e, t) => Z.purchaseService.receivePurchase(e, t)))), r.handle("purchases:cancel", G(X("ADMIN")((e, t) => Z.purchaseService.cancelPurchase(e, t)))), r.handle("purchases:updatePaymentStatus", G(X("ADMIN")((e, t) => Z.purchaseService.updatePaymentStatus(e, t)))), r.handle("backup:create", G(X("ADMIN")((e) => Z.backupService.createBackup(e)))), r.handle("backup:list", async () => {
+	});
+	ipcMain.handle("purchases:create", wrapIpc(requireRole("ADMIN")((data, userId) => $.purchaseService.createPurchase(data, userId)), purchaseSchema));
+	ipcMain.handle("purchases:receive", wrapIpc(requireRole("ADMIN")((purchaseId, userId) => $.purchaseService.receivePurchase(purchaseId, userId))));
+	ipcMain.handle("purchases:cancel", wrapIpc(requireRole("ADMIN")((purchaseId, userId) => $.purchaseService.cancelPurchase(purchaseId, userId))));
+	ipcMain.handle("purchases:updatePaymentStatus", wrapIpc(requireRole("ADMIN")((purchaseId, paymentStatus) => $.purchaseService.updatePaymentStatus(purchaseId, paymentStatus))));
+	ipcMain.handle("backup:create", wrapIpc(requireRole("ADMIN")((label) => $.backupService.createBackup(label))));
+	ipcMain.handle("backup:list", async () => {
 		try {
-			return await Z.backupService.listBackups();
-		} catch (e) {
-			return E.error("[IPC] Error listing backups:", e), [];
+			return await $.backupService.listBackups();
+		} catch (error) {
+			logger.error("[IPC] Error listing backups:", error);
+			return [];
 		}
-	}), r.handle("backup:restore", G(X("ADMIN")((e) => Z.backupService.restoreBackup(e)))), r.handle("backup:delete", G(X("ADMIN")((e) => Z.backupService.deleteBackup(e)))), r.handle("settings:getTax", async () => {
+	});
+	ipcMain.handle("backup:restore", wrapIpc(requireRole("ADMIN")((backupPath) => $.backupService.restoreBackup(backupPath))));
+	ipcMain.handle("backup:delete", wrapIpc(requireRole("ADMIN")((backupPath) => $.backupService.deleteBackup(backupPath))));
+	ipcMain.handle("settings:getTax", async () => {
 		try {
-			let e = q();
-			if (!e) throw new J();
-			if (e.role !== "ADMIN") throw new Y(["ADMIN"]);
-			return await Z.settingsService.getTaxSettings();
-		} catch (e) {
-			return E.error("[Settings] getTax error:", e), W(e, "Error al obtener configuración de impuestos");
+			const user = getCurrentUser();
+			if (!user) throw new UnauthorizedError();
+			if (user.role !== "ADMIN") throw new ForbiddenError(["ADMIN"]);
+			return await $.settingsService.getTaxSettings();
+		} catch (error) {
+			logger.error("[Settings] getTax error:", error);
+			return sanitizedCatch(error, "Error al obtener configuración de impuestos");
 		}
-	}), r.handle("settings:updateTax", async (e, t, n, r) => {
+	});
+	ipcMain.handle("settings:updateTax", async (_, taxRate, taxType, taxIncluded) => {
 		try {
-			let e = q();
-			if (!e) throw new J();
-			if (e.role !== "ADMIN") throw new Y(["ADMIN"]);
-			return await Z.settingsService.updateTaxSettings(t, n, r);
-		} catch (e) {
-			return E.error({ err: e }, "[Settings] updateTax error"), W(e, "Error al guardar configuración de impuestos");
+			const user = getCurrentUser();
+			if (!user) throw new UnauthorizedError();
+			if (user.role !== "ADMIN") throw new ForbiddenError(["ADMIN"]);
+			return await $.settingsService.updateTaxSettings(taxRate, taxType, taxIncluded);
+		} catch (error) {
+			logger.error({ err: error }, "[Settings] updateTax error");
+			return sanitizedCatch(error, "Error al guardar configuración de impuestos");
 		}
-	}), r.handle("reports:generate", G(X("ADMIN")(async (e) => {
-		let t = e.startDate ? new Date(e.startDate) : void 0, r;
-		e.endDate ? (r = new Date(e.endDate), r.setHours(23, 59, 59, 999)) : t && (r = new Date(t), r.setHours(23, 59, 59, 999));
-		let i = {
-			...e,
-			startDate: t,
-			endDate: r
-		}, a = await Z.reportService.generateReport(i), o = i.format === "pdf" ? "pdf" : "xlsx", { filePath: s, canceled: c } = await n.showSaveDialog({
-			defaultPath: `${i.type}-${Date.now()}.${o}`,
-			filters: i.format === "pdf" ? [{
+	});
+	ipcMain.handle("reports:generate", wrapIpc(requireRole("ADMIN")(async (raw) => {
+		const startDate = raw.startDate ? new Date(raw.startDate) : void 0;
+		let endDate;
+		if (raw.endDate) {
+			endDate = new Date(raw.endDate);
+			endDate.setHours(23, 59, 59, 999);
+		} else if (startDate) {
+			endDate = new Date(startDate);
+			endDate.setHours(23, 59, 59, 999);
+		}
+		const request = {
+			...raw,
+			startDate,
+			endDate
+		};
+		const buffer = await $.reportService.generateReport(request);
+		const ext = request.format === "pdf" ? "pdf" : "xlsx";
+		const { filePath, canceled } = await dialog.showSaveDialog({
+			defaultPath: `${request.type}-${Date.now()}.${ext}`,
+			filters: request.format === "pdf" ? [{
 				name: "PDF",
 				extensions: ["pdf"]
 			}] : [{
@@ -4105,218 +5776,739 @@ function dt() {
 				extensions: ["xlsx"]
 			}]
 		});
-		return c || !s ? {
-			success: !1,
+		if (canceled || !filePath) return {
+			success: false,
 			message: "Cancelado por el usuario"
-		} : (await C.writeFile(s, a), {
-			success: !0,
-			path: s
-		});
-	}))), r.handle("reports:generateReceipt", G(X("ADMIN")(async (e) => {
-		let t = {
+		};
+		await fs$1.writeFile(filePath, buffer);
+		return {
+			success: true,
+			path: filePath
+		};
+	})));
+	ipcMain.handle("reports:generateReceipt", wrapIpc(requireRole("ADMIN")(async (saleId) => {
+		const request = {
 			type: "sale_receipt",
 			format: "pdf",
-			saleId: e
-		}, r = await Z.reportService.generateReport(t), { filePath: i, canceled: a } = await n.showSaveDialog({
-			defaultPath: `comprobante-${e}-${Date.now()}.pdf`,
+			saleId
+		};
+		const buffer = await $.reportService.generateReport(request);
+		const { filePath, canceled } = await dialog.showSaveDialog({
+			defaultPath: `comprobante-${saleId}-${Date.now()}.pdf`,
 			filters: [{
 				name: "PDF",
 				extensions: ["pdf"]
 			}]
 		});
-		return a || !i ? {
-			success: !1,
+		if (canceled || !filePath) return {
+			success: false,
 			message: "Cancelado por el usuario"
-		} : (await C.writeFile(i, r), {
-			success: !0,
-			path: i
-		});
-	}))), r.handle("reports:generateCashClose", G(X("ADMIN")(async (e) => {
-		let t = {
+		};
+		await fs$1.writeFile(filePath, buffer);
+		return {
+			success: true,
+			path: filePath
+		};
+	})));
+	ipcMain.handle("reports:generateCashClose", wrapIpc(requireRole("ADMIN")(async (registerId) => {
+		const request = {
 			type: "cash_close",
 			format: "pdf",
-			registerId: e
-		}, r = await Z.reportService.generateReport(t), { filePath: i, canceled: a } = await n.showSaveDialog({
-			defaultPath: `cierre-caja-${e}-${Date.now()}.pdf`,
+			registerId
+		};
+		const buffer = await $.reportService.generateReport(request);
+		const { filePath, canceled } = await dialog.showSaveDialog({
+			defaultPath: `cierre-caja-${registerId}-${Date.now()}.pdf`,
 			filters: [{
 				name: "PDF",
 				extensions: ["pdf"]
 			}]
 		});
-		return a || !i ? {
-			success: !1,
+		if (canceled || !filePath) return {
+			success: false,
 			message: "Cancelado por el usuario"
-		} : (await C.writeFile(i, r), {
-			success: !0,
-			path: i
+		};
+		await fs$1.writeFile(filePath, buffer);
+		return {
+			success: true,
+			path: filePath
+		};
+	})));
+	/**
+	* AI ASSISTANT
+	*/
+	ipcMain.handle("ai:chat", wrapIpc(async (data) => {
+		const user = getCurrentUser();
+		return await $.aiService.askAssistant(data.query, user?.id);
+	}, aiChatSchema));
+	/**
+	* AI MONITORING STATS
+	*/
+	ipcMain.handle("ai:stats", wrapIpc(async () => {
+		return $.aiMonitorService.getSnapshot();
+	}));
+	ipcMain.handle("ai:stats:history", wrapIpc(async (data) => {
+		return $.aiMonitorService.getHistory(data?.limit);
+	}));
+	ipcMain.handle("ai:stats:errors", wrapIpc(async () => {
+		return $.aiMonitorService.getRecentErrors();
+	}));
+	ipcMain.handle("ai:stats:reset", wrapIpc(async () => {
+		$.aiMonitorService.resetHistory();
+		return { reset: true };
+	}));
+	/**
+	* AI FEEDBACK
+	*/
+	ipcMain.handle("ai:feedback", wrapIpc(async (data) => {
+		const user = getCurrentUser();
+		if (!user || !$.aiTrainingLogRepo) return { success: false };
+		await $.aiTrainingLogRepo.create({
+			usuario_id: user.id,
+			mensaje_usuario: data.query || `feedback:${data.rating}`,
+			nlu_output: JSON.stringify({
+				feedback: data.rating,
+				messageIndex: data.messageIndex
+			}),
+			respuesta_sistema: null
 		});
-	}))), r.handle("ai:chat", G(async (e) => await Z.aiService.askAssistant(e.query), je));
+		return { success: true };
+	}));
+	/**
+	* AI TRAINING
+	*/
+	ipcMain.handle("ai:training:stats", wrapIpc(async () => {
+		const AutoTrainService = (await import("./AutoTrainService-D4nynddO.js")).AutoTrainService;
+		return new AutoTrainService().getStats();
+	}));
+	ipcMain.handle("ai:training:retrain", wrapIpc(async (data) => {
+		const AutoTrainService = (await import("./AutoTrainService-D4nynddO.js")).AutoTrainService;
+		return new AutoTrainService().retrain({ epochs: data?.epochs });
+	}));
+	/**
+	* AI DRAFT APPROVAL
+	*/
+	ipcMain.handle("ai:draft:approve", wrapIpc(async (data) => {
+		const pipeline = $.validationPipeline;
+		if (!pipeline) return {
+			success: false,
+			message: "Validation pipeline not available"
+		};
+		const draft = pipeline.getReviewQueue().approve(data.draftId, data.userId);
+		if (!draft) return {
+			success: false,
+			message: "Draft not found or already processed"
+		};
+		await pipeline.getAuditService().recordDraftConfirmed(draft.type, draft.payload, data.userId);
+		try {
+			if (draft.type === "DRAFT_PRODUCT") {
+				const result = await $.productService.createProduct(draft.payload, data.userId);
+				return {
+					success: true,
+					action: draft.type,
+					result
+				};
+			}
+			if (draft.type === "DRAFT_CLIENT") {
+				const result = await $.clientService.createClient(draft.payload, data.userId);
+				return {
+					success: true,
+					action: draft.type,
+					result
+				};
+			}
+			return {
+				success: true,
+				action: draft.type
+			};
+		} catch (err) {
+			return {
+				success: false,
+				message: err.message ?? "Failed to create entity"
+			};
+		}
+	}));
+	ipcMain.handle("ai:draft:reject", wrapIpc(async (data) => {
+		const pipeline = $.validationPipeline;
+		if (!pipeline) return {
+			success: false,
+			message: "Validation pipeline not available"
+		};
+		const draft = pipeline.getReviewQueue().reject(data.draftId, String(data.userId));
+		if (!draft) return {
+			success: false,
+			message: "Draft not found or already processed"
+		};
+		await pipeline.getAuditService().recordDraftRejected(draft.type, data.userId);
+		return {
+			success: true,
+			draftId: draft.draftId,
+			status: "rejected"
+		};
+	}));
+	ipcMain.handle("ai:draft:pending", wrapIpc(async () => {
+		const pipeline = $.validationPipeline;
+		if (!pipeline) return [];
+		return pipeline.getReviewQueue().getPending();
+	}));
+	ipcMain.handle("ai:draft:history", wrapIpc(async (data) => {
+		const pipeline = $.validationPipeline;
+		if (!pipeline) return [];
+		return pipeline.getReviewQueue().getHistory(data?.limit);
+	}));
 }
 //#endregion
 //#region src/backend/utils/generatedSchema.ts
-var ft = "-- CreateTable\nCREATE TABLE \"users\" (\n    \"id\" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,\n    \"username\" TEXT NOT NULL,\n    \"password_hash\" TEXT NOT NULL,\n    \"role\" TEXT NOT NULL,\n    \"security_question\" TEXT,\n    \"security_answer_hash\" TEXT,\n    \"failed_attempts\" INTEGER NOT NULL DEFAULT 0,\n    \"locked_until\" DATETIME,\n    \"created_at\" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n    \"updated_at\" DATETIME NOT NULL\n);\n\n-- CreateTable\nCREATE TABLE \"clients\" (\n    \"id\" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,\n    \"dni\" TEXT NOT NULL,\n    \"name\" TEXT NOT NULL,\n    \"phone\" TEXT,\n    \"code\" TEXT NOT NULL,\n    \"tax_id\" TEXT,\n    \"created_at\" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n    \"updated_at\" DATETIME NOT NULL\n);\n\n-- CreateTable\nCREATE TABLE \"categories\" (\n    \"id\" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,\n    \"name\" TEXT NOT NULL,\n    \"created_at\" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n    \"updated_at\" DATETIME NOT NULL\n);\n\n-- CreateTable\nCREATE TABLE \"products\" (\n    \"id\" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,\n    \"sku\" TEXT NOT NULL,\n    \"name\" TEXT NOT NULL,\n    \"description\" TEXT,\n    \"category_id\" INTEGER,\n    \"price_purchase\" REAL NOT NULL,\n    \"price_sale\" REAL NOT NULL,\n    \"stock\" INTEGER NOT NULL DEFAULT 0,\n    \"min_stock\" INTEGER DEFAULT 5,\n    \"created_at\" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n    \"updated_at\" DATETIME NOT NULL,\n    \"supplier_id\" INTEGER,\n    CONSTRAINT \"products_category_id_fkey\" FOREIGN KEY (\"category_id\") REFERENCES \"categories\" (\"id\") ON DELETE SET NULL ON UPDATE CASCADE,\n    CONSTRAINT \"products_supplier_id_fkey\" FOREIGN KEY (\"supplier_id\") REFERENCES \"suppliers\" (\"id\") ON DELETE SET NULL ON UPDATE CASCADE\n);\n\n-- CreateTable\nCREATE TABLE \"cash_registers\" (\n    \"id\" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,\n    \"opened_at\" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n    \"opening_amount\" REAL NOT NULL,\n    \"total_sales\" REAL NOT NULL DEFAULT 0,\n    \"closed_at\" DATETIME,\n    \"closing_amount\" REAL,\n    \"difference\" REAL,\n    \"status\" TEXT,\n    \"created_at\" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n    \"updated_at\" DATETIME NOT NULL\n);\n\n-- CreateTable\nCREATE TABLE \"sales\" (\n    \"id\" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,\n    \"cash_register_id\" INTEGER NOT NULL,\n    \"client_id\" INTEGER NOT NULL,\n    \"total\" REAL NOT NULL,\n    \"subtotal\" REAL NOT NULL DEFAULT 0,\n    \"tax_amount\" REAL NOT NULL DEFAULT 0,\n    \"discount_total\" REAL DEFAULT 0,\n    \"payment_method\" TEXT DEFAULT 'CASH',\n    \"exchange_rate\" REAL NOT NULL DEFAULT 0,\n    \"created_at\" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n    \"updated_at\" DATETIME NOT NULL,\n    CONSTRAINT \"sales_cash_register_id_fkey\" FOREIGN KEY (\"cash_register_id\") REFERENCES \"cash_registers\" (\"id\") ON DELETE RESTRICT ON UPDATE CASCADE,\n    CONSTRAINT \"sales_client_id_fkey\" FOREIGN KEY (\"client_id\") REFERENCES \"clients\" (\"id\") ON DELETE RESTRICT ON UPDATE CASCADE\n);\n\n-- CreateTable\nCREATE TABLE \"sale_items\" (\n    \"id\" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,\n    \"sale_id\" INTEGER NOT NULL,\n    \"product_id\" INTEGER NOT NULL,\n    \"quantity\" INTEGER NOT NULL,\n    \"unit_price\" REAL NOT NULL,\n    \"purchase_price\" REAL NOT NULL,\n    \"discount_name\" TEXT,\n    \"discount_type\" TEXT,\n    \"discount_value\" REAL,\n    \"discount_amount\" REAL DEFAULT 0,\n    \"final_unit_price\" REAL,\n    \"created_at\" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n    \"updated_at\" DATETIME NOT NULL,\n    CONSTRAINT \"sale_items_sale_id_fkey\" FOREIGN KEY (\"sale_id\") REFERENCES \"sales\" (\"id\") ON DELETE CASCADE ON UPDATE CASCADE,\n    CONSTRAINT \"sale_items_product_id_fkey\" FOREIGN KEY (\"product_id\") REFERENCES \"products\" (\"id\") ON DELETE RESTRICT ON UPDATE CASCADE\n);\n\n-- CreateTable\nCREATE TABLE \"inventory_movements\" (\n    \"id\" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,\n    \"product_id\" INTEGER NOT NULL,\n    \"type\" TEXT NOT NULL,\n    \"quantity\" INTEGER NOT NULL,\n    \"reason\" TEXT,\n    \"created_at\" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n    \"updated_at\" DATETIME NOT NULL,\n    CONSTRAINT \"inventory_movements_product_id_fkey\" FOREIGN KEY (\"product_id\") REFERENCES \"products\" (\"id\") ON DELETE CASCADE ON UPDATE CASCADE\n);\n\n-- CreateTable\nCREATE TABLE \"suppliers\" (\n    \"id\" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,\n    \"name\" TEXT NOT NULL,\n    \"ruc\" TEXT,\n    \"phone\" TEXT,\n    \"email\" TEXT,\n    \"address\" TEXT,\n    \"created_at\" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n    \"updated_at\" DATETIME NOT NULL\n);\n\n-- CreateTable\nCREATE TABLE \"purchases\" (\n    \"id\" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,\n    \"supplier_id\" INTEGER NOT NULL,\n    \"total_amount\" REAL NOT NULL,\n    \"status\" TEXT NOT NULL DEFAULT 'PENDING',\n    \"payment_status\" TEXT NOT NULL DEFAULT 'UNPAID',\n    \"created_at\" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n    \"updated_at\" DATETIME NOT NULL,\n    CONSTRAINT \"purchases_supplier_id_fkey\" FOREIGN KEY (\"supplier_id\") REFERENCES \"suppliers\" (\"id\") ON DELETE RESTRICT ON UPDATE CASCADE\n);\n\n-- CreateTable\nCREATE TABLE \"purchase_items\" (\n    \"id\" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,\n    \"purchase_id\" INTEGER NOT NULL,\n    \"product_id\" INTEGER NOT NULL,\n    \"quantity\" INTEGER NOT NULL,\n    \"unit_cost\" REAL NOT NULL,\n    CONSTRAINT \"purchase_items_purchase_id_fkey\" FOREIGN KEY (\"purchase_id\") REFERENCES \"purchases\" (\"id\") ON DELETE RESTRICT ON UPDATE CASCADE,\n    CONSTRAINT \"purchase_items_product_id_fkey\" FOREIGN KEY (\"product_id\") REFERENCES \"products\" (\"id\") ON DELETE RESTRICT ON UPDATE CASCADE\n);\n\n-- CreateTable\nCREATE TABLE \"audit_logs\" (\n    \"id\" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,\n    \"user_id\" INTEGER NOT NULL,\n    \"action\" TEXT NOT NULL,\n    \"entity\" TEXT NOT NULL,\n    \"entity_id\" INTEGER NOT NULL,\n    \"created_at\" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n    \"updated_at\" DATETIME NOT NULL,\n    CONSTRAINT \"audit_logs_user_id_fkey\" FOREIGN KEY (\"user_id\") REFERENCES \"users\" (\"id\") ON DELETE CASCADE ON UPDATE CASCADE\n);\n\n-- CreateTable\nCREATE TABLE \"settings\" (\n    \"id\" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,\n    \"key\" TEXT NOT NULL,\n    \"value\" TEXT NOT NULL\n);\n\n-- CreateTable\nCREATE TABLE \"discounts\" (\n    \"id\" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,\n    \"name\" TEXT NOT NULL,\n    \"type\" TEXT NOT NULL,\n    \"value\" REAL NOT NULL,\n    \"is_active\" BOOLEAN NOT NULL DEFAULT true,\n    \"applicable_to\" TEXT NOT NULL DEFAULT 'ALL',\n    \"category_id\" INTEGER,\n    \"min_purchase_amount\" REAL,\n    \"created_at\" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n    \"updated_at\" DATETIME NOT NULL,\n    CONSTRAINT \"discounts_category_id_fkey\" FOREIGN KEY (\"category_id\") REFERENCES \"categories\" (\"id\") ON DELETE SET NULL ON UPDATE CASCADE\n);\n\n-- CreateTable\nCREATE TABLE \"product_discounts\" (\n    \"product_id\" INTEGER NOT NULL,\n    \"discount_id\" INTEGER NOT NULL,\n\n    PRIMARY KEY (\"product_id\", \"discount_id\"),\n    CONSTRAINT \"product_discounts_product_id_fkey\" FOREIGN KEY (\"product_id\") REFERENCES \"products\" (\"id\") ON DELETE CASCADE ON UPDATE CASCADE,\n    CONSTRAINT \"product_discounts_discount_id_fkey\" FOREIGN KEY (\"discount_id\") REFERENCES \"discounts\" (\"id\") ON DELETE CASCADE ON UPDATE CASCADE\n);\n\n-- CreateIndex\nCREATE UNIQUE INDEX \"users_username_key\" ON \"users\"(\"username\");\n\n-- CreateIndex\nCREATE UNIQUE INDEX \"clients_dni_key\" ON \"clients\"(\"dni\");\n\n-- CreateIndex\nCREATE UNIQUE INDEX \"clients_code_key\" ON \"clients\"(\"code\");\n\n-- CreateIndex\nCREATE UNIQUE INDEX \"clients_tax_id_key\" ON \"clients\"(\"tax_id\");\n\n-- CreateIndex\nCREATE INDEX \"clients_name_idx\" ON \"clients\"(\"name\");\n\n-- CreateIndex\nCREATE INDEX \"clients_dni_idx\" ON \"clients\"(\"dni\");\n\n-- CreateIndex\nCREATE UNIQUE INDEX \"products_sku_key\" ON \"products\"(\"sku\");\n\n-- CreateIndex\nCREATE INDEX \"products_category_id_idx\" ON \"products\"(\"category_id\");\n\n-- CreateIndex\nCREATE INDEX \"products_stock_min_stock_idx\" ON \"products\"(\"stock\", \"min_stock\");\n\n-- CreateIndex\nCREATE INDEX \"products_name_idx\" ON \"products\"(\"name\");\n\n-- CreateIndex\nCREATE INDEX \"products_sku_idx\" ON \"products\"(\"sku\");\n\n-- CreateIndex\nCREATE INDEX \"products_supplier_id_idx\" ON \"products\"(\"supplier_id\");\n\n-- CreateIndex\nCREATE INDEX \"sales_cash_register_id_idx\" ON \"sales\"(\"cash_register_id\");\n\n-- CreateIndex\nCREATE INDEX \"sales_client_id_idx\" ON \"sales\"(\"client_id\");\n\n-- CreateIndex\nCREATE INDEX \"sales_created_at_idx\" ON \"sales\"(\"created_at\");\n\n-- CreateIndex\nCREATE INDEX \"sales_cash_register_id_created_at_idx\" ON \"sales\"(\"cash_register_id\", \"created_at\");\n\n-- CreateIndex\nCREATE INDEX \"sales_client_id_created_at_idx\" ON \"sales\"(\"client_id\", \"created_at\");\n\n-- CreateIndex\nCREATE INDEX \"sales_payment_method_idx\" ON \"sales\"(\"payment_method\");\n\n-- CreateIndex\nCREATE INDEX \"sale_items_sale_id_idx\" ON \"sale_items\"(\"sale_id\");\n\n-- CreateIndex\nCREATE INDEX \"sale_items_product_id_idx\" ON \"sale_items\"(\"product_id\");\n\n-- CreateIndex\nCREATE INDEX \"inventory_movements_product_id_idx\" ON \"inventory_movements\"(\"product_id\");\n\n-- CreateIndex\nCREATE INDEX \"inventory_movements_type_idx\" ON \"inventory_movements\"(\"type\");\n\n-- CreateIndex\nCREATE INDEX \"inventory_movements_product_id_created_at_idx\" ON \"inventory_movements\"(\"product_id\", \"created_at\");\n\n-- CreateIndex\nCREATE INDEX \"inventory_movements_product_id_type_idx\" ON \"inventory_movements\"(\"product_id\", \"type\");\n\n-- CreateIndex\nCREATE UNIQUE INDEX \"suppliers_ruc_key\" ON \"suppliers\"(\"ruc\");\n\n-- CreateIndex\nCREATE INDEX \"purchases_supplier_id_idx\" ON \"purchases\"(\"supplier_id\");\n\n-- CreateIndex\nCREATE INDEX \"purchases_status_idx\" ON \"purchases\"(\"status\");\n\n-- CreateIndex\nCREATE INDEX \"purchases_created_at_idx\" ON \"purchases\"(\"created_at\");\n\n-- CreateIndex\nCREATE INDEX \"purchase_items_purchase_id_idx\" ON \"purchase_items\"(\"purchase_id\");\n\n-- CreateIndex\nCREATE INDEX \"purchase_items_product_id_idx\" ON \"purchase_items\"(\"product_id\");\n\n-- CreateIndex\nCREATE INDEX \"audit_logs_user_id_idx\" ON \"audit_logs\"(\"user_id\");\n\n-- CreateIndex\nCREATE INDEX \"audit_logs_entity_idx\" ON \"audit_logs\"(\"entity\");\n\n-- CreateIndex\nCREATE INDEX \"audit_logs_created_at_idx\" ON \"audit_logs\"(\"created_at\");\n\n-- CreateIndex\nCREATE UNIQUE INDEX \"settings_key_key\" ON \"settings\"(\"key\");\n";
+var SCHEMA_SQL = `-- CreateTable
+CREATE TABLE "users" (
+    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    "username" TEXT NOT NULL,
+    "password_hash" TEXT NOT NULL,
+    "role" TEXT NOT NULL,
+    "security_question" TEXT,
+    "security_answer_hash" TEXT,
+    "failed_attempts" INTEGER NOT NULL DEFAULT 0,
+    "locked_until" DATETIME,
+    "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" DATETIME NOT NULL
+);
+
+-- CreateTable
+CREATE TABLE "clients" (
+    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    "dni" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "phone" TEXT,
+    "code" TEXT NOT NULL,
+    "tax_id" TEXT,
+    "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" DATETIME NOT NULL
+);
+
+-- CreateTable
+CREATE TABLE "categories" (
+    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    "name" TEXT NOT NULL,
+    "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" DATETIME NOT NULL
+);
+
+-- CreateTable
+CREATE TABLE "products" (
+    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    "sku" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "description" TEXT,
+    "category_id" INTEGER,
+    "price_purchase" REAL NOT NULL,
+    "price_sale" REAL NOT NULL,
+    "stock" INTEGER NOT NULL DEFAULT 0,
+    "min_stock" INTEGER DEFAULT 5,
+    "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" DATETIME NOT NULL,
+    "supplier_id" INTEGER,
+    CONSTRAINT "products_category_id_fkey" FOREIGN KEY ("category_id") REFERENCES "categories" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
+    CONSTRAINT "products_supplier_id_fkey" FOREIGN KEY ("supplier_id") REFERENCES "suppliers" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "cash_registers" (
+    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    "opened_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "opening_amount" REAL NOT NULL,
+    "total_sales" REAL NOT NULL DEFAULT 0,
+    "closed_at" DATETIME,
+    "closing_amount" REAL,
+    "difference" REAL,
+    "status" TEXT,
+    "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" DATETIME NOT NULL
+);
+
+-- CreateTable
+CREATE TABLE "sales" (
+    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    "cash_register_id" INTEGER NOT NULL,
+    "client_id" INTEGER NOT NULL,
+    "total" REAL NOT NULL,
+    "subtotal" REAL NOT NULL DEFAULT 0,
+    "tax_amount" REAL NOT NULL DEFAULT 0,
+    "discount_total" REAL DEFAULT 0,
+    "payment_method" TEXT DEFAULT 'CASH',
+    "exchange_rate" REAL NOT NULL DEFAULT 0,
+    "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" DATETIME NOT NULL,
+    CONSTRAINT "sales_cash_register_id_fkey" FOREIGN KEY ("cash_register_id") REFERENCES "cash_registers" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+    CONSTRAINT "sales_client_id_fkey" FOREIGN KEY ("client_id") REFERENCES "clients" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "sale_items" (
+    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    "sale_id" INTEGER NOT NULL,
+    "product_id" INTEGER NOT NULL,
+    "quantity" INTEGER NOT NULL,
+    "unit_price" REAL NOT NULL,
+    "purchase_price" REAL NOT NULL,
+    "discount_name" TEXT,
+    "discount_type" TEXT,
+    "discount_value" REAL,
+    "discount_amount" REAL DEFAULT 0,
+    "final_unit_price" REAL,
+    "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" DATETIME NOT NULL,
+    CONSTRAINT "sale_items_sale_id_fkey" FOREIGN KEY ("sale_id") REFERENCES "sales" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT "sale_items_product_id_fkey" FOREIGN KEY ("product_id") REFERENCES "products" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "inventory_movements" (
+    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    "product_id" INTEGER NOT NULL,
+    "type" TEXT NOT NULL,
+    "quantity" INTEGER NOT NULL,
+    "reason" TEXT,
+    "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" DATETIME NOT NULL,
+    CONSTRAINT "inventory_movements_product_id_fkey" FOREIGN KEY ("product_id") REFERENCES "products" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "suppliers" (
+    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    "name" TEXT NOT NULL,
+    "ruc" TEXT,
+    "phone" TEXT,
+    "email" TEXT,
+    "address" TEXT,
+    "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" DATETIME NOT NULL
+);
+
+-- CreateTable
+CREATE TABLE "purchases" (
+    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    "supplier_id" INTEGER NOT NULL,
+    "total_amount" REAL NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'PENDING',
+    "payment_status" TEXT NOT NULL DEFAULT 'UNPAID',
+    "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" DATETIME NOT NULL,
+    CONSTRAINT "purchases_supplier_id_fkey" FOREIGN KEY ("supplier_id") REFERENCES "suppliers" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "purchase_items" (
+    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    "purchase_id" INTEGER NOT NULL,
+    "product_id" INTEGER NOT NULL,
+    "quantity" INTEGER NOT NULL,
+    "unit_cost" REAL NOT NULL,
+    CONSTRAINT "purchase_items_purchase_id_fkey" FOREIGN KEY ("purchase_id") REFERENCES "purchases" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+    CONSTRAINT "purchase_items_product_id_fkey" FOREIGN KEY ("product_id") REFERENCES "products" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "audit_logs" (
+    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    "user_id" INTEGER NOT NULL,
+    "action" TEXT NOT NULL,
+    "entity" TEXT NOT NULL,
+    "entity_id" INTEGER NOT NULL,
+    "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" DATETIME NOT NULL,
+    CONSTRAINT "audit_logs_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "settings" (
+    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    "key" TEXT NOT NULL,
+    "value" TEXT NOT NULL
+);
+
+-- CreateTable
+CREATE TABLE "discounts" (
+    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    "name" TEXT NOT NULL,
+    "type" TEXT NOT NULL,
+    "value" REAL NOT NULL,
+    "is_active" BOOLEAN NOT NULL DEFAULT true,
+    "applicable_to" TEXT NOT NULL DEFAULT 'ALL',
+    "category_id" INTEGER,
+    "min_purchase_amount" REAL,
+    "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" DATETIME NOT NULL,
+    CONSTRAINT "discounts_category_id_fkey" FOREIGN KEY ("category_id") REFERENCES "categories" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "product_discounts" (
+    "product_id" INTEGER NOT NULL,
+    "discount_id" INTEGER NOT NULL,
+
+    PRIMARY KEY ("product_id", "discount_id"),
+    CONSTRAINT "product_discounts_product_id_fkey" FOREIGN KEY ("product_id") REFERENCES "products" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT "product_discounts_discount_id_fkey" FOREIGN KEY ("discount_id") REFERENCES "discounts" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "users_username_key" ON "users"("username");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "clients_dni_key" ON "clients"("dni");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "clients_code_key" ON "clients"("code");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "clients_tax_id_key" ON "clients"("tax_id");
+
+-- CreateIndex
+CREATE INDEX "clients_name_idx" ON "clients"("name");
+
+-- CreateIndex
+CREATE INDEX "clients_dni_idx" ON "clients"("dni");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "products_sku_key" ON "products"("sku");
+
+-- CreateIndex
+CREATE INDEX "products_category_id_idx" ON "products"("category_id");
+
+-- CreateIndex
+CREATE INDEX "products_stock_min_stock_idx" ON "products"("stock", "min_stock");
+
+-- CreateIndex
+CREATE INDEX "products_name_idx" ON "products"("name");
+
+-- CreateIndex
+CREATE INDEX "products_sku_idx" ON "products"("sku");
+
+-- CreateIndex
+CREATE INDEX "products_supplier_id_idx" ON "products"("supplier_id");
+
+-- CreateIndex
+CREATE INDEX "sales_cash_register_id_idx" ON "sales"("cash_register_id");
+
+-- CreateIndex
+CREATE INDEX "sales_client_id_idx" ON "sales"("client_id");
+
+-- CreateIndex
+CREATE INDEX "sales_created_at_idx" ON "sales"("created_at");
+
+-- CreateIndex
+CREATE INDEX "sales_cash_register_id_created_at_idx" ON "sales"("cash_register_id", "created_at");
+
+-- CreateIndex
+CREATE INDEX "sales_client_id_created_at_idx" ON "sales"("client_id", "created_at");
+
+-- CreateIndex
+CREATE INDEX "sales_payment_method_idx" ON "sales"("payment_method");
+
+-- CreateIndex
+CREATE INDEX "sale_items_sale_id_idx" ON "sale_items"("sale_id");
+
+-- CreateIndex
+CREATE INDEX "sale_items_product_id_idx" ON "sale_items"("product_id");
+
+-- CreateIndex
+CREATE INDEX "inventory_movements_product_id_idx" ON "inventory_movements"("product_id");
+
+-- CreateIndex
+CREATE INDEX "inventory_movements_type_idx" ON "inventory_movements"("type");
+
+-- CreateIndex
+CREATE INDEX "inventory_movements_product_id_created_at_idx" ON "inventory_movements"("product_id", "created_at");
+
+-- CreateIndex
+CREATE INDEX "inventory_movements_product_id_type_idx" ON "inventory_movements"("product_id", "type");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "suppliers_ruc_key" ON "suppliers"("ruc");
+
+-- CreateIndex
+CREATE INDEX "purchases_supplier_id_idx" ON "purchases"("supplier_id");
+
+-- CreateIndex
+CREATE INDEX "purchases_status_idx" ON "purchases"("status");
+
+-- CreateIndex
+CREATE INDEX "purchases_created_at_idx" ON "purchases"("created_at");
+
+-- CreateIndex
+CREATE INDEX "purchase_items_purchase_id_idx" ON "purchase_items"("purchase_id");
+
+-- CreateIndex
+CREATE INDEX "purchase_items_product_id_idx" ON "purchase_items"("product_id");
+
+-- CreateIndex
+CREATE INDEX "audit_logs_user_id_idx" ON "audit_logs"("user_id");
+
+-- CreateIndex
+CREATE INDEX "audit_logs_entity_idx" ON "audit_logs"("entity");
+
+-- CreateIndex
+CREATE INDEX "audit_logs_created_at_idx" ON "audit_logs"("created_at");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "settings_key_key" ON "settings"("key");
+`;
 //#endregion
 //#region src/backend/utils/migrationRunner.ts
-function pt(e) {
-	let t = [], n = "", r = !1, i = "";
-	for (let a = 0; a < e.length; a++) {
-		let o = e[a], s = e[a + 1] || "";
-		if (r) {
-			n += o, o === i && e[a - 1] !== "\\" && (r = !1);
+/**
+* Split a SQL script into individual statements.
+* Handles multi-line CREATE TABLE, comments, and trailing semicolons.
+*/
+function splitSqlStatements(sql) {
+	const statements = [];
+	let current = "";
+	let inString = false;
+	let stringChar = "";
+	for (let i = 0; i < sql.length; i++) {
+		const ch = sql[i];
+		const next = sql[i + 1] || "";
+		if (inString) {
+			current += ch;
+			if (ch === stringChar && sql[i - 1] !== "\\") inString = false;
 			continue;
 		}
-		if (o === "-" && s === "-") {
-			for (; a < e.length && e[a] !== "\n";) a++;
+		if (ch === "-" && next === "-") {
+			while (i < sql.length && sql[i] !== "\n") i++;
 			continue;
 		}
-		if (o === "/" && s === "*") {
-			for (a += 2; a < e.length && !(e[a] === "*" && e[a + 1] === "/");) a++;
-			a += 2;
+		if (ch === "/" && next === "*") {
+			i += 2;
+			while (i < sql.length && !(sql[i] === "*" && sql[i + 1] === "/")) i++;
+			i += 2;
 			continue;
 		}
-		if (o === "'" || o === "\"") {
-			r = !0, i = o, n += o;
+		if (ch === "'" || ch === "\"") {
+			inString = true;
+			stringChar = ch;
+			current += ch;
 			continue;
 		}
-		if (o === ";") {
-			let e = n.trim();
-			e && t.push(e), n = "";
+		if (ch === ";") {
+			const trimmed = current.trim();
+			if (trimmed) statements.push(trimmed);
+			current = "";
 			continue;
 		}
-		n += o;
+		current += ch;
 	}
-	let a = n.trim();
-	return a && t.push(a), t;
+	const trimmed = current.trim();
+	if (trimmed) statements.push(trimmed);
+	return statements;
 }
-async function mt(e) {
+/**
+* Check if the database appears to have been initialized
+* by checking for the existence of core tables.
+*/
+async function isDatabaseInitialized(prisma) {
 	try {
-		let t = await e.$queryRawUnsafe("SELECT name FROM sqlite_master WHERE type='table' AND name='users'");
-		return Array.isArray(t) && t.length > 0;
+		const result = await prisma.$queryRawUnsafe(`SELECT name FROM sqlite_master WHERE type='table' AND name='users'`);
+		return Array.isArray(result) && result.length > 0;
 	} catch {
-		return !1;
+		return false;
 	}
 }
-async function ht(e) {
-	if (await mt(e)) return E.info("Database already initialized, skipping."), { applied: !1 };
-	E.info("Loading embedded schema");
-	let t = pt(ft);
-	E.info(`Found ${t.length} SQL statements to execute`);
-	for (let n = 0; n < t.length; n++) {
-		let r = t[n];
+/**
+* Run the full schema DDL against the database.
+* Creates all tables, indexes, and constraints from the embedded schema.
+*/
+async function runMigrations(prisma) {
+	if (await isDatabaseInitialized(prisma)) {
+		logger.info("Database already initialized, skipping.");
+		return { applied: false };
+	}
+	logger.info("Loading embedded schema");
+	const statements = splitSqlStatements(SCHEMA_SQL);
+	logger.info(`Found ${statements.length} SQL statements to execute`);
+	for (let i = 0; i < statements.length; i++) {
+		const stmt = statements[i];
 		try {
-			await e.$executeRawUnsafe(r);
-		} catch (e) {
-			if (e.message && e.message.includes("already exists")) {
-				E.info(`Skipping statement ${n + 1} (already exists): ${r.slice(0, 60)}...`);
+			await prisma.$executeRawUnsafe(stmt);
+		} catch (err) {
+			if (err.message && err.message.includes("already exists")) {
+				logger.info(`Skipping statement ${i + 1} (already exists): ${stmt.slice(0, 60)}...`);
 				continue;
 			}
-			let t = `Migration failed at statement ${n + 1}: ${e.message || e}`;
-			return E.error(t), E.error(`SQL: ${r.slice(0, 200)}`), {
-				applied: !1,
-				error: t
+			const msg = `Migration failed at statement ${i + 1}: ${err.message || err}`;
+			logger.error(msg);
+			logger.error(`SQL: ${stmt.slice(0, 200)}`);
+			return {
+				applied: false,
+				error: msg
 			};
 		}
 	}
-	E.info("Schema applied successfully!");
+	logger.info("Schema applied successfully!");
 	try {
-		await e.$disconnect(), await e.$connect(), E.info("Prisma connection refreshed");
+		await prisma.$disconnect();
+		await prisma.$connect();
+		logger.info("Prisma connection refreshed");
 	} catch (e) {
-		return E.error({ err: e }, "Failed to refresh Prisma connection"), {
-			applied: !0,
+		logger.error({ err: e }, "Failed to refresh Prisma connection");
+		return {
+			applied: true,
 			error: "Migrations applied but failed to refresh connection"
 		};
 	}
-	return { applied: !0 };
+	return { applied: true };
 }
 //#endregion
 //#region src/backend/index.ts
-var { PrismaClient: gt } = c;
-O();
-var Q = at(new gt({ adapter: new l({ url: process.env.DATABASE_URL }) }));
-st(Q);
-var _t = a.dirname(ne(import.meta.url));
-process.env.DIST = a.join(_t, "../dist"), process.env.VITE_PUBLIC = t.isPackaged ? process.env.DIST : a.join(process.env.DIST, "../public");
-var $ = null, vt = process.env.VITE_DEV_SERVER_URL;
-async function yt() {
-	$ = new e({
+var { PrismaClient } = pkg;
+setupProductionEnv();
+var container = buildContainer(new PrismaClient({ adapter: new PrismaBetterSqlite3({ url: process.env.DATABASE_URL }) }));
+setContainer(container);
+var __dirname = path.dirname(fileURLToPath(import.meta.url));
+process.env.DIST = path.join(__dirname, "../dist");
+process.env.VITE_PUBLIC = app.isPackaged ? process.env.DIST : path.join(process.env.DIST, "../public");
+var win = null;
+var VITE_DEV_SERVER_URL = process.env["VITE_DEV_SERVER_URL"];
+async function createWindow() {
+	win = new BrowserWindow({
 		width: 1200,
 		height: 800,
 		minWidth: 900,
 		minHeight: 600,
-		icon: a.join(process.env.VITE_PUBLIC, "favicon.ico"),
+		icon: path.join(process.env.VITE_PUBLIC, "favicon.ico"),
 		webPreferences: {
-			preload: a.join(_t, "index.mjs"),
-			contextIsolation: !0,
-			nodeIntegration: !1
+			preload: path.join(__dirname, "index.mjs"),
+			contextIsolation: true,
+			nodeIntegration: false
 		},
-		autoHideMenuBar: !0
-	}), t.isPackaged && i.defaultSession.webRequest.onHeadersReceived((e, t) => {
-		t({ responseHeaders: {
-			...e.responseHeaders,
+		autoHideMenuBar: true
+	});
+	if (app.isPackaged) session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+		callback({ responseHeaders: {
+			...details.responseHeaders,
 			"Content-Security-Policy": ["default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'"]
 		} });
-	}), vt ? ($.loadURL(vt), $.webContents.openDevTools()) : $.loadFile(a.join(process.env.DIST, "index.html")), $.on("blur", () => {
+	});
+	if (VITE_DEV_SERVER_URL) {
+		win.loadURL(VITE_DEV_SERVER_URL);
+		win.webContents.openDevTools();
+	} else win.loadFile(path.join(process.env.DIST, "index.html"));
+	win.on("blur", () => {
 		setTimeout(() => {
-			if ($ && !$.isDestroyed() && !$.isFocused()) {
-				let t = e.getFocusedWindow();
-				(!t || t === $) && $.focus();
+			if (win && !win.isDestroyed() && !win.isFocused()) {
+				const focusedWindow = BrowserWindow.getFocusedWindow();
+				if (!focusedWindow || focusedWindow === win) win.focus();
 			}
 		}, 100);
-	}), $.on("focus", () => {
-		$ && $.webContents && $.webContents.focus();
-	}), $.on("closed", () => {
-		$ = null;
+	});
+	win.on("focus", () => {
+		if (win && win.webContents) win.webContents.focus();
+	});
+	win.on("closed", () => {
+		win = null;
 	});
 }
-r.handle("window:focus", () => $ && !$.isDestroyed() ? ($.focus(), $.webContents.focus(), !0) : !1), r.handle("window:is-ready", () => $ && !$.isDestroyed()), r.handle("dialog:showMessageBox", (t, r) => {
-	let i = e.getFocusedWindow() || $;
-	return n.showMessageBox(i, r);
-}), r.handle("dialog:showOpenDialog", (t, r) => {
-	let i = e.getFocusedWindow() || $;
-	return n.showOpenDialog(i, r);
-}), r.handle("dialog:showSaveDialog", (t, r) => {
-	let i = e.getFocusedWindow() || $;
-	return n.showSaveDialog(i, r);
-}), t.on("window-all-closed", () => {
-	process.platform !== "darwin" && (t.quit(), $ = null);
-}), t.whenReady().then(async () => {
-	let r = !1;
+ipcMain.handle("window:focus", () => {
+	if (win && !win.isDestroyed()) {
+		win.focus();
+		win.webContents.focus();
+		return true;
+	}
+	return false;
+});
+ipcMain.handle("window:is-ready", () => {
+	return win && !win.isDestroyed();
+});
+ipcMain.handle("dialog:showMessageBox", (event, options) => {
+	const focusedWindow = BrowserWindow.getFocusedWindow() || win;
+	return dialog.showMessageBox(focusedWindow, options);
+});
+ipcMain.handle("dialog:showOpenDialog", (event, options) => {
+	const focusedWindow = BrowserWindow.getFocusedWindow() || win;
+	return dialog.showOpenDialog(focusedWindow, options);
+});
+ipcMain.handle("dialog:showSaveDialog", (event, options) => {
+	const focusedWindow = BrowserWindow.getFocusedWindow() || win;
+	return dialog.showSaveDialog(focusedWindow, options);
+});
+app.on("window-all-closed", () => {
+	if (process.platform !== "darwin") {
+		app.quit();
+		win = null;
+	}
+});
+app.whenReady().then(async () => {
+	let prismaOk = false;
 	try {
-		await Q.prisma.$connect(), await Q.prisma.$queryRaw`PRAGMA journal_mode=WAL`, await Q.prisma.$queryRaw`PRAGMA synchronous=NORMAL`, await Q.prisma.$queryRaw`PRAGMA cache_size=10000`, await Q.prisma.$queryRaw`PRAGMA temp_store=MEMORY`, E.info("Prisma connected to SQLite successfully"), r = !0;
-	} catch (e) {
-		let r = [
-			`Error: ${e.message || String(e)}`,
-			e.code ? `Code: ${e.code}` : "",
+		await container.prisma.$connect();
+		await container.prisma.$queryRaw`PRAGMA journal_mode=WAL`;
+		await container.prisma.$queryRaw`PRAGMA synchronous=NORMAL`;
+		await container.prisma.$queryRaw`PRAGMA cache_size=10000`;
+		await container.prisma.$queryRaw`PRAGMA temp_store=MEMORY`;
+		logger.info("Prisma connected to SQLite successfully");
+		prismaOk = true;
+	} catch (err) {
+		const detail = [
+			`Error: ${err.message || String(err)}`,
+			err.code ? `Code: ${err.code}` : "",
 			`DATABASE_URL: ${process.env.DATABASE_URL || "(not set)"}`,
 			`resourcesPath: ${process.resourcesPath || "(not set)"}`,
-			`appPath: ${t.getAppPath()}`
+			`appPath: ${app.getAppPath()}`
 		].filter(Boolean).join("\n");
-		E.error({ err: e }, `Failed to connect to SQLite:\n${r}`);
+		logger.error({ err }, `Failed to connect to SQLite:\n${detail}`);
 		try {
-			await n.showMessageBox({
+			await dialog.showMessageBox({
 				type: "error",
 				title: "Error de Base de Datos",
 				message: "No se pudo conectar a la base de datos SQLite.",
-				detail: "Revisa que la instalación sea correcta o contacta al administrador.\n\nSi el problema persiste, revisa los logs de la aplicación."
+				detail: `Revisa que la instalación sea correcta o contacta al administrador.\n\nSi el problema persiste, revisa los logs de la aplicación.`
 			});
 		} catch {}
 	}
-	if (r) {
-		let e = await ht(Q.prisma);
-		if (e.error) {
-			E.error({ err: e.error }, "Migration error");
+	if (prismaOk) {
+		const migrationResult = await runMigrations(container.prisma);
+		if (migrationResult.error) {
+			logger.error({ err: migrationResult.error }, "Migration error");
 			try {
-				await n.showMessageBox({
+				await dialog.showMessageBox({
 					type: "error",
 					title: "Error de Migración",
 					message: "No se pudieron aplicar las migraciones de la base de datos.",
-					detail: e.error
+					detail: migrationResult.error
 				});
 			} catch {}
 		}
 	}
-	dt(), Q.schedulerService.start(), yt(), t.on("activate", () => {
-		e.getAllWindows().length === 0 && yt();
+	setupIpcHandlers();
+	container.schedulerService.start();
+	try {
+		const { existsSync } = await import("fs");
+		const { join, dirname } = await import("path");
+		const modelPath = process.env.NEURAL_MODEL_PATH ? path.resolve(process.env.NEURAL_MODEL_PATH) : join(app.getAppPath(), "neural_model");
+		const ragDir = path.join(__dirname, "../infrastructure/rag/knowledge-base");
+		if (existsSync(join(modelPath, "model.json"))) {
+			const { IntentClassifierService } = await import("./IntentClassifierService-BF22L3df.js");
+			const { NeuralOrchestrator } = await import("./neuralOrchestrator-DggILq01.js");
+			const { RagService, KnowledgeBase } = await import("./rag-CM8ewd7C.js");
+			const { UnifiedQueryService } = await import("./unifiedQueryService-CWmfmGUT.js");
+			const classifier = new IntentClassifierService();
+			await classifier.loadModel(modelPath);
+			const orchestrator = new NeuralOrchestrator(classifier);
+			const kb = new KnowledgeBase();
+			await kb.loadFromDirectory(ragDir);
+			const rag = new RagService(kb);
+			const unifiedQuery = new UnifiedQueryService(orchestrator, container.aiProvider, rag);
+			container.aiService.setNeuralOrchestrator(orchestrator);
+			container.aiService.setUnifiedQueryService(unifiedQuery);
+			container.aiMonitorService.setUnifiedQueryService(unifiedQuery);
+			await container.aiService.enableNeuralClassifier();
+			logger.info({ modelPath }, "Neural classifier + RAG + UnifiedQuery loaded");
+		} else logger.info("Neural model not found at " + modelPath + " — using LLM only");
+	} catch (err) {
+		logger.warn({ err }, "Neural classifier could not be loaded — using LLM only");
+	}
+	createWindow();
+	app.on("activate", () => {
+		if (BrowserWindow.getAllWindows().length === 0) createWindow();
 	});
 });
 //#endregion

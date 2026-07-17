@@ -182,7 +182,45 @@ app.whenReady().then(async () => {
   // 4. Start scheduled tasks
   container.schedulerService.start();
 
-  // 5. Create the main window
+  // 5. Load neural network classifier + RAG + Unified Query Service (optional)
+  try {
+    const { existsSync } = await import('fs');
+    const { join, dirname } = await import('path');
+    const modelPath = process.env.NEURAL_MODEL_PATH
+      ? path.resolve(process.env.NEURAL_MODEL_PATH)
+      : join(app.getAppPath(), 'neural_model');
+
+    const ragDir = path.join(__dirname, '../infrastructure/rag/knowledge-base');
+
+    if (existsSync(join(modelPath, 'model.json'))) {
+      const { IntentClassifierService } = await import('../infrastructure/neural/models/IntentClassifierService.js');
+      const { NeuralOrchestrator } = await import('../infrastructure/neural/orchestrator/neuralOrchestrator.js');
+      const { RagService, KnowledgeBase } = await import('../infrastructure/rag/index.js');
+      const { UnifiedQueryService } = await import('../infrastructure/neural/orchestrator/unifiedQueryService.js');
+
+      const classifier = new IntentClassifierService();
+      await classifier.loadModel(modelPath);
+      const orchestrator = new NeuralOrchestrator(classifier);
+
+      const kb = new KnowledgeBase();
+      await kb.loadFromDirectory(ragDir);
+      const rag = new RagService(kb);
+
+      const unifiedQuery = new UnifiedQueryService(orchestrator, container.aiProvider, rag);
+
+      container.aiService.setNeuralOrchestrator(orchestrator);
+      container.aiService.setUnifiedQueryService(unifiedQuery);
+      container.aiMonitorService.setUnifiedQueryService(unifiedQuery);
+      await container.aiService.enableNeuralClassifier();
+      logger.info({ modelPath }, 'Neural classifier + RAG + UnifiedQuery loaded');
+    } else {
+      logger.info('Neural model not found at ' + modelPath + ' — using LLM only');
+    }
+  } catch (err) {
+    logger.warn({ err }, 'Neural classifier could not be loaded — using LLM only');
+  }
+
+  // 6. Create the main window
   createWindow();
 
   app.on("activate", () => {

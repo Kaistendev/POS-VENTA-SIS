@@ -145,6 +145,24 @@ contextBridge.exposeInMainWorld('api', {
   // AI Assistant
   askAi: (query: string) => ipcRenderer.invoke('ai:chat', { query }),
 
+  // AI Monitoring
+  getAiStats: () => ipcRenderer.invoke('ai:stats'),
+  getAiStatsHistory: (limit?: number) => ipcRenderer.invoke('ai:stats:history', { limit }),
+  getAiStatsErrors: () => ipcRenderer.invoke('ai:stats:errors'),
+  resetAiStats: () => ipcRenderer.invoke('ai:stats:reset'),
+
+  // AI Feedback
+  submitAiFeedback: (data: { messageIndex: number; rating: number; query?: string }) => ipcRenderer.invoke('ai:feedback', data),
+
+  // AI Training
+  getAiTrainingStats: () => ipcRenderer.invoke('ai:training:stats'),
+  retrainAiModel: (epochs?: number) => ipcRenderer.invoke('ai:training:retrain', { epochs }),
+
+  // AI Draft Approval
+  approveAiDraft: (draftId: string) => ipcRenderer.invoke('ai:draft:approve', { draftId }),
+  rejectAiDraft: (draftId: string) => ipcRenderer.invoke('ai:draft:reject', { draftId }),
+  getAiDraftPending: () => ipcRenderer.invoke('ai:draft:pending'),
+
   // Modal management (native Electron modals)
   modal: {
     create: (options: any) => ipcRenderer.invoke('modal:create', options),

@@ -1,0 +1,76 @@
+[
+  {
+    "name": "embedding_Embedding1/embeddings",
+    "shape": [
+      192,
+      64
+    ],
+    "dtype": "float32",
+    "paths": [
+      "embedding_Embedding1_embeddings.bin"
+    ]
+  },
+  {
+    "name": "dense_Dense1/kernel",
+    "shape": [
+      64,
+      128
+    ],
+    "dtype": "float32",
+    "paths": [
+      "dense_Dense1_kernel.bin"
+    ]
+  },
+  {
+    "name": "dense_Dense1/bias",
+    "shape": [
+      128
+    ],
+    "dtype": "float32",
+    "paths": [
+      "dense_Dense1_bias.bin"
+    ]
+  },
+  {
+    "name": "dense_Dense2/kernel",
+    "shape": [
+      128,
+      64
+    ],
+    "dtype": "float32",
+    "paths": [
+      "dense_Dense2_kernel.bin"
+    ]
+  },
+  {
+    "name": "dense_Dense2/bias",
+    "shape": [
+      64
+    ],
+    "dtype": "float32",
+    "paths": [
+      "dense_Dense2_bias.bin"
+    ]
+  },
+  {
+    "name": "dense_Dense3/kernel",
+    "shape": [
+      64,
+      8
+    ],
+    "dtype": "float32",
+    "paths": [
+      "dense_Dense3_kernel.bin"
+    ]
+  },
+  {
+    "name": "dense_Dense3/bias",
+    "shape": [
+      8
+    ],
+    "dtype": "float32",
+    "paths": [
+      "dense_Dense3_bias.bin"
+    ]
+  }
+]

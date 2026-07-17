@@ -282,7 +282,32 @@ export interface SaleReceiptItemDTO {
 
 export type AiResponseDTO = 
   | { type: 'TEXT'; content: string }
-  | { type: 'ACTION'; action: 'DRAFT_PRODUCT' | 'DRAFT_CLIENT' | 'DRAFT_SALE'; payload: Record<string, unknown> };
+  | { type: 'ACTION'; action: 'DRAFT_PRODUCT' | 'DRAFT_CLIENT' | 'DRAFT_SALE'; payload: Record<string, unknown>; draftId?: string; autoApproved?: boolean };
+
+// ─── AiTrainingLog DTOs ───
+export interface CreateAiTrainingLogDTO {
+  usuario_id: number;
+  mensaje_usuario: string;
+  nlu_output?: string | null;
+  respuesta_sistema?: string | null;
+}
+
+export interface AiTrainingLogDTO {
+  id: string;
+  usuario_id: number;
+  mensaje_usuario: string;
+  nlu_output: string | null;
+  respuesta_sistema: string | null;
+  created_at: Date;
+}
+
+export interface AiTrainingLogFilterDTO {
+  usuario_id?: number;
+  intent?: string;
+  startDate?: Date;
+  endDate?: Date;
+  limit?: number;
+}
 
 export interface CashCloseDTO {
   registerId: number;

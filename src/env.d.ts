@@ -140,6 +140,24 @@ interface Window {
     // AI Assistant
     askAi: (query: string) => Promise<IpcResponse<import('./domain/dtos').AiResponseDTO>>;
 
+    // AI Monitoring
+    getAiStats: () => Promise<IpcResponse<Record<string, unknown> | null>>;
+    getAiStatsHistory: (limit?: number) => Promise<IpcResponse<Record<string, unknown>[]>>;
+    getAiStatsErrors: () => Promise<IpcResponse<Record<string, unknown>[]>>;
+    resetAiStats: () => Promise<IpcResponse<{ reset: boolean }>>;
+
+    // AI Feedback
+    submitAiFeedback: (data: { messageIndex: number; rating: number; query?: string }) => Promise<IpcResponse<{ success: boolean }>>;
+
+    // AI Training
+    getAiTrainingStats: () => Promise<IpcResponse<Record<string, unknown>>>;
+    retrainAiModel: (epochs?: number) => Promise<IpcResponse<{ success: boolean; accuracy?: number; message: string }>>;
+
+    // AI Draft Approval
+    approveAiDraft: (draftId: string) => Promise<IpcResponse<{ success: boolean; action?: string; message?: string }>>;
+    rejectAiDraft: (draftId: string) => Promise<IpcResponse<{ success: boolean; draftId?: string; message?: string }>>;
+    getAiDraftPending: () => Promise<IpcResponse<Record<string, unknown>[]>>;
+
     // Reports
     generateReport: (request: import('./domain/dtos').ReportRequestDTO) => Promise<{ success: boolean; path?: string; message?: string }>;
     generateReceipt: (saleId: number) => Promise<{ success: boolean; path?: string; message?: string }>;

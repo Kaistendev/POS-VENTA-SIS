@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, XCircle } from 'lucide-react';
 import Modal from '../ui/Modal.tsx';
 import { useToast } from '../../hooks/useToast.ts';
 
@@ -8,9 +8,10 @@ interface AiDraftModalProps {
   onClose: () => void;
   draftType: 'DRAFT_PRODUCT' | 'DRAFT_CLIENT' | 'DRAFT_SALE' | null;
   draftPayload: Record<string, unknown>;
+  draftId?: string;
 }
 
-export default function AiDraftModal({ isOpen, onClose, draftType, draftPayload }: AiDraftModalProps) {
+export default function AiDraftModal({ isOpen, onClose, draftType, draftPayload, draftId }: AiDraftModalProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const { success } = useToast();
@@ -30,15 +31,34 @@ export default function AiDraftModal({ isOpen, onClose, draftType, draftPayload 
 
   const set = (key: string, value: string) => setForm(prev => ({ ...prev, [key]: value }));
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleApprove = async (e: React.FormEvent) => {
     e.preventDefault();
     if (draftType === 'DRAFT_SALE') {
       onClose();
       return;
     }
+
+    if (draftId && window.api.approveAiDraft) {
+      setSaving(true);
+      setError('');
+      try {
+        const result = await window.api.approveAiDraft(draftId);
+        if (result.success) {
+          success(draftType === 'DRAFT_PRODUCT' ? 'Producto creado correctamente' : 'Cliente creado correctamente');
+          onClose();
+        } else {
+          setError(result.message || 'Error al procesar');
+        }
+      } catch (err: any) {
+        setError(err.message || 'Error de comunicación');
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+
     setSaving(true);
     setError('');
-
     try {
       if (draftType === 'DRAFT_PRODUCT') {
         const data = {
@@ -81,6 +101,17 @@ export default function AiDraftModal({ isOpen, onClose, draftType, draftPayload 
     }
   };
 
+  const handleReject = async () => {
+    if (draftId && window.api.rejectAiDraft) {
+      try {
+        await window.api.rejectAiDraft(draftId);
+      } catch {
+        // silent
+      }
+    }
+    onClose();
+  };
+
   if (!draftType) return null;
 
   const title = draftType === 'DRAFT_PRODUCT' ? 'Nuevo Producto (desde IA)'
@@ -89,7 +120,7 @@ export default function AiDraftModal({ isOpen, onClose, draftType, draftPayload 
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={title} width="560px">
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleApprove} className="space-y-4">
         {error && (
           <div className="p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-red-400 text-sm">{error}</div>
         )}
@@ -164,6 +195,13 @@ export default function AiDraftModal({ isOpen, onClose, draftType, draftPayload 
         )}
 
         <div className="flex justify-end space-x-3 pt-4 border-t border-[#2e303a]">
+          {draftId && (
+            <button type="button" onClick={handleReject} disabled={saving}
+              className="px-4 py-2 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors disabled:opacity-50 flex items-center gap-2">
+              <XCircle size={16} />
+              Rechazar
+            </button>
+          )}
           <button type="button" onClick={onClose} disabled={saving}
             className="px-4 py-2 bg-[#2e303a] text-gray-300 rounded-lg hover:bg-[#3e404a] transition-colors disabled:opacity-50">
             Cancelar
@@ -172,7 +210,7 @@ export default function AiDraftModal({ isOpen, onClose, draftType, draftPayload 
             <button type="submit" disabled={saving}
               className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center gap-2">
               {saving && <Loader2 size={16} className="animate-spin" />}
-              {saving ? 'Guardando...' : 'Guardar'}
+              {saving ? 'Guardando...' : draftId ? 'Confirmar' : 'Guardar'}
             </button>
           )}
         </div>

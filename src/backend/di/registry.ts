@@ -21,6 +21,11 @@ export interface AppContainer {
   cacheService: any;
   movementRepo: any;
   aiService: any;
+  aiTrainingLogRepo: any;
+  aiProvider: any;
+  aiMonitorService: any;
+  aiAuditService: any;
+  validationPipeline: any;
 }
 
 let _container: AppContainer | null = null;

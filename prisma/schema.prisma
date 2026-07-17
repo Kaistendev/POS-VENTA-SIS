@@ -22,6 +22,7 @@ model User {
   updated_at           DateTime   @updatedAt @map("updated_at")
 
   audit_logs           AuditLog[]
+  ai_training_logs     AiTrainingLog[]
 
   @@map("users")
 }
@@ -236,6 +237,20 @@ model Setting {
   value String
 
   @@map("settings")
+}
+
+model AiTrainingLog {
+  id                String    @id @default(uuid())
+  usuario_id        Int
+  usuario           User      @relation(fields: [usuario_id], references: [id])
+  mensaje_usuario   String
+  nlu_output        String?
+  respuesta_sistema String?
+  created_at        DateTime  @default(now()) @map("created_at")
+
+  @@index([usuario_id])
+  @@index([created_at])
+  @@map("ai_training_logs")
 }
 
 model Discount {
