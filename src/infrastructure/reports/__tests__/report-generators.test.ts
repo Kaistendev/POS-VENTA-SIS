@@ -5,8 +5,14 @@ import { SaleReportRow, InventoryReportRow, SalesStatsDTO } from '../../../domai
 import { InventoryMetrics } from '../../../domain/models.js';
 
 const mockSalesRows: SaleReportRow[] = [
-  { date: '10/05/2026', invoiceNumber: 1, client: 'Juan Perez', itemsCount: 3, subtotal: 100, tax: 18, total: 118, paymentMethod: 'Efectivo' },
-  { date: '10/05/2026', invoiceNumber: 2, client: 'Maria Lopez', itemsCount: 1, subtotal: 50, tax: 9, total: 59, paymentMethod: 'Tarjeta' },
+  { date: '10/05/2026', invoiceNumber: 1, client: 'Juan Perez', clientDni: '12345678', itemsCount: 3, items: [
+    { productName: 'Arroz', quantity: 2, unitPrice: 25, totalPrice: 50 },
+    { productName: 'Frijoles', quantity: 1, unitPrice: 30, totalPrice: 30 },
+    { productName: 'Aceite', quantity: 1, unitPrice: 20, totalPrice: 20 },
+  ], subtotal: 100, tax: 18, total: 118, paymentMethod: 'Efectivo' },
+  { date: '10/05/2026', invoiceNumber: 2, client: 'Maria Lopez', clientDni: '87654321', itemsCount: 1, items: [
+    { productName: 'Pan', quantity: 2, unitPrice: 25, totalPrice: 50 },
+  ], subtotal: 50, tax: 9, total: 59, paymentMethod: 'Tarjeta' },
 ];
 
 const mockSalesTotals: SalesStatsDTO = {

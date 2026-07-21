@@ -131,7 +131,7 @@ const SETTINGS_ALLOWLIST = [
 
 export const settingsSchema = z.record(
   z.enum(SETTINGS_ALLOWLIST),
-  z.string()
+  z.string().catch('')
 ).refine(
   (val) => Object.keys(val).length > 0,
   { message: "Debe enviar al menos una configuración." }

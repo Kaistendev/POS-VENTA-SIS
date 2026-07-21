@@ -30,7 +30,10 @@ function createMockDashboardService(): DashboardService {
     } as DashboardStats),
     getWeeklySales: vi.fn(),
     getLowStockProducts: vi.fn(),
-    getSalesByPaymentMethod: vi.fn(),
+    getSalesByPaymentMethod: vi.fn().mockResolvedValue([
+      { payment_method: 'CASH', _count: { id: 5 }, _sum: { total: 500 } },
+      { payment_method: 'CARD', _count: { id: 3 }, _sum: { total: 400 } },
+    ]),
     getTopProducts: vi.fn().mockResolvedValue([
       { product_id: 1, product_name: 'Prod A', product_sku: 'SKU-001', category: 'Cat1', total_quantity: 50, avg_price: 25, times_sold: 30 },
     ]),
@@ -62,6 +65,20 @@ function createMockSaleService(): SaleService {
         payment_method: 'Efectivo',
         created_at: new Date('2026-05-10'),
         client: { id: 1, name: 'Juan Perez', dni: '12345678' },
+        items: [
+          {
+            id: 1,
+            quantity: 2,
+            unit_price: 25,
+            product: { id: 1, name: 'Producto A' },
+          },
+          {
+            id: 2,
+            quantity: 1,
+            unit_price: 50,
+            product: { id: 2, name: 'Producto B' },
+          },
+        ],
       } as unknown as Sale,
     ]),
     getSalesStats: vi.fn().mockResolvedValue({
@@ -199,7 +216,12 @@ describe('ReportService', () => {
     const rows = (pdfGen.generateSalesReport as ReturnType<typeof vi.fn>).mock.calls[0][0] as SaleReportRow[];
     expect(rows).toHaveLength(1);
     expect(rows[0].client).toBe('Juan Perez');
+    expect(rows[0].clientDni).toBe('12345678');
     expect(rows[0].total).toBe(118);
+    expect(rows[0].items).toHaveLength(2);
+    expect(rows[0].items[0].productName).toBe('Producto A');
+    expect(rows[0].items[0].quantity).toBe(2);
+    expect(rows[0].items[1].productName).toBe('Producto B');
   });
 
   it('maps product data to InventoryReportRow correctly', async () => {

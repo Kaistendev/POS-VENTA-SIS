@@ -26,7 +26,7 @@ export class ReportService {
       case 'daily_sales':
         return this.generateSalesReport(generator, request, title, true);
       case 'sales_summary':
-        return this.generateSalesReport(generator, request, title, false);
+        return this.generateSalesReport(generator, request, title, true);
       case 'profit_summary':
         return this.generateProfitReport(generator, request, title);
       case 'inventory':
@@ -61,12 +61,20 @@ export class ReportService {
 
     const rows: SaleReportRow[] = sales.map(s => {
       const date = s.created_at instanceof Date ? s.created_at : new Date(s.created_at);
-      const saleWithCount = s as any;
+      const saleWithItems = s as any;
+      const items = (saleWithItems.items || []).map((i: any) => ({
+        productName: i.product?.name ?? 'Producto',
+        quantity: i.quantity,
+        unitPrice: Number(i.unit_price),
+        totalPrice: Number(i.unit_price) * i.quantity,
+      }));
       return {
         date: date.toLocaleDateString('es-PE'),
         invoiceNumber: s.id,
         client: s.client?.name ?? 'N/A',
-        itemsCount: saleWithCount._count?.items ?? 0,
+        clientDni: s.client?.dni ?? '',
+        itemsCount: items.length,
+        items,
         subtotal: Number(s.subtotal),
         tax: Number(s.tax_amount),
         total: Number(s.total),
@@ -90,7 +98,9 @@ export class ReportService {
       date: `${request.startDate?.toLocaleDateString('es-PE') ?? 'Inicio'} - ${request.endDate?.toLocaleDateString('es-PE') ?? 'Hoy'}`,
       invoiceNumber: 0,
       client: '-',
+      clientDni: '',
       itemsCount: 0,
+      items: [],
       subtotal: 0,
       tax: 0,
       total: stats.totalRevenue,

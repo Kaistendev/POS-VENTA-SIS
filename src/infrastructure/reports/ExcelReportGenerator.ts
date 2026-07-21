@@ -22,12 +22,12 @@ export class ExcelReportGenerator implements IReportGenerator {
     sheet.columns = [
       { header: 'Fecha', key: 'date', width: 14 },
       { header: '# Factura', key: 'invoiceNumber', width: 12 },
-      { header: 'Cliente', key: 'client', width: 30 },
-      { header: 'Items', key: 'itemsCount', width: 8 },
-      { header: 'Subtotal', key: 'subtotal', width: 14 },
-      { header: 'Impuesto', key: 'tax', width: 14 },
-      { header: 'Total', key: 'total', width: 14 },
-      { header: 'Pago', key: 'paymentMethod', width: 16 },
+      { header: 'Cliente', key: 'client', width: 25 },
+      { header: 'Producto', key: 'product', width: 35 },
+      { header: 'Cant', key: 'quantity', width: 8 },
+      { header: 'P.Unit', key: 'unitPrice', width: 12 },
+      { header: 'Total', key: 'total', width: 12 },
+      { header: 'Pago', key: 'paymentMethod', width: 14 },
     ];
 
     const headerRow = sheet.getRow(4);
@@ -36,27 +36,40 @@ export class ExcelReportGenerator implements IReportGenerator {
     headerRow.alignment = { horizontal: 'center' };
 
     rows.forEach(r => {
-      sheet.addRow({
-        date: r.date,
-        invoiceNumber: r.invoiceNumber,
-        client: r.client,
-        itemsCount: r.itemsCount,
-        subtotal: r.subtotal,
-        tax: r.tax,
-        total: r.total,
-        paymentMethod: r.paymentMethod,
-      });
+      if (r.items.length === 0) {
+        sheet.addRow({
+          date: r.date,
+          invoiceNumber: r.invoiceNumber,
+          client: r.client,
+          product: '-',
+          quantity: 0,
+          unitPrice: 0,
+          total: r.total,
+          paymentMethod: r.paymentMethod,
+        });
+      } else {
+        r.items.forEach((item, idx) => {
+          sheet.addRow({
+            date: idx === 0 ? r.date : '',
+            invoiceNumber: idx === 0 ? r.invoiceNumber : '',
+            client: idx === 0 ? r.client : '',
+            product: item.productName,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            total: item.totalPrice,
+            paymentMethod: idx === 0 ? r.paymentMethod : '',
+          });
+        });
+      }
     });
 
     const dataStartRow = 5;
-    const dataEndRow = dataStartRow + rows.length - 1;
+    const dataEndRow = dataStartRow + rows.reduce((sum, r) => sum + Math.max(r.items.length, 1), 0) - 1;
 
     sheet.addRow({});
     const summaryRow = sheet.addRow({
       date: 'TOTALES',
-      itemsCount: totals.totalSales,
-      subtotal: { formula: `SUM(E${dataStartRow}:E${dataEndRow})` },
-      tax: { formula: `SUM(F${dataStartRow}:F${dataEndRow})` },
+      product: totals.totalSales + ' ventas',
       total: { formula: `SUM(G${dataStartRow}:G${dataEndRow})` },
     });
     summaryRow.font = { bold: true };
@@ -72,12 +85,12 @@ export class ExcelReportGenerator implements IReportGenerator {
       sheet.addRow({});
       sheet.addRow({
         date: 'Efectivo',
-        itemsCount: totals.cashSales ?? 0,
+        product: `${totals.cashSales ?? 0} ventas`,
         total: totals.cashRevenue ?? 0,
       });
       sheet.addRow({
         date: 'Tarjeta',
-        itemsCount: totals.cardSales ?? 0,
+        product: `${totals.cardSales ?? 0} ventas`,
         total: totals.cardRevenue ?? 0,
       });
     }

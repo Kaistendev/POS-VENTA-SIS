@@ -322,7 +322,15 @@ var PrismaSaleRepository = class {
 					opened_at: true,
 					opening_amount: true
 				} },
-				_count: { select: { items: true } }
+				items: { select: {
+					id: true,
+					quantity: true,
+					unit_price: true,
+					product: { select: {
+						id: true,
+						name: true
+					} }
+				} }
 			},
 			orderBy: { created_at: "desc" }
 		});
@@ -1475,27 +1483,44 @@ var PDFReportGenerator = class {
 		doc.text(`Generado: ${(/* @__PURE__ */ new Date()).toLocaleDateString("es-PE")}`, 14, 28);
 		let finalY = 34;
 		if (showTable && rows.length > 0) {
-			autoTable(doc, {
-				head: [[
-					"Fecha",
-					"# Factura",
-					"Cliente",
-					"Items",
-					"Subtotal",
-					"Impuesto",
-					"Total",
-					"Pago"
-				]],
-				body: rows.map((r) => [
+			const head = [[
+				"Fecha",
+				"# Factura",
+				"Cliente",
+				"Producto",
+				"Cant",
+				"P.Unit",
+				"Total",
+				"Pago"
+			]];
+			const body = [];
+			rows.forEach((r) => {
+				if (r.items.length === 0) body.push([
 					r.date,
 					String(r.invoiceNumber),
 					r.client,
-					String(r.itemsCount),
-					`$ ${r.subtotal.toFixed(2)}`,
-					`$ ${r.tax.toFixed(2)}`,
-					`$ ${r.total.toFixed(2)}`,
+					"-",
+					"0",
+					"$0.00",
+					`$${r.total.toFixed(2)}`,
 					r.paymentMethod
-				]),
+				]);
+				else r.items.forEach((item, idx) => {
+					body.push([
+						idx === 0 ? r.date : "",
+						idx === 0 ? String(r.invoiceNumber) : "",
+						idx === 0 ? r.client : "",
+						item.productName,
+						String(item.quantity),
+						`$${item.unitPrice.toFixed(2)}`,
+						`$${item.totalPrice.toFixed(2)}`,
+						idx === 0 ? r.paymentMethod : ""
+					]);
+				});
+			});
+			autoTable(doc, {
+				head,
+				body,
 				startY: 34,
 				styles: { fontSize: 7 },
 				headStyles: { fillColor: [
@@ -1503,7 +1528,14 @@ var PDFReportGenerator = class {
 					128,
 					185
 				] },
-				tableWidth: "auto"
+				tableWidth: "auto",
+				didParseCell: (data) => {
+					if (data.section === "body" && data.column.index === 7 && data.cell.raw === "") data.cell.styles.textColor = [
+						255,
+						255,
+						255
+					];
+				}
 			});
 			finalY = doc.lastAutoTable.finalY + 10;
 		}
@@ -1779,32 +1811,32 @@ var ExcelReportGenerator = class {
 			{
 				header: "Cliente",
 				key: "client",
-				width: 30
+				width: 25
 			},
 			{
-				header: "Items",
-				key: "itemsCount",
+				header: "Producto",
+				key: "product",
+				width: 35
+			},
+			{
+				header: "Cant",
+				key: "quantity",
 				width: 8
 			},
 			{
-				header: "Subtotal",
-				key: "subtotal",
-				width: 14
-			},
-			{
-				header: "Impuesto",
-				key: "tax",
-				width: 14
+				header: "P.Unit",
+				key: "unitPrice",
+				width: 12
 			},
 			{
 				header: "Total",
 				key: "total",
-				width: 14
+				width: 12
 			},
 			{
 				header: "Pago",
 				key: "paymentMethod",
-				width: 16
+				width: 14
 			}
 		];
 		const headerRow = sheet.getRow(4);
@@ -1819,25 +1851,35 @@ var ExcelReportGenerator = class {
 		};
 		headerRow.alignment = { horizontal: "center" };
 		rows.forEach((r) => {
-			sheet.addRow({
+			if (r.items.length === 0) sheet.addRow({
 				date: r.date,
 				invoiceNumber: r.invoiceNumber,
 				client: r.client,
-				itemsCount: r.itemsCount,
-				subtotal: r.subtotal,
-				tax: r.tax,
+				product: "-",
+				quantity: 0,
+				unitPrice: 0,
 				total: r.total,
 				paymentMethod: r.paymentMethod
 			});
+			else r.items.forEach((item, idx) => {
+				sheet.addRow({
+					date: idx === 0 ? r.date : "",
+					invoiceNumber: idx === 0 ? r.invoiceNumber : "",
+					client: idx === 0 ? r.client : "",
+					product: item.productName,
+					quantity: item.quantity,
+					unitPrice: item.unitPrice,
+					total: item.totalPrice,
+					paymentMethod: idx === 0 ? r.paymentMethod : ""
+				});
+			});
 		});
 		const dataStartRow = 5;
-		const dataEndRow = dataStartRow + rows.length - 1;
+		const dataEndRow = dataStartRow + rows.reduce((sum, r) => sum + Math.max(r.items.length, 1), 0) - 1;
 		sheet.addRow({});
 		const summaryRow = sheet.addRow({
 			date: "TOTALES",
-			itemsCount: totals.totalSales,
-			subtotal: { formula: `SUM(E${dataStartRow}:E${dataEndRow})` },
-			tax: { formula: `SUM(F${dataStartRow}:F${dataEndRow})` },
+			product: totals.totalSales + " ventas",
 			total: { formula: `SUM(G${dataStartRow}:G${dataEndRow})` }
 		});
 		summaryRow.font = { bold: true };
@@ -1854,12 +1896,12 @@ var ExcelReportGenerator = class {
 			sheet.addRow({});
 			sheet.addRow({
 				date: "Efectivo",
-				itemsCount: totals.cashSales ?? 0,
+				product: `${totals.cashSales ?? 0} ventas`,
 				total: totals.cashRevenue ?? 0
 			});
 			sheet.addRow({
 				date: "Tarjeta",
-				itemsCount: totals.cardSales ?? 0,
+				product: `${totals.cardSales ?? 0} ventas`,
 				total: totals.cardRevenue ?? 0
 			});
 		}
@@ -2259,7 +2301,7 @@ var settingsSchema = z.record(z.enum([
 	"tax_rate",
 	"tax_type",
 	"tax_included"
-]), z.string()).refine((val) => Object.keys(val).length > 0, { message: "Debe enviar al menos una configuración." });
+]), z.string().catch("")).refine((val) => Object.keys(val).length > 0, { message: "Debe enviar al menos una configuración." });
 //#endregion
 //#region src/backend/services/ProductService.ts
 var ProductService = class {
@@ -3481,7 +3523,7 @@ var ReportService = class {
 		const title = request.title ?? this.getDefaultTitle(request.type);
 		switch (request.type) {
 			case "daily_sales": return this.generateSalesReport(generator, request, title, true);
-			case "sales_summary": return this.generateSalesReport(generator, request, title, false);
+			case "sales_summary": return this.generateSalesReport(generator, request, title, true);
 			case "profit_summary": return this.generateProfitReport(generator, request, title);
 			case "inventory": return this.generateInventoryReport(generator, false, title);
 			case "low_stock": return this.generateInventoryReport(generator, true, title);
@@ -3507,12 +3549,19 @@ var ReportService = class {
 		};
 		const rows = sales.map((s) => {
 			const date = s.created_at instanceof Date ? s.created_at : new Date(s.created_at);
-			const saleWithCount = s;
+			const items = (s.items || []).map((i) => ({
+				productName: i.product?.name ?? "Producto",
+				quantity: i.quantity,
+				unitPrice: Number(i.unit_price),
+				totalPrice: Number(i.unit_price) * i.quantity
+			}));
 			return {
 				date: date.toLocaleDateString("es-PE"),
 				invoiceNumber: s.id,
 				client: s.client?.name ?? "N/A",
-				itemsCount: saleWithCount._count?.items ?? 0,
+				clientDni: s.client?.dni ?? "",
+				itemsCount: items.length,
+				items,
 				subtotal: Number(s.subtotal),
 				tax: Number(s.tax_amount),
 				total: Number(s.total),
@@ -3532,7 +3581,9 @@ var ReportService = class {
 			date: `${request.startDate?.toLocaleDateString("es-PE") ?? "Inicio"} - ${request.endDate?.toLocaleDateString("es-PE") ?? "Hoy"}`,
 			invoiceNumber: 0,
 			client: "-",
+			clientDni: "",
 			itemsCount: 0,
+			items: [],
 			subtotal: 0,
 			tax: 0,
 			total: stats.totalRevenue,

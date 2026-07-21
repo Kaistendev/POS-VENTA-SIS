@@ -210,7 +210,9 @@ export interface SaleReportRow {
   date: string;
   invoiceNumber: number;
   client: string;
+  clientDni: string;
   itemsCount: number;
+  items: { productName: string; quantity: number; unitPrice: number; totalPrice: number }[];
   subtotal: number;
   tax: number;
   total: number;

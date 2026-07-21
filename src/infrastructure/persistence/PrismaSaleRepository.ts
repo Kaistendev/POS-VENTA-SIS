@@ -21,7 +21,12 @@ export class PrismaSaleRepository implements ISaleRepository {
         created_at: true, updated_at: true, cash_register_id: true, client_id: true,
         client: { select: { id: true, name: true, dni: true } },
         cash_register: { select: { id: true, opened_at: true, opening_amount: true } },
-        _count: { select: { items: true } },
+        items: {
+          select: {
+            id: true, quantity: true, unit_price: true,
+            product: { select: { id: true, name: true } },
+          },
+        },
       },
       orderBy: { created_at: 'desc' },
     }) as unknown as Sale[];

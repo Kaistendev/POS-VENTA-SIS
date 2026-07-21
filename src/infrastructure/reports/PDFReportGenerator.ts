@@ -15,17 +15,26 @@ export class PDFReportGenerator implements IReportGenerator {
 
     let finalY = 34;
     if (showTable && rows.length > 0) {
-      const head = [['Fecha', '# Factura', 'Cliente', 'Items', 'Subtotal', 'Impuesto', 'Total', 'Pago']];
-      const body = rows.map(r => [
-        r.date,
-        String(r.invoiceNumber),
-        r.client,
-        String(r.itemsCount),
-        `$ ${r.subtotal.toFixed(2)}`,
-        `$ ${r.tax.toFixed(2)}`,
-        `$ ${r.total.toFixed(2)}`,
-        r.paymentMethod,
-      ]);
+      const head = [['Fecha', '# Factura', 'Cliente', 'Producto', 'Cant', 'P.Unit', 'Total', 'Pago']];
+      const body: string[][] = [];
+      rows.forEach(r => {
+        if (r.items.length === 0) {
+          body.push([r.date, String(r.invoiceNumber), r.client, '-', '0', '$0.00', `$${r.total.toFixed(2)}`, r.paymentMethod]);
+        } else {
+          r.items.forEach((item, idx) => {
+            body.push([
+              idx === 0 ? r.date : '',
+              idx === 0 ? String(r.invoiceNumber) : '',
+              idx === 0 ? r.client : '',
+              item.productName,
+              String(item.quantity),
+              `$${item.unitPrice.toFixed(2)}`,
+              `$${item.totalPrice.toFixed(2)}`,
+              idx === 0 ? r.paymentMethod : '',
+            ]);
+          });
+        }
+      });
 
       autoTable(doc, {
         head,
@@ -34,6 +43,11 @@ export class PDFReportGenerator implements IReportGenerator {
         styles: { fontSize: 7 },
         headStyles: { fillColor: [41, 128, 185] },
         tableWidth: 'auto',
+        didParseCell: (data: any) => {
+          if (data.section === 'body' && data.column.index === 7 && data.cell.raw === '') {
+            data.cell.styles.textColor = [255, 255, 255];
+          }
+        },
       });
 
       finalY = (doc as any).lastAutoTable.finalY + 10;
