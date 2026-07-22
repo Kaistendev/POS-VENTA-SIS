@@ -2,9 +2,10 @@ require("dotenv").config();
 
 module.exports = {
   appId: "com.inventario.pos",
+  npmRebuild: false,
   productName: "InventarioPOS",
   directories: {
-    output: "sistemaPOS 2.0.0",
+    output: "sistemaPOS 2.1.0",
   },
   files: [
     "dist/**/*",

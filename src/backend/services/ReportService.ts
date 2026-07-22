@@ -6,6 +6,7 @@ import { SaleService } from './SaleService.js';
 import { ProductService } from './ProductService.js';
 import { CashRegisterService } from './CashRegisterService.js';
 import { SettingsService } from './SettingsService.js';
+import { ValidationError } from '../../shared/errors.js';
 
 export class ReportService {
   constructor(
@@ -151,7 +152,7 @@ export class ReportService {
   }
 
   private async generateSaleReceipt(request: ReportRequestDTO): Promise<Uint8Array> {
-    if (!request.saleId) throw new Error('Se requiere saleId para generar un comprobante');
+    if (!request.saleId) throw new ValidationError('Se requiere saleId para generar un comprobante');
     const sale = await this.saleService.getSaleDetails(request.saleId);
     const settings = await this.settingsService.getSettings();
 
@@ -193,7 +194,7 @@ export class ReportService {
   }
 
   private async generateCashCloseReport(generator: IReportGenerator, request: ReportRequestDTO, title: string): Promise<Uint8Array> {
-    if (!request.registerId) throw new Error('Se requiere registerId para generar reporte de cierre');
+    if (!request.registerId) throw new ValidationError('Se requiere registerId para generar reporte de cierre');
     const details = await this.cashRegisterService.getRegisterDetails(request.registerId);
     const settings = await this.settingsService.getSettings();
 

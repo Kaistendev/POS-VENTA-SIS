@@ -25,6 +25,7 @@ export function setupProductionEnv() {
     logger.info(`Database will be created at ${dbPath} on first connect`);
   }
 
-  process.env.DATABASE_URL = `file:${dbPath}`;
+  const dbUrl = `file:${dbPath.replace(/\\/g, '/')}`;
+  process.env.DATABASE_URL = dbUrl;
   logger.info(`Database URL: ${process.env.DATABASE_URL}`);
 }

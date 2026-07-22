@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { FileText, FileSpreadsheet, Calendar, Download } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { FileText, FileSpreadsheet, Calendar, Download, Wallet } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useToast } from '../hooks/useToast.ts';
 
@@ -24,8 +24,21 @@ export default function Reports() {
   const [startDate, setStartDate] = useState(today);
   const [endDate, setEndDate] = useState(today);
 
+  const [cashRegisters, setCashRegisters] = useState<{ id: number; opened_at: Date | string }[]>([]);
+  const [fetchedRegisters, setFetchedRegisters] = useState(false);
+
+  useEffect(() => {
+    if (type === 'cash_close' && !fetchedRegisters && window.api) {
+      window.api.getAllRegisters().then(data => {
+        setCashRegisters(data || []);
+        setFetchedRegisters(true);
+      });
+    }
+  }, [type, fetchedRegisters]);
+
   const handleTypeChange = (newType: ReportType) => {
     setType(newType);
+    setFetchedRegisters(false);
     const now = new Date();
     if (newType === 'daily_sales') {
       const d = now.toISOString().split('T')[0];
@@ -47,6 +60,14 @@ export default function Reports() {
   const { success, error: toastError } = useToast();
 
   const handleGenerate = async () => {
+    if (type === 'cash_close' && !registerId) {
+      toastError('Seleccione una caja para generar el reporte de cierre');
+      return;
+    }
+    if (type === 'sale_receipt' && !saleId) {
+      toastError('Ingrese el ID de la venta para generar el comprobante');
+      return;
+    }
     setLoading(true);
     try {
       if (window.api) {
@@ -154,16 +175,21 @@ export default function Reports() {
 
               {type === 'cash_close' && (
                 <div className="space-y-2">
-                  <label className="text-[10px] uppercase font-bold text-gray-500 tracking-widest">
-                    ID de Caja
+                  <label className="text-[10px] uppercase font-bold text-gray-500 tracking-widest flex items-center">
+                    <Wallet className="w-3 h-3 mr-2" /> Caja
                   </label>
-                  <input
-                    type="number"
+                  <select
                     value={registerId}
                     onChange={(e) => setRegisterId(e.target.value)}
-                    placeholder="Ej: 1"
-                    className="w-full bg-black/20 border border-white/10 rounded-xl py-3 px-4 text-white outline-none focus:border-primary transition-all"
-                  />
+                    className="w-full bg-black/20 border border-white/10 rounded-xl py-3 px-4 text-white outline-none focus:border-primary transition-all appearance-none cursor-pointer"
+                  >
+                    <option value="">Seleccione una caja...</option>
+                    {cashRegisters.map(r => (
+                      <option key={r.id} value={r.id}>
+                        #{r.id} — {new Date(r.opened_at).toLocaleDateString('es-ES', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               )}
             </div>

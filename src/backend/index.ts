@@ -6,15 +6,6 @@ import { buildContainer } from "./di/container.js";
 import { setContainer } from "./di/registry.js";
 import { logger } from "../shared/logger.js";
 
-// ⚠️ Must run before PrismaClient is created — sets DATABASE_URL for production
-setupProductionEnv();
-
-const prisma = new PrismaClient({
-  adapter: new PrismaBetterSqlite3({ url: process.env.DATABASE_URL! })
-});
-const container = buildContainer(prisma);
-setContainer(container);
-
 import { app, BrowserWindow, ipcMain, dialog, session } from "electron";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -22,6 +13,9 @@ import { setupIpcHandlers } from "./ipc.js";
 import { runMigrations } from "./utils/migrationRunner.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Will be initialized inside app.whenReady
+let container: import("./di/registry.js").AppContainer | null = null;
 
 // We define process.env.DIST depending on whether we are in dev/build
 process.env.DIST = path.join(__dirname, "../dist");
@@ -131,6 +125,14 @@ app.on("window-all-closed", () => {
 });
 
 app.whenReady().then(async () => {
+  // 0. Initialize PrismaClient and DI container (after app is ready)
+  setupProductionEnv();
+  const prisma = new PrismaClient({
+    adapter: new PrismaBetterSqlite3({ url: process.env.DATABASE_URL! })
+  });
+  container = buildContainer(prisma);
+  setContainer(container);
+
   // 1. Test Prisma connection and setup SQLite optimizations
   let prismaOk = false;
   try {
@@ -155,7 +157,7 @@ app.whenReady().then(async () => {
         type: 'error',
         title: 'Error de Base de Datos',
         message: 'No se pudo conectar a la base de datos SQLite.',
-        detail: `Revisa que la instalación sea correcta o contacta al administrador.\n\nSi el problema persiste, revisa los logs de la aplicación.`,
+        detail: `${err.message || String(err)}\n\nDATABASE_URL: ${process.env.DATABASE_URL || '(not set)'}\n\nSi el problema persiste, contacta al administrador.`,
       });
     } catch { /* ignore dialog errors */ }
   }
