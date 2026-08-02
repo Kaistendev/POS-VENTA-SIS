@@ -1,4 +1,6 @@
 import jsPDF from 'jspdf'
+import { applyPlugin } from 'jspdf-autotable'
+applyPlugin(jsPDF)
 import type { ReportRequestDTO } from '../../domain/dtos'
 import type { AppData } from './seed'
 
@@ -17,62 +19,6 @@ function dmyh(d: Date): string {
 function bizInfo(data: AppData) {
   const g = (k: string) => data.settings.find(x => x.key === k)?.value || ''
   return { name: g('business_name') || 'Mi Empresa', address: g('business_address'), phone: g('business_phone'), taxId: g('business_tax_id'), footer: g('ticket_footer') }
-}
-
-function drawTable(doc: jsPDF, headers: string[], rows: (string | number)[][], startY: number, opts?: { headBg?: number[]; headColor?: number[]; fontSize?: number; colWidths?: number[] }) {
-  const pageW = doc.internal.pageSize.getWidth()
-  const margin = 20
-  const availW = pageW - margin * 2
-  const fs = opts?.fontSize || 7
-  const rowH = fs * 2.5
-  const colW = opts?.colWidths || headers.map(() => availW / headers.length)
-  const headBg = opts?.headBg || [109, 40, 217]
-  const headColor = opts?.headColor || [255, 255, 255]
-
-  let y = startY
-
-  function drawRow(cells: string[], yPos: number, isHead: boolean, rowIdx: number) {
-    let x = margin
-    const maxH = rowH
-
-    if (isHead) {
-      doc.setFillColor(headBg[0], headBg[1], headBg[2])
-      doc.setTextColor(headColor[0], headColor[1], headColor[2])
-    } else {
-      if (rowIdx % 2 === 0) doc.setFillColor(245, 245, 250)
-      else doc.setFillColor(255, 255, 255)
-      doc.setTextColor(50, 50, 50)
-    }
-
-    doc.rect(x, yPos, availW, maxH, 'F')
-
-    doc.setFontSize(fs)
-    cells.forEach((cell, i) => {
-      const cw = colW[i]
-      const align = (i === 0 || isHead) ? 'left' : (i < headers.length - 1 ? 'left' : 'right')
-      if (align === 'right') {
-        doc.text(cell, x + cw - 2, yPos + maxH * 0.7, { align: 'right' })
-      } else {
-        doc.text(cell, x + 2, yPos + maxH * 0.7)
-      }
-      x += cw
-    })
-  }
-
-  // Header
-  drawRow(headers, y, true, 0)
-  y += rowH
-
-  // Body
-  rows.forEach((row, i) => {
-    const strRow = row.map(c => String(c))
-    drawRow(strRow, y, false, i)
-    y += rowH
-  })
-
-  // Footer separator
-  y += 2
-  return y
 }
 
 function header(doc: jsPDF, biz: ReturnType<typeof bizInfo>, title: string, subtitle?: string) {
@@ -157,25 +103,33 @@ export function generateDailySalesPDF(request: ReportRequestDTO, data: AppData):
     s.payment_method || 'EFECTIVO',
   ])
 
-  const titulos = ['Venta', 'Fecha/Hora', 'Cliente', 'Subtotal', 'IVA', 'Desc.', 'Total', 'Pago']
-  const anchos = [14, 28, 40, 22, 18, 18, 22, 22]
-
-  let y = 58
   if (rows.length > 0) {
-    y = drawTable(doc, titulos, rows, y, { colWidths: anchos, fontSize: 6.5 })
+    doc.autoTable({
+      startY: 58,
+      head: [['Venta', 'Fecha/Hora', 'Cliente', 'Subtotal', 'IVA', 'Desc.', 'Total', 'Pago']],
+      body: rows,
+      theme: 'grid',
+      headStyles: { fillColor: [109, 40, 217], textColor: [255, 255, 255], fontSize: 7 },
+      bodyStyles: { fontSize: 6.5 },
+      alternateRowStyles: { fillColor: [245, 245, 250] },
+      columnStyles: {
+        0: { cellWidth: 14 }, 1: { cellWidth: 28 }, 2: { cellWidth: 40 },
+        3: { cellWidth: 22 }, 4: { cellWidth: 18 }, 5: { cellWidth: 18 },
+        6: { cellWidth: 22 }, 7: { cellWidth: 22 },
+      },
+    })
   } else {
     doc.setFontSize(10)
-    doc.text('No se encontraron ventas en el período seleccionado.', pageW / 2, y + 10, { align: 'center' })
-    y += 20
+    doc.text('No se encontraron ventas en el período seleccionado.', pageW / 2, 68, { align: 'center' })
   }
 
-  // Totals
+  const finalY = (doc as any).lastAutoTable?.finalY || 68
   const totalSub = sales.reduce((a, s) => a + (s.subtotal ?? 0), 0)
   const totalTax = sales.reduce((a, s) => a + (s.tax_amount ?? 0), 0)
   const totalDisc = sales.reduce((a, s) => a + (s.discount_total ?? 0), 0)
   const totalRev = sales.reduce((a, s) => a + s.total, 0)
 
-  y += 8
+  let y = finalY + 8
   doc.setFontSize(9)
   doc.setTextColor(60, 60, 60)
   doc.text(`Ventas: ${sales.length}`, 20, y)
@@ -230,7 +184,6 @@ export function generateSalesSummaryPDF(request: ReportRequestDTO, data: AppData
     ['Tarjeta/Débito/Crédito:', `${cardSales.length} ventas — ${fmt(cardSales.reduce((a, s) => a + s.total, 0))}`],
   ]
 
-  doc.setFontSize(10)
   items.forEach(([label, val]) => {
     if (label) {
       doc.text(label, leftX, y)
@@ -257,14 +210,42 @@ export function generateInventoryPDF(_request: ReportRequestDTO, data: AppData):
     return [p.sku, p.name, cat?.name || '—', p.stock.toString(), p.min_stock?.toString() || '—', fmt(p.price_purchase), fmt(p.price_sale), status]
   })
 
-  const titulos = ['SKU', 'Producto', 'Categoría', 'Stock', 'Stk Mín', 'Costo', 'Precio', 'Estado']
-  const anchos = [20, 55, 25, 12, 12, 18, 18, 14]
+  const statusColors: Record<string, [number, number, number]> = {
+    'SIN STOCK': [220, 38, 38],
+    'BAJO': [234, 88, 12],
+    'OK': [22, 163, 74],
+  }
 
-  let y = 48
-  y = drawTable(doc, titulos, rows, y, { colWidths: anchos, fontSize: 6.5 })
+  doc.autoTable({
+    startY: 48,
+    head: [['SKU', 'Producto', 'Categoría', 'Stock', 'Stk Mín', 'Costo', 'Precio', 'Estado']],
+    body: rows,
+    theme: 'grid',
+    headStyles: { fillColor: [109, 40, 217], textColor: [255, 255, 255], fontSize: 7 },
+    bodyStyles: { fontSize: 6.5 },
+    alternateRowStyles: { fillColor: [245, 245, 250] },
+    columnStyles: {
+      0: { cellWidth: 20 }, 1: { cellWidth: 55 }, 2: { cellWidth: 25 },
+      3: { cellWidth: 12 }, 4: { cellWidth: 12 }, 5: { cellWidth: 18 },
+      6: { cellWidth: 18 }, 7: { cellWidth: 14 },
+    },
+    didParseCell: (data: any) => {
+      const colIndex = data.column.index
+      if (colIndex === 7) {
+        const status = data.cell.text[0]
+        const color = statusColors[status]
+        if (color) {
+          data.cell.styles.textColor = color
+          data.cell.styles.fontStyle = 'bold'
+        }
+      }
+    },
+  })
 
+  const finalY = (doc as any).lastAutoTable?.finalY || 48
   const totalValue = data.products.reduce((sum, p) => sum + p.price_purchase * p.stock, 0)
-  y += 8
+
+  let y = finalY + 8
   doc.setFontSize(9)
   doc.text(`Total productos: ${data.products.length}`, 20, y)
   doc.text(`Valor inventario: ${fmt(totalValue)}`, 20, y + 5)
@@ -287,19 +268,27 @@ export function generateLowStockPDF(_request: ReportRequestDTO, data: AppData): 
     return [p.sku, p.name, cat?.name || '—', p.stock.toString(), p.min_stock?.toString() || '—', fmt(p.price_sale)]
   })
 
-  const titulos = ['SKU', 'Producto', 'Categoría', 'Stock', 'Stk Mín', 'Precio Venta']
-  const anchos = [22, 65, 30, 15, 15, 25]
-
-  let y = 48
   if (rows.length > 0) {
-    y = drawTable(doc, titulos, rows, y, { colWidths: anchos, fontSize: 7, headBg: [220, 38, 38] })
+    doc.autoTable({
+      startY: 48,
+      head: [['SKU', 'Producto', 'Categoría', 'Stock', 'Stk Mín', 'Precio Venta']],
+      body: rows,
+      theme: 'grid',
+      headStyles: { fillColor: [220, 38, 38], textColor: [255, 255, 255], fontSize: 7 },
+      bodyStyles: { fontSize: 7 },
+      alternateRowStyles: { fillColor: [255, 245, 245] },
+      columnStyles: {
+        0: { cellWidth: 22 }, 1: { cellWidth: 65 }, 2: { cellWidth: 30 },
+        3: { cellWidth: 15 }, 4: { cellWidth: 15 }, 5: { cellWidth: 25 },
+      },
+    })
   } else {
     doc.setFontSize(10)
-    doc.text('No hay productos con stock bajo.', doc.internal.pageSize.getWidth() / 2, y + 10, { align: 'center' })
-    y += 20
+    doc.text('No hay productos con stock bajo.', doc.internal.pageSize.getWidth() / 2, 58, { align: 'center' })
   }
 
-  y += 8
+  const finalY = (doc as any).lastAutoTable?.finalY || 58
+  let y = finalY + 8
   doc.setFontSize(9)
   doc.text(`Productos críticos: ${lowStock.length}`, 20, y)
 
@@ -340,19 +329,27 @@ export function generateTopProductsPDF(_request: ReportRequestDTO, data: AppData
     fmt(s.total),
   ])
 
-  const titulos = ['#', 'SKU', 'Producto', 'Cantidad', 'Total']
-  const anchos = [8, 22, 80, 20, 25]
-
-  let y = 48
   if (rows.length > 0) {
-    y = drawTable(doc, titulos, rows, y, { colWidths: anchos, fontSize: 7 })
+    doc.autoTable({
+      startY: 48,
+      head: [['#', 'SKU', 'Producto', 'Cantidad', 'Total']],
+      body: rows,
+      theme: 'grid',
+      headStyles: { fillColor: [109, 40, 217], textColor: [255, 255, 255], fontSize: 7 },
+      bodyStyles: { fontSize: 7 },
+      alternateRowStyles: { fillColor: [245, 245, 250] },
+      columnStyles: {
+        0: { cellWidth: 8 }, 1: { cellWidth: 22 }, 2: { cellWidth: 80 },
+        3: { cellWidth: 20 }, 4: { cellWidth: 25 },
+      },
+    })
   } else {
     doc.setFontSize(10)
-    doc.text('Aún no hay ventas registradas.', doc.internal.pageSize.getWidth() / 2, y + 10, { align: 'center' })
-    y += 20
+    doc.text('Aún no hay ventas registradas.', doc.internal.pageSize.getWidth() / 2, 58, { align: 'center' })
   }
 
-  footer(doc, biz, y + 10)
+  const finalY = (doc as any).lastAutoTable?.finalY || 58
+  footer(doc, biz, finalY + 10)
 
   const filename = `productos-mas-vendidos-${new Date().toISOString().split('T')[0]}.pdf`
   download(doc, filename)
@@ -418,7 +415,7 @@ export function generateProfitSummaryPDF(request: ReportRequestDTO, data: AppDat
 
 export function generateCashClosePDF(registerId: number, data: AppData): { success: true; path: string } {
   const biz = bizInfo(data)
-  const reg = data.cash_registers.find(r => r.id === registerId)
+  const reg = data.cashRegisters.find(r => r.id === registerId)
   const doc = new jsPDF({ unit: 'mm', format: 'letter' })
   const pageW = doc.internal.pageSize.getWidth()
 
@@ -536,11 +533,17 @@ export function generateSaleReceiptPDF(saleId: number, data: AppData): { success
       ]
     })
 
-    const titulos = ['Producto', 'Cant.', 'P/U', 'Total']
-    const anchos = [85, 15, 20, 25]
-    y = drawTable(doc, titulos, itemRows, y, { colWidths: anchos, fontSize: 7 })
+    doc.autoTable({
+      startY: y,
+      head: [['Producto', 'Cant.', 'P/U', 'Total']],
+      body: itemRows,
+      theme: 'grid',
+      headStyles: { fillColor: [109, 40, 217], textColor: [255, 255, 255], fontSize: 7 },
+      bodyStyles: { fontSize: 7 },
+      columnStyles: { 0: { cellWidth: 85 }, 1: { cellWidth: 15 }, 2: { cellWidth: 20 }, 3: { cellWidth: 25 } },
+    })
 
-    y += 6
+    y = ((doc as any).lastAutoTable?.finalY || y) + 6
     doc.setFontSize(10)
     doc.text(`Subtotal:`, pageW - 70, y)
     doc.text(fmt(sale.subtotal ?? 0), pageW - leftX, y, { align: 'right' })

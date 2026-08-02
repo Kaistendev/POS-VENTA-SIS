@@ -12,6 +12,8 @@ export const seedSuppliers: Supplier[] = [
   { id: 1, name: 'Distribuidora Nacional S.A.', ruc: 'J-12345678-9', phone: '0212-5550101', email: 'ventas@distnacional.com', address: 'Av. Principal, Centro Comercial Paseo, Piso 2', created_at: new Date(), updated_at: new Date() },
   { id: 2, name: 'Importaciones Global C.A.', ruc: 'J-98765432-1', phone: '0241-5550202', email: 'info@importglobal.com', address: 'Zona Industrial Sur, Galpón 15', created_at: new Date(), updated_at: new Date() },
   { id: 3, name: 'Suministros Express 2000', ruc: 'J-45678912-3', phone: '0251-5550303', email: 'pedidos@sumiexpress.com', address: 'Calle 5, Edif. Comercial Los Andes', created_at: new Date(), updated_at: new Date() },
+  { id: 4, name: 'Comercial Andina S.R.L.', ruc: 'J-32165498-7', phone: '0274-5550404', email: 'contacto@comercialandina.com', address: 'Av. Bolívar, Centro Comercial El Valle, Local 8', created_at: new Date(), updated_at: new Date() },
+  { id: 5, name: 'Proveedores del Caribe C.A.', ruc: 'J-24681357-9', phone: '0243-5550505', email: 'ventas@provcaribe.com', address: 'Puerto Marítimo, Zona Franca, Bodega 22', created_at: new Date(), updated_at: new Date() },
 ];
 
 export const seedProducts: (Product & { category?: any; supplier?: any })[] = [
@@ -58,10 +60,10 @@ export const seedUsers: (User & { password_hash: string; security_answer_hash?: 
 export const seedSettings: Setting[] = [
   { id: 1, key: 'business_name', value: 'Tienda Demo' },
   { id: 2, key: 'business_phone', value: '0212-5550000' },
-  { id: 3, key: 'business_address', value: 'Av. Principal, Local 5, Caracas' },
+  { id: 3, key: 'business_address', value: 'Av. Principal, Local 5' },
   { id: 4, key: 'business_tax_id', value: 'J-00000000-0' },
   { id: 5, key: 'ticket_footer', value: '¡Gracias por su compra!' },
-  { id: 6, key: 'exchange_rate_usd_ves', value: '45.50' },
+  { id: 6, key: 'exchange_rate_usd_ves', value: '750' },
 ];
 
 export const seedDiscounts: Discount[] = [
@@ -90,23 +92,169 @@ export interface AppData {
   reportLogs: { id: number; type: string; filename: string; generatedAt: string }[];
 }
 
-export function getSeedData(): AppData {
+// Deterministic PRNG (mulberry32) so the simulated July history is stable.
+function mulberry32(seed: number) {
+  let a = seed >>> 0;
+  return () => {
+    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const PAYMENT_METHODS = ['CASH', 'TRANSFER', 'CARD', 'POINT'];
+
+/**
+ * Build a simulated operating history for the previous month (July of the
+ * current year): 10 supplier purchases (all received, adding stock) and
+ * 40 sales to different clients (reducing stock). Stock deltas are applied on
+ * top of the base seed stock and every movement is recorded so the dashboard,
+ * reports and inventory history stay consistent.
+ */
+export function buildDemoMonthHistory() {
+  const rand = mulberry32(20260701);
+
+  // base stock per product id
+  const stock: Record<number, number> = {};
+  seedProducts.forEach((p) => { stock[p.id] = p.stock; });
+  const productById = (id: number) => seedProducts.find((p) => p.id === id)!;
+
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = 6; // July (0-indexed)
+
+  function randomDateInJuly(): Date {
+    const day = 1 + Math.floor(rand() * 28); // 1..28
+    const hour = 8 + Math.floor(rand() * 11); // 08..18
+    const minute = Math.floor(rand() * 60);
+    return new Date(year, month, day, hour, minute, Math.floor(rand() * 60));
+  }
+  function pad(n: number) { return String(n).padStart(2, '0'); }
+
+  // ── 10 purchases (received) ──
+  const purchases: any[] = [];
+  const sales: any[] = [];
+  const inventoryMovements: any[] = [];
+  let purchaseId = 0, saleId = 0, movId = 0;
+
+  // Each product's suppliers, to make purchases feel plausible per supplier.
+  for (let i = 0; i < 10; i++) {
+    purchaseId++;
+    const supplier_id = 1 + Math.floor(rand() * seedSuppliers.length);
+    const createdAt = randomDateInJuly();
+    const numItems = 1 + Math.floor(rand() * 3);
+    const items: any[] = [];
+    const used = new Set<number>();
+    for (let k = 0; k < numItems; k++) {
+      let pid = 1 + Math.floor(rand() * seedProducts.length);
+      let guard = 0;
+      while (used.has(pid) && guard++ < 20) pid = 1 + Math.floor(rand() * seedProducts.length);
+      used.add(pid);
+      const product = productById(pid);
+      const quantity = 15 + Math.floor(rand() * 65); // 15..79
+      items.push({ purchase_id: purchaseId, product_id: pid, quantity, unit_cost: product.price_purchase });
+    }
+    const total = items.reduce((sum, it) => sum + it.unit_cost * it.quantity, 0);
+    purchases.push({
+      id: purchaseId, supplier_id, total_amount: round2(total),
+      status: 'RECEIVED', payment_status: rand() < 0.6 ? 'PAID' : 'PENDING',
+      created_at: createdAt, updated_at: createdAt,
+      items: items.map((it, idx) => ({ ...it, id: -(idx + 1) })),
+    });
+    // received => add stock + movement
+    for (const it of items) {
+      stock[it.product_id] += it.quantity;
+      movId++;
+      inventoryMovements.push({ id: movId, product_id: it.product_id, type: 'ENTRADA', quantity: it.quantity, reason: 'COMPRA', created_at: createdAt, updated_at: createdAt });
+    }
+  }
+
+  // ── 40 sales ──
+  for (let i = 0; i < 40; i++) {
+    saleId++;
+    const client_id = 1 + Math.floor(rand() * seedClients.length); // 1..10
+    const createdAt = randomDateInJuly();
+    const numItems = 1 + Math.floor(rand() * 3); // 1..3
+    const items: any[] = [];
+    const used = new Set<number>();
+    for (let k = 0; k < numItems; k++) {
+      let pid = 1 + Math.floor(rand() * seedProducts.length);
+      let guard = 0;
+      while ((used.has(pid) || stock[pid] <= 0) && guard++ < 40) pid = 1 + Math.floor(rand() * seedProducts.length);
+      used.add(pid);
+      const product = productById(pid);
+      const maxQty = 1 + Math.floor(rand() * 3); // 1..3
+      const quantity = Math.min(maxQty, Math.max(1, stock[pid]));
+      if (quantity <= 0) continue;
+      const unit_price = Math.round(product.price_sale * 100) / 100;
+      items.push({
+        sale_id: saleId, product_id: pid, quantity,
+        unit_price, purchase_price: product.price_purchase,
+        discount_name: null, discount_type: null, discount_value: null, discount_amount: 0, final_unit_price: null,
+      });
+    }
+    if (items.length === 0) { saleId--; continue; } // skip degenerate
+    const subtotal = items.reduce((sum, it) => sum + it.unit_price * it.quantity, 0);
+    const tax_amount = round2(subtotal * 0.0); // no tax for simplicity
+    const discount_total = 0;
+    const total = round2(subtotal + tax_amount - discount_total);
+    const payment_method = PAYMENT_METHODS[Math.floor(rand() * PAYMENT_METHODS.length)];
+    sales.push({
+      id: saleId,
+      cash_register_id: 1,
+      client_id,
+      total, subtotal: round2(subtotal), tax_amount, discount_total,
+      payment_method, exchange_rate: payment_method === 'CASH' ? 45.5 : 0,
+      created_at: createdAt, updated_at: createdAt,
+      items: items.map((it, idx) => ({ ...it, id: -(idx + 1), created_at: createdAt, updated_at: createdAt })),
+    });
+    for (const it of items) {
+      stock[it.product_id] -= it.quantity;
+      movId++;
+      inventoryMovements.push({ id: movId, product_id: it.product_id, type: 'SALIDA', quantity: it.quantity, reason: 'VENTA', created_at: createdAt, updated_at: createdAt });
+    }
+  }
+
+  // outputs
+  const products = seedProducts.map((p) => ({ ...p, stock: stock[p.id] }));
+  const cashRegisters = [JSON.parse(JSON.stringify(seedCashRegister))];
+  cashRegisters[0].total_sales = round2(sales.reduce((s, x) => s + x.total, 0));
+
   return {
-    products: JSON.parse(JSON.stringify(seedProducts)),
+    products,
+    sales,
+    purchases,
+    inventoryMovements,
+    cashRegisters,
+    nextId: { sales: saleId + 1, purchases: purchaseId + 1, inventoryMovements: movId + 1 },
+  };
+}
+
+function round2(n: number) {
+  return Math.round(n * 100) / 100;
+}
+
+export function getSeedData(): AppData {
+  const demo = buildDemoMonthHistory();
+  return {
+    products: demo.products,
     categories: JSON.parse(JSON.stringify(seedCategories)),
     clients: JSON.parse(JSON.stringify(seedClients)),
     suppliers: JSON.parse(JSON.stringify(seedSuppliers)),
     users: JSON.parse(JSON.stringify(seedUsers)),
     discounts: JSON.parse(JSON.stringify(seedDiscounts)),
-    cashRegisters: [JSON.parse(JSON.stringify(seedCashRegister))],
+    cashRegisters: demo.cashRegisters,
     settings: JSON.parse(JSON.stringify(seedSettings)),
-    sales: [],
-    purchases: [],
-      inventoryMovements: [],
-      reportLogs: [],
-      nextId: {
-      products: 21, categories: 6, clients: 11, suppliers: 4, users: 3,
-      discounts: 4, cashRegisters: 2, sales: 1, purchases: 1, inventoryMovements: 1, settings: 7, reportLogs: 1,
+    sales: demo.sales,
+    purchases: demo.purchases,
+    inventoryMovements: demo.inventoryMovements,
+    reportLogs: [],
+    nextId: {
+      products: 21, categories: 6, clients: 11, suppliers: 6, users: 3,
+      discounts: 4, cashRegisters: 2,
+      sales: demo.nextId.sales, purchases: demo.nextId.purchases, inventoryMovements: demo.nextId.inventoryMovements,
+      settings: 7, reportLogs: 1,
     },
   };
 }

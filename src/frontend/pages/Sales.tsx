@@ -139,21 +139,45 @@ export default function Sales() {
     return parseFloat(((item.price * item.qty - discAmt) / item.qty).toFixed(2));
   };
 
-  const generateTicketPDF = (saleId: number | string, cartItems: any[], clientName: string, rate: number) => {
+  const generateTicketPDF = (saleId: number | string, cartItems: any[], clientName: string, rate: number, clientDni?: string) => {
+    const bizName = businessInfo?.business_name || 'Mi Empresa';
+    const bizAddress = businessInfo?.business_address || '';
+    const bizPhone = businessInfo?.business_phone || '';
+    const bizTaxId = businessInfo?.business_tax_id || '';
+    const ticketFooter = businessInfo?.ticket_footer || 'Gracias por su compra';
     const hasDiscounts = Object.keys(cartDiscounts).length > 0;
-    const extraLines = (rate > 0 ? cartItems.length + 3 : 0) + (hasDiscounts ? cartItems.length : 0);
-    const doc = new jsPDF({ unit: 'mm', format: [80, 150 + extraLines * 3] });
+    const headerLines = (bizAddress ? 1 : 0) + (bizTaxId || bizPhone ? 1 : 0) + (clientDni ? 1 : 0) + (rate > 0 ? 1 : 0) + 3;
+    const extraLines = (rate > 0 ? cartItems.length + 2 : 0) + (hasDiscounts ? cartItems.length : 0);
+    const doc = new jsPDF({ unit: 'mm', format: [80, 160 + headerLines * 4 + extraLines * 3] });
     doc.setFontSize(12);
-    doc.text('INVENTARIO-POS', 40, 10, { align: 'center' });
-    doc.setFontSize(8);
-    doc.text(`Ticket: #${saleId}`, 5, 20);
-    doc.text(`Fecha: ${new Date().toLocaleString()}`, 5, 25);
-    doc.text(`Cliente: ${clientName}`, 5, 30);
-    if (rate > 0) {
-      doc.text(`Tasa Bs.: ${rate.toFixed(2)}`, 5, 35);
+    doc.text(bizName, 40, 10, { align: 'center' });
+    doc.setFontSize(7);
+    let infoY = 16;
+    if (bizTaxId) {
+      doc.text(`RIF: ${bizTaxId}${bizPhone ? ` | Tel: ${bizPhone}` : ''}`, 40, infoY, { align: 'center' });
+      infoY += 4;
+    } else if (bizPhone) {
+      doc.text(`Tel: ${bizPhone}`, 40, infoY, { align: 'center' });
+      infoY += 4;
     }
-    doc.text('------------------------------------------', 5, 40);
-    let y = 45;
+    if (bizAddress) {
+      doc.text(bizAddress, 40, infoY, { align: 'center' });
+      infoY += 4;
+    }
+    doc.setFontSize(8);
+    doc.text(`Ticket: #${saleId}`, 5, infoY + 2);
+    doc.text(`Fecha: ${new Date().toLocaleString()}`, 5, infoY + 7);
+    doc.text(`Cliente: ${clientName}`, 5, infoY + 12);
+    if (clientDni) {
+      doc.text(`Doc: ${clientDni}`, 5, infoY + 17);
+    }
+    let y = infoY + (clientDni ? 23 : 18);
+    if (rate > 0) {
+      doc.text(`Tasa Bs.: ${rate.toFixed(2)}`, 5, y);
+      y += 5;
+    }
+    doc.text('------------------------------------------', 5, y);
+    y += 5;
     cartItems.forEach(item => {
       const discAmt = getItemDiscountAmount(item);
       const displayTotal = item.price * item.qty - discAmt;
@@ -199,7 +223,7 @@ export default function Sales() {
     }
     y += 3;
     doc.setFontSize(8);
-    doc.text('Gracias por su compra', 40, y, { align: 'center' });
+    doc.text(ticketFooter, 40, y, { align: 'center' });
     doc.save(`Ticket_${saleId}.pdf`);
   };
 
@@ -227,7 +251,7 @@ export default function Sales() {
       if (result.success) {
         const finalClientName = customerData.name || selectedClient.name;
         setLastSaleId(result.id);
-        generateTicketPDF(result.id, cart, finalClientName, exchangeRate);
+        generateTicketPDF(result.id, cart, finalClientName, exchangeRate, customerData.dni || undefined);
         setShowSuccess(true);
         clearCart();
         setCustomerData({ name: '', dni: '' });

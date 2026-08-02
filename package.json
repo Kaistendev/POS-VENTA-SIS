@@ -8,7 +8,9 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test": "vitest run",
+    "postinstall": "node scripts/patch-all.mjs"
   },
   "dependencies": {
     "@emotion/cache": "^11.14.0",
@@ -17,14 +19,16 @@
     "@mui/material": "^9.0.0",
     "@mui/x-data-grid": "^9.0.1",
     "clsx": "^2.1.1",
-    "framer-motion": "^12.38.0",
+    "exceljs": "^4.4.0",
+    "framer-motion": "^11.18.2",
     "idb": "^8.0.3",
     "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
     "lucide-react": "^1.8.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-router-dom": "^7.14.0",
-    "recharts": "^3.8.1",
+    "recharts": "^3.8.0",
     "tailwind-merge": "^3.5.0",
     "zod": "^4.3.6",
     "zustand": "^5.0.12"
@@ -42,9 +46,11 @@
     "eslint-plugin-react-refresh": "^0.5.2",
     "eslint-plugin-security": "^4.0.0",
     "globals": "^17.4.0",
+    "jsdom": "^29.1.1",
     "postcss": "^8.5.9",
     "tailwindcss": "^3.4.19",
     "typescript": "^6.0.2",
-    "vite": "^8.0.4"
+    "vite": "^8.0.4",
+    "vitest": "^3.2.7"
   }
 }

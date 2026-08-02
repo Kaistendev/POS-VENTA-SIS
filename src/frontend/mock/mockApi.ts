@@ -2,6 +2,7 @@ import type { User, Product, Client, Category, Supplier, CashRegister, Sale, Dis
 import type { CreateProductDTO, UpdateProductDTO, CreateClientDTO, UpdateClientDTO, CreateCategoryDTO, UpdateCategoryDTO, CreateSupplierDTO, UpdateSupplierDTO, CreateDiscountDTO, UpdateDiscountDTO, CreatePurchaseDTO, TaxSettingsDTO, SalesStatsDTO, CashCloseDTO, SaleReceiptDTO, SaleReceiptItemDTO, ReportRequestDTO } from '../../domain/dtos';
 import { getSeedData, type AppData } from './seed';
 import { generateDailySalesPDF, generateSalesSummaryPDF, generateInventoryPDF, generateLowStockPDF, generateTopProductsPDF, generateProfitSummaryPDF, generateSaleReceiptPDF, generateCashClosePDF } from './reportGenerator';
+import { generateDailySalesExcel, generateSalesSummaryExcel, generateInventoryExcel, generateLowStockExcel, generateTopProductsExcel, generateProfitSummaryExcel, generateSaleReceiptExcel, generateCashCloseExcel } from './excelReportGenerator';
 import { kvGet, kvSet, migrateFromLocalStorage } from './db';
 
 const STORAGE_KEY = 'pos-web-data';
@@ -518,26 +519,27 @@ export async function setupMockApi() {
     // ── Reports ──
     generateReport: async (request) => {
       const reportData = await loadData();
+      const isExcel = request.format === 'xlsx';
       let result: { success: true; path: string };
       switch (request.type) {
         case 'daily_sales':
-          result = generateDailySalesPDF(request, reportData); break;
+          result = isExcel ? generateDailySalesExcel(request, reportData) : generateDailySalesPDF(request, reportData); break;
         case 'sales_summary':
-          result = generateSalesSummaryPDF(request, reportData); break;
+          result = isExcel ? generateSalesSummaryExcel(request, reportData) : generateSalesSummaryPDF(request, reportData); break;
         case 'inventory':
-          result = generateInventoryPDF(request, reportData); break;
+          result = isExcel ? generateInventoryExcel(request, reportData) : generateInventoryPDF(request, reportData); break;
         case 'low_stock':
-          result = generateLowStockPDF(request, reportData); break;
+          result = isExcel ? generateLowStockExcel(request, reportData) : generateLowStockPDF(request, reportData); break;
         case 'top_products':
-          result = generateTopProductsPDF(request, reportData); break;
+          result = isExcel ? generateTopProductsExcel(request, reportData) : generateTopProductsPDF(request, reportData); break;
         case 'profit_summary':
-          result = generateProfitSummaryPDF(request, reportData); break;
+          result = isExcel ? generateProfitSummaryExcel(request, reportData) : generateProfitSummaryPDF(request, reportData); break;
         case 'sale_receipt':
-          result = generateSaleReceiptPDF(request.saleId || 0, reportData); break;
+          result = isExcel ? generateSaleReceiptExcel(request.saleId || 0, reportData) : generateSaleReceiptPDF(request.saleId || 0, reportData); break;
         case 'cash_close':
-          result = generateCashClosePDF(request.registerId || 0, reportData); break;
+          result = isExcel ? generateCashCloseExcel(request.registerId || 0, reportData) : generateCashClosePDF(request.registerId || 0, reportData); break;
         default:
-          result = { success: true, path: `reporte-${request.type}.pdf` };
+          result = { success: true, path: `reporte-${request.type}.${isExcel ? 'xlsx' : 'pdf'}` };
       }
       reportData.reportLogs.push({ id: nextId(reportData, 'reportLogs'), type: request.type, filename: result.path, generatedAt: new Date().toISOString() });
       saveData(reportData);

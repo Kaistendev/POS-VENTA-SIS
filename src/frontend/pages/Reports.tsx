@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { FileText, FileSpreadsheet, Calendar, Download } from 'lucide-react';
+import { FileText, FileSpreadsheet, Calendar, Download, History, ShoppingCart } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useToast } from '../hooks/useToast.ts';
+import { SalesHistoryReportView, PurchasesReportView } from './reportViews.tsx';
 
+type ReportTab = 'generator' | 'sales_history' | 'purchases';
 type ReportType = 'daily_sales' | 'sales_summary' | 'inventory' | 'low_stock' | 'top_products' | 'profit_summary' | 'sale_receipt' | 'cash_close';
 type ReportFormat = 'pdf' | 'xlsx';
 
@@ -18,6 +20,7 @@ const reportTypes: { value: ReportType; label: string; description: string }[] =
 ];
 
 export default function Reports() {
+  const [tab, setTab] = useState<ReportTab>('generator');
   const [type, setType] = useState<ReportType>('daily_sales');
   const [format, setFormat] = useState<ReportFormat>('pdf');
   const today = new Date().toISOString().split('T')[0];
@@ -83,6 +86,37 @@ export default function Reports() {
         </div>
       </div>
 
+      <div className="flex flex-wrap gap-2">
+        <button
+          onClick={() => setTab('generator')}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all border ${
+            tab === 'generator' ? 'bg-primary text-white border-primary' : 'bg-white/5 text-gray-400 border-white/10 hover:bg-white/10'
+          }`}
+        >
+          <FileText className="w-4 h-4" /> Generar Reporte
+        </button>
+        <button
+          onClick={() => setTab('sales_history')}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all border ${
+            tab === 'sales_history' ? 'bg-primary text-white border-primary' : 'bg-white/5 text-gray-400 border-white/10 hover:bg-white/10'
+          }`}
+        >
+          <History className="w-4 h-4" /> Historial de Ventas
+        </button>
+        <button
+          onClick={() => setTab('purchases')}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all border ${
+            tab === 'purchases' ? 'bg-primary text-white border-primary' : 'bg-white/5 text-gray-400 border-white/10 hover:bg-white/10'
+          }`}
+        >
+          <ShoppingCart className="w-4 h-4" /> Compras a Proveedores
+        </button>
+      </div>
+
+      {tab === 'sales_history' && <SalesHistoryReportView />}
+      {tab === 'purchases' && <PurchasesReportView />}
+
+      {tab === 'generator' && (
       <div className="grid gap-6 grid-cols-1 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-6">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-panel p-8 rounded-3xl border border-white/5">
@@ -229,6 +263,7 @@ export default function Reports() {
           </motion.div>
         </div>
       </div>
+      )}
     </div>
   );
 }
