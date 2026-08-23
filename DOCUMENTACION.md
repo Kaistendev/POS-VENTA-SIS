@@ -37,7 +37,7 @@ Sistema de Punto de Venta (POS) y gestión de inventario construido con **Electr
 │          │          │                                │
 │  ┌───────▼───────┐  │   ┌────────────────────────┐   │
 │  │  Services     │  │   │  React Pages            │   │
-│  │  (lógica de   │  │   │  (16 páginas)           │   │
+│  │  (lógica de   │  │   │  (17 páginas)           │   │
 │  │   negocio)    │  │   └────────────────────────┘   │
 │  └───────┬───────┘  │                                │
 │          │          │   ┌────────────────────────┐   │
@@ -175,26 +175,23 @@ Logger estructurado (formato JSON). Usado en todo el main process con timestamps
 ```
 POS-VENTA-SIS/
 ├── src/
-│   ├── common/
-│   │   ├── types.ts              # Interfaces compartidas (deprecated)
-│   │   ├── schemas.ts            # Esquemas Zod
-│   │   └── validation.ts         # Validador de contraseñas
 │   ├── shared/
 │   │   ├── errors.ts             # Clases de error: DomainError, NotFoundError, etc.
 │   │   ├── helpers.ts            # buildDateFilter, etc.
+│   │   ├── schemas.ts            # Esquemas Zod
 │   │   └── logger.ts             # Pino logger
 │   ├── domain/                   # Capa de dominio (pura, sin dependencias externas)
-│   │   ├── models.ts             # Interfaces de dominio (User, Product, Sale, etc.)
-│   │   ├── dtos.ts               # Data Transfer Objects (CreateUserDTO, etc.)
-│   │   └── ports/                # Interfaces de repositorio (13 puertos)
+│   │   ├── models.ts             # Interfaces de dominio (User, Product, Sale, SupplierPayment, etc.)
+│   │   ├── dtos.ts               # DTOs (CreateUserDTO, PurchaseInvoiceDTO, PaymentReceiptDTO, etc.)
+│   │   └── ports/                # Interfaces de repositorios y generadores de reportes
 │   ├── infrastructure/           # Implementaciones concretas
-│   │   ├── persistence/          # Repositorios Prisma (11 implementaciones)
+│   │   ├── persistence/          # Repositorios Prisma (12 implementaciones)
 │   │   ├── backup/               # ElectronBackupService
 │   │   └── reports/              # PDFReportGenerator, ExcelReportGenerator
-│   ├── main/                     # Proceso principal de Electron
+│   ├── backend/                  # Proceso principal de Electron
 │   │   ├── index.ts              # Entry point: bootstrap completo
 │   │   ├── env.ts                # Configuración de entorno (producción/dev)
-│   │   ├── ipc.ts                # Todos los handlers IPC (~70)
+│   │   ├── ipc.ts                # Todos los handlers IPC (~90)
 │   │   ├── di/
 │   │   │   ├── container.ts      # Ensamblado de dependencias (DI)
 │   │   │   └── registry.ts       # Acceso global al contenedor
@@ -202,30 +199,37 @@ POS-VENTA-SIS/
 │   │   │   ├── session.ts        # Sesión en memoria (currentUser)
 │   │   │   ├── authorize.ts      # requireRole(), UnauthorizedError, ForbiddenError
 │   │   │   └── rateLimiter.ts    # Rate limiter (5 intentos, 15 min lockout)
-│   │   ├── services/             # Lógica de negocio (16 servicios)
+│   │   ├── services/             # Lógica de negocio (17 servicios)
 │   │   └── utils/
-│   │       ├── ipcWrapper.ts     # wrapeIpc(), sanitizedCatch()
+│   │       ├── ipcWrapper.ts     # wrapIpc(), sanitizedCatch()
 │   │       ├── migrationRunner.ts# Ejecuta schema.sql en primera ejecución
 │   │       └── pathValidation.ts # assertPathWithin() para backups
-│   ├── preload/
-│   │   └── index.ts              # contextBridge → window.api
-│   ├── pages/                    # 16 páginas React
-│   ├── components/               # Componentes UI reutilizables
-│   ├── hooks/                    # Custom hooks
-│   ├── store/                    # Stores Zustand
-│   ├── lib/
-│   │   └── utils.ts              # cn(), formatCurrency()
+│   ├── frontend/
+│   │   ├── preload/
+│   │   │   └── index.ts          # contextBridge → window.api
+│   │   ├── pages/                # 17 páginas React
+│   │   ├── components/           # Componentes UI reutilizables
+│   │   ├── hooks/                # Custom hooks
+│   │   ├── store/                # Stores Zustand
+│   │   └── lib/
+│   │       ├── utils.ts          # cn(), formatCurrency()
+│   │       └── currency.ts       # useExchangeRate(), formatBsRef() (referencia Bs.)
 │   ├── styles/
 │   │   └── theme.ts              # Tema MUI oscuro
 │   ├── assets/                   # Imágenes, fuentes
+│   ├── env.d.ts                  # Tipado de window.api
 │   └── App.tsx                   # Root component con rutas
 ├── prisma/
-│   ├── schema.prisma             # Modelo de datos (11 modelos)
+│   ├── schema.prisma             # Modelo de datos (16 modelos)
 │   ├── schema.sql                # DDL para primera ejecución
 │   ├── migrations/               # Migraciones Prisma
-│   ├── seed.ts                   # Datos de prueba
-│   └── prisma.config.ts          # Configuración para CLI de Prisma
-├── packages.json                 # Dependencias y scripts
+│   └── seed*.ts                  # Datos de prueba (seed, seed-data, seed-purchases)
+├── scripts/
+│   ├── generate-schema.mjs       # Regenera schema.sql desde schema.prisma
+│   └── rebuild-electron.mjs      # Recompila better-sqlite3 para Electron/Node
+├── reports/                      # Reportes automáticos diarios/semanales (PDF)
+├── backups/                      # Respaldos comprimidos de la BD
+├── scheduler-state.json          # Estado de tareas programadas
 ├── vite.config.js                # Configuración de Vite
 ├── electron-builder.config.cjs   # Configuración de empaquetado
 ├── tailwind.config.js            # Configuración de Tailwind
@@ -290,19 +294,21 @@ function setupIpcHandlers() {
 |----------|----------------|
 | `AuthService` | Login, register, changePassword, password recovery (pregunta de seguridad + token UUID) |
 | `UserService` | CRUD de usuarios + cambio de contraseña admin |
-| `ProductService` | CRUD de productos, control de stock (addStock/removeStock), movimientos de inventario |
-| `SaleService` | Registrar ventas (con validación de stock, caja abierta, cálculo de impuestos), cancelar ventas |
+| `ProductService` | CRUD de productos, control de stock (addStock/removeStock), movimientos. `addStock` con razón `COMPRA` genera automáticamente cuenta por pagar si el producto tiene proveedor |
+| `SaleService` | Registrar ventas (con validación de stock, caja abierta, cálculo de impuestos y descuentos), cancelar ventas |
 | `CashRegisterService` | Apertura/cierre de caja, cálculo de diferencias (sobrante/faltante) |
 | `ClientService` | CRUD de clientes, validación de duplicados (DNI, código, RUC) |
 | `CategoryService` | CRUD de categorías |
-| `SupplierService` | CRUD de proveedores |
-| `PurchaseService` | Órdenes de compra, recepción (incrementa stock), cancelación |
-| `SettingsService` | CRUD de configuraciones clave/valor, impuestos |
+| `DiscountService` | CRUD de descuentos (producto/categoría/monto mínimo) y cálculo de aplicables |
+| `SupplierService` | CRUD de proveedores + **cuentas por pagar**: deuda por proveedor, posición de caja (`getCashPosition`), pago FIFO validando saldo disponible, historial de pagos |
+| `PurchaseService` | Órdenes de compra, recepción (incrementa stock), cancelación, datos para factura de compra (`getPurchaseInvoiceData`) |
+| `AccountingService` | Resumen contable: saldo disponible, cuentas por pagar consolidadas y proyección de ganancia bruta por inventario |
+| `SettingsService` | CRUD de configuraciones clave/valor, impuestos, tasa de cambio |
 | `DashboardService` | Estadísticas, métricas, caché de dashboard |
 | `BackupService` | Fachada que delega en `ElectronBackupService` |
-| `ReportService` | Generación de reportes (PDF/Excel): ventas, inventario, cierre de caja, tickets |
+| `ReportService` | Generación de reportes (PDF/Excel): ventas, inventario, cierre de caja, tickets, **facturas de compra**, **recibos de pago a proveedor** |
 | `CacheService` | Caché en memoria para dashboard (TTL configurable) |
-| `SchedulerService` | Tareas programadas: reporte diario, semanal, backup automático |
+| `SchedulerService` | Tareas programadas: reporte diario/semanal (**guardados como PDF en `reports/`**), backup automático |
 
 #### 4.3.1 Manejo de Errores en Servicios
 
@@ -432,18 +438,20 @@ ipcMain.handle("settings:getAll", async () => {
 | `products:` | getAll, getById, getLowStock, create, update, delete, addStock, removeStock, getMovements | 9 |
 | `clients:` | getAll, getById, create, update, delete | 5 |
 | `categories:` | getAll, getById, create, update, delete | 5 |
+| `discounts:` | getAll, getById, create, update, delete, getApplicable | 6 |
 | `cash:` | getOpen, getAll, getDetails, getDailySummary, open, close | 6 |
 | `users:` | getAll, getById, create, update, delete, changePassword | 6 |
 | `settings:` | getAll, update, getTax, updateTax | 4 |
-| `suppliers:` | getAll, getById, create, update, delete | 5 |
+| `suppliers:` | getAll, getById, create, update, delete + **getAccountsPayable, getDebt, getPayments, pay** (cuentas por pagar) | 9 |
 | `purchases:` | getAll, getById, create, receive, cancel, updatePaymentStatus | 6 |
+| `accounting:` | getSummary (saldo disponible, deudas, proyección de ganancias) | 1 |
 | `movements:` | getAll | 1 |
 | `backup:` | create, list, restore, delete | 4 |
-| `reports:` | generate, generateReceipt, generateCashClose | 3 |
+| `reports:` | generate, generateReceipt, generateCashClose + **generatePurchaseInvoice** (factura de compra), **generatePaymentReceipt** (recibo de pago a proveedor) | 5 |
 | `dialog:` | showConfirm | 1 |
 | `window:` | focus, is-ready | 2 |
 | `health:` | check | 1 |
-| | **Total** | **~70** |
+| | **Total** | **~90** |
 
 ---
 
@@ -472,9 +480,11 @@ ipcMain.handle("settings:getAll", async () => {
           ├─ /users         → <Users/>         (solo ADMIN)
           ├─ /cash-history  → <CashHistory/>   (solo ADMIN)
           ├─ /movements     → <InventoryMovements/> (solo ADMIN)
-          ├─ /suppliers     → <Suppliers/>      (solo ADMIN)
+          ├─ /suppliers     → <Suppliers/>      (solo ADMIN, con cuentas por pagar)
           ├─ /purchases     → <Purchases/>      (solo ADMIN)
-          └─ /reports       → <Reports/>        (solo ADMIN)
+          ├─ /discounts     → <Discounts/>      (solo ADMIN)
+          ├─ /reports       → <Reports/>        (solo ADMIN)
+          └─ /accounting    → <Accounting/>     (solo ADMIN, contabilidad)
 ```
 
 ### 6.2 Manejo de Sesión
@@ -630,19 +640,20 @@ En `src/infrastructure/persistence/`:
 | `IProductRepository` | `PrismaProductRepository` | `updateStock()` con protección atómica `stock >= quantity` |
 | `ISaleRepository` | `PrismaSaleRepository` | `registerSale()` en transacción: crea venta + items + movimientos + descuenta stock + actualiza caja |
 | `IClientRepository` | `PrismaClientRepository` | Búsqueda por DNI, código, RUC + validación duplicados |
-| `ICashRegisterRepository` | `PrismaCashRegisterRepository` | `close()` con cálculo de diferencia + actualización de estado |
+| `ICashRegisterRepository` | `PrismaCashRegisterRepository` | `close()` con cálculo de diferencia + actualización de estado + `getTotalInflow()`: Σ aperturas + Σ ventas (saldo disponible de cuentas por pagar) |
 | `ISettingsRepository` | `PrismaSettingsRepository` | Key-value store con `upsert()` |
 | `ICategoryRepository` | `PrismaCategoryRepository` | `getProductCount()` para proteger borrado |
 | `IAuditLogRepository` | `PrismaAuditLogRepository` | Auditoría de acciones críticas |
 | `IDashboardRepository` | `PrismaDashboardRepository` | Estadísticas agregadas, top products/clients |
-| `ISupplierRepository` | `PrismaSupplierRepository` | Búsqueda por RUC |
-| `IPurchaseRepository` | `PrismaPurchaseRepository` | Transacción de recepción: actualiza stock + registra movimiento |
+| `ISupplierRepository` | `PrismaSupplierRepository` | Búsqueda por RUC + cuentas por pagar: `getOutstandingPurchases`, `getAccountsPayable` (groupBy), `registerPayment`, `applyPaymentToPurchase`, `getTotalPaid`, `getPaymentsByPurchase/ByIds` |
+| `IPurchaseRepository` | `PrismaPurchaseRepository` | Transacción de recepción: actualiza stock + registra movimiento. `createReceivedWithoutStock()` crea la deuda al aumentar stock con razón COMPRA |
+| `IDiscountRepository` | `PrismaDiscountRepository` | Descuentos y aplicabilidad por producto/categoría/monto |
 
 ---
 
 ## 8. Base de Datos
 
-### 8.1 Modelo de Datos (11 tablas)
+### 8.1 Modelo de Datos (16 modelos)
 
 ```
 ┌───────────┐     ┌──────────────┐     ┌───────────┐
@@ -710,14 +721,33 @@ En `src/infrastructure/persistence/`:
 └───────────────┘
 ```
 
+**Modelos adicionales (no en el diagrama):**
+
+| Tabla | Descripción |
+|-------|-------------|
+| `discounts` | Descuentos (nombre, tipo, valor, activo, aplicable a, categoría, monto mínimo) |
+| `product_discounts` | Relación N:M productos ↔ descuentos (PK compuesta) |
+| `supplier_payments` | Historial de pagos a proveedores: `supplier_id`, `purchase_id?`, `amount`, `note`, `created_by`, `created_at` |
+
+**Nota sobre `purchases`:** además de `total_amount`, `status` y
+`payment_status`, incluye **`paid_amount`** (default 0) para soportar
+pagos parciales.
+
+**Lógica de cuentas por pagar:**
+- Una compra genera deuda cuando `status = 'RECEIVED'` y `paid_amount < total_amount`
+- Cada pago se registra en `supplier_payments` y se aplica **FIFO** sobre las compras recibidas más antiguas
+- Al alcanzar `paid_amount >= total_amount`, la compra pasa a `payment_status = 'PAID'`
+- Saldo disponible para pagar = `(Σ aperturas de caja + Σ ventas) − Σ pagos a proveedores`; no se permite pagar si es ≤ 0 o insuficiente
+
 ### 8.2 Índices
 
 - `products`: category_id, stock+min_stock (compuesto), name, sku, supplier_id
 - `sales`: cash_register_id, client_id, created_at, payment_method
 - `sale_items`: sale_id, product_id
 - `inventory_movements`: product_id, type
-- `purchases`: supplier_id, status, created_at
+- `purchases`: supplier_id, status, payment_status, created_at
 - `purchase_items`: purchase_id, product_id
+- `supplier_payments`: supplier_id, purchase_id, created_at
 - `audit_logs`: user_id, entity, created_at
 - `clients`: name (para búsqueda), dni (único)
 
@@ -960,6 +990,7 @@ cd POS-VENTA-SIS
 
 # 2. Instalar dependencias
 npm install
+# El postinstall ejecuta: prisma generate + rebuild de better-sqlite3 para Electron
 
 # 3. Configurar .env (copiar de .env.example)
 cp .env.example .env
@@ -972,6 +1003,32 @@ npm run db:schema
 # 5. Iniciar en modo desarrollo
 npm run dev
 ```
+
+#### ⚠️ better-sqlite3 y el ABI de Electron (importante)
+
+Electron usa un ABI de Node distinto (`NODE_MODULE_VERSION` diferente), por lo que
+`better-sqlite3` debe compilarse específicamente para Electron. El flujo:
+
+| Contexto | Comando |
+|----------|---------|
+| `pnpm install` / postinstall | Recompila automáticamente **para Electron** |
+| `pnpm run dev` | Requiere binario compilado **para Electron** |
+| Tests con vitest (Node) | Requieren binario compilado **para Node**: `node scripts/rebuild-electron.mjs restore` |
+| Volver a dev tras los tests | `node scripts/rebuild-electron.mjs electron` |
+
+La versión de `better-sqlite3` está **fijada** en `package.json` (sin `^`) para
+evitar drift de versiones.
+
+#### 📁 Reportes automáticos programados
+
+El `SchedulerService` genera al inicio del día (si no existen):
+- `reports/reporte-diario-YYYY-MM-DD.pdf` — ventas del día actual
+- `reports/reporte-semanal-semana-N.pdf` — resumen semanal
+- `backups/backup-...sqlite.gz` — respaldo diario comprimido
+
+En producción las carpetas viven en `%APPDATA%/InventarioPOS/`. El estado de
+"ya ejecutado" se guarda en `scheduler-state.json` (borrar una clave fuerza la
+regeneración).
 
 ### 12.2 Modificar la Base de Datos
 
@@ -1078,3 +1135,15 @@ Vite hot-reload solo aplica al renderer. Para cambios en `src/main/`, debes cerr
 
 **¿Cómo hago backup de los datos?**
 Desde Ajustes → Backups, o automáticamente cada día. Los backups se guardan comprimidos (gzip) en la carpeta `backups/`.
+
+**¿Dónde están los reportes automáticos diarios/semanales?**
+En la carpeta `reports/` (en desarrollo: raíz del proyecto; en producción: `%APPDATA%/InventarioPOS/reports/`). Si no se generó el de hoy, elimina la clave `scheduler_daily_report` de `scheduler-state.json` y reinicia.
+
+**¿Por qué el reporte "Ventas del Día" salía con 0 ventas?**
+Era un bug de zona horaria (corregido): `new Date("YYYY-MM-DD")` se interpreta como medianoche UTC y desplazaba el rango en zonas GMT-negativas. Ahora las fechas se construyen en hora local (`parseLocalDate()` en `Reports.tsx`).
+
+**¿Cómo funciona el pago a proveedores?**
+Desde Contabilidad o Proveedores: se valida que la empresa tenga saldo disponible (ingresos − pagos previos), se ingresa el monto total o parcial, y se aplica FIFO sobre las compras pendientes más antiguas. Cada pago genera un recibo PDF opcional y las compras recibidas tienen factura de compra en PDF (botón 🖨️ en Compras).
+
+**¿De dónde sale la referencia en bolívares?**
+Del setting `exchange_rate_usd_ves` (Ajustes → Datos del Negocio → Tasa de Cambio). Los montos operativos siempre están en USD; el Bs. es solo referencia visual.

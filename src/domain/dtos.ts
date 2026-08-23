@@ -193,7 +193,7 @@ export interface UpdateDiscountDTO {
 
 // ─── Report DTOs ───
 export type ReportFormat = 'pdf' | 'xlsx';
-export type ReportType = 'daily_sales' | 'sales_summary' | 'inventory' | 'low_stock' | 'top_products' | 'profit_summary' | 'sale_receipt' | 'cash_close';
+export type ReportType = 'daily_sales' | 'sales_summary' | 'inventory' | 'low_stock' | 'top_products' | 'profit_summary' | 'sale_receipt' | 'cash_close' | 'purchase_invoice' | 'payment_receipt';
 
 export interface ReportRequestDTO {
   type: ReportType;
@@ -203,6 +203,8 @@ export interface ReportRequestDTO {
   title?: string;
   saleId?: number;
   registerId?: number;
+  purchaseId?: number;
+  paymentIds?: number[];
   logoBase64?: string;
 }
 
@@ -260,6 +262,57 @@ export interface SaleReceiptItemDTO {
   discountName?: string | null;
   discountAmount?: number | null;
   finalPrice?: number | null;
+}
+
+export interface PurchaseInvoiceItemDTO {
+  productName: string;
+  sku: string | null;
+  quantity: number;
+  unitCost: number;
+  totalPrice: number;
+}
+
+export interface PurchasePaymentRecordDTO {
+  date: Date;
+  amount: number;
+  note?: string | null;
+}
+
+export interface PurchaseInvoiceDTO {
+  purchaseId: number;
+  businessName?: string;
+  businessAddress?: string;
+  businessPhone?: string;
+  businessTaxId?: string;
+  supplierName: string;
+  supplierRuc: string | null;
+  supplierPhone?: string | null;
+  supplierEmail?: string | null;
+  createdAt: Date;
+  status: string;
+  items: PurchaseInvoiceItemDTO[];
+  totalAmount: number;
+  paidAmount: number;
+  remainingAmount: number;
+  payments: PurchasePaymentRecordDTO[];
+}
+
+export interface PaymentAllocationDTO {
+  paymentId: number;
+  purchaseId: number;
+  purchaseDate: Date;
+  amount: number;
+  note?: string | null;
+}
+
+export interface PaymentReceiptDTO {
+  businessName: string;
+  supplierName: string;
+  supplierRuc: string | null;
+  date: Date;
+  allocations: PaymentAllocationDTO[];
+  totalPaid: number;
+  remainingDebt: number;
 }
 
 export interface CashCloseDTO {

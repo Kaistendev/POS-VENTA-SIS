@@ -65,6 +65,13 @@ export class PrismaCashRegisterRepository implements ICashRegisterRepository {
     });
   }
 
+  async getTotalInflow(): Promise<number> {
+    const result = await this.prisma.cashRegister.aggregate({
+      _sum: { opening_amount: true, total_sales: true },
+    });
+    return (result._sum.opening_amount || 0) + (result._sum.total_sales || 0);
+  }
+
   async getDailySummary(registerId: number): Promise<any> {
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);

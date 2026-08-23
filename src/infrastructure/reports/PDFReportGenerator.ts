@@ -1,7 +1,7 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { IReportGenerator } from '../../domain/ports/IReportGenerator.js';
-import { SaleReportRow, InventoryReportRow, SalesStatsDTO, SaleReceiptDTO, CashCloseDTO } from '../../domain/dtos.js';
+import { SaleReportRow, InventoryReportRow, SalesStatsDTO, SaleReceiptDTO, CashCloseDTO, PurchaseInvoiceDTO, PaymentReceiptDTO } from '../../domain/dtos.js';
 import { InventoryMetrics } from '../../domain/models.js';
 
 export class PDFReportGenerator implements IReportGenerator {
@@ -201,6 +201,196 @@ export class PDFReportGenerator implements IReportGenerator {
     y += 8;
     doc.setFontSize(7);
     doc.text(data.ticketFooter || 'Gracias por su compra', 40, y, { align: 'center' });
+
+    return new Uint8Array(doc.output('arraybuffer'));
+  }
+
+  async generatePurchaseInvoice(data: PurchaseInvoiceDTO): Promise<Uint8Array> {
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+
+    let y = 20;
+    doc.setFontSize(16);
+    doc.text(data.businessName || 'INVENTARIO-POS', 14, y);
+    doc.setFontSize(14);
+    doc.text(`FACTURA DE COMPRA #${data.purchaseId}`, 196, y, { align: 'right' });
+
+    y += 6;
+    doc.setFontSize(9);
+    doc.setTextColor(90, 90, 90);
+    if (data.businessAddress) { doc.text(data.businessAddress, 14, y); y += 5; }
+    if (data.businessPhone) { doc.text(`Tel: ${data.businessPhone}`, 14, y); y += 5; }
+    if (data.businessTaxId) { doc.text(`RUC: ${data.businessTaxId}`, 14, y); y += 5; }
+    doc.setTextColor(0, 0, 0);
+
+    // Datos del proveedor y de la compra
+    const statusLabels: Record<string, string> = {
+      PENDING: 'PENDIENTE',
+      RECEIVED: 'RECIBIDA',
+      CANCELLED: 'CANCELADA',
+    };
+    const infoLeft = [
+      ['Proveedor:', data.supplierName],
+      ['RUC:', data.supplierRuc || '-'],
+      ...(data.supplierPhone ? [['Teléfono:', data.supplierPhone]] : []),
+      ...(data.supplierEmail ? [['Email:', data.supplierEmail]] : []),
+    ] as [string, string][];
+    const infoRight = [
+      ['Fecha de compra:', new Date(data.createdAt).toLocaleDateString('es-PE')],
+      ['Estado:', statusLabels[data.status] ?? data.status],
+      ['Generado:', new Date().toLocaleDateString('es-PE')],
+    ] as [string, string][];
+
+    y += 2;
+    let leftY = y + 5;
+    doc.setFontSize(9);
+    for (const [label, value] of infoLeft) {
+      doc.setFont('helvetica', 'bold');
+      doc.text(label, 14, leftY);
+      doc.setFont('helvetica', 'normal');
+      doc.text(value, 34, leftY);
+      leftY += 5;
+    }
+    let rightY = y + 5;
+    for (const [label, value] of infoRight) {
+      doc.setFont('helvetica', 'bold');
+      doc.text(label, 120, rightY);
+      doc.setFont('helvetica', 'normal');
+      doc.text(value, 155, rightY);
+      rightY += 5;
+    }
+
+    y = Math.max(leftY, rightY) + 4;
+    doc.setDrawColor(180, 180, 180);
+    doc.line(14, y, 196, y);
+    y += 8;
+
+    autoTable(doc, {
+      head: [['Producto', 'SKU', 'Cantidad', 'Costo Unit.', 'Total']],
+      body: data.items.map((item) => [
+        item.productName,
+        item.sku || '-',
+        String(item.quantity),
+        `$ ${item.unitCost.toFixed(2)}`,
+        `$ ${item.totalPrice.toFixed(2)}`,
+      ]),
+      startY: y,
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: [41, 128, 185] },
+      columnStyles: { 3: { halign: 'right' }, 4: { halign: 'right' } },
+    });
+
+    y = (doc as any).lastAutoTable.finalY + 10;
+
+    const round = (n: number) => Math.round(n * 100) / 100;
+    const remaining = round(data.totalAmount - data.paidAmount);
+    const isPaid = remaining <= 0 && data.status !== 'CANCELLED';
+    const isPartial = data.paidAmount > 0 && remaining > 0;
+
+    doc.setFontSize(10);
+    doc.text('Total de la compra:', 120, y);
+    doc.text(`$ ${data.totalAmount.toFixed(2)}`, 196, y, { align: 'right' });
+    y += 6;
+    doc.text('Pagado:', 120, y);
+    doc.text(`$ ${data.paidAmount.toFixed(2)}`, 196, y, { align: 'right' });
+    y += 6;
+
+    if (isPaid) {
+      doc.setTextColor(0, 128, 0);
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.text('PAGADA EN SU TOTALIDAD', 120, y);
+    } else {
+      doc.setTextColor(isPartial ? 200 : 220, isPartial ? 120 : 30, isPartial ? 0 : 30);
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.text(isPartial ? 'PAGO PARCIAL - Saldo:' : 'POR PAGAR - Saldo total:', 120, y);
+      doc.text(`$ ${remaining.toFixed(2)}`, 196, y, { align: 'right' });
+    }
+    doc.setTextColor(0, 0, 0);
+    doc.setFont('helvetica', 'normal');
+    y += 10;
+
+    if (data.payments.length > 0) {
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Historial de pagos:', 14, y);
+      doc.setFont('helvetica', 'normal');
+      y += 4;
+
+      autoTable(doc, {
+        head: [['#', 'Fecha de pago', 'Monto', 'Nota']],
+        body: data.payments.map((p, i) => [
+          String(i + 1),
+          new Date(p.date).toLocaleString('es-PE'),
+          `$ ${p.amount.toFixed(2)}`,
+          p.note || '-',
+        ]),
+        startY: y,
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [39, 174, 96] },
+        columnStyles: { 2: { halign: 'right' } },
+      });
+      y = (doc as any).lastAutoTable.finalY + 10;
+    }
+
+    doc.setFontSize(8);
+    doc.setTextColor(110, 110, 110);
+    doc.text('Documento generado automáticamente por el sistema.', 14, y);
+
+    return new Uint8Array(doc.output('arraybuffer'));
+  }
+
+  async generatePaymentReceipt(data: PaymentReceiptDTO): Promise<Uint8Array> {
+    const doc = new jsPDF({ unit: 'mm', format: [80, 100 + data.allocations.length * 8] });
+
+    let y = 10;
+
+    doc.setFontSize(10);
+    doc.text(data.businessName || 'INVENTARIO-POS', 40, y, { align: 'center' });
+    y += 5;
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'bold');
+    doc.text('RECIBO DE PAGO A PROVEEDOR', 40, y, { align: 'center' });
+    doc.setFont('helvetica', 'normal');
+    y += 5;
+    doc.text('='.repeat(32), 5, y);
+    y += 5;
+
+    doc.text(`Proveedor: ${data.supplierName}`, 5, y);
+    y += 4;
+    if (data.supplierRuc) {
+      doc.text(`RUC: ${data.supplierRuc}`, 5, y);
+      y += 4;
+    }
+    doc.text(`Fecha: ${new Date(data.date).toLocaleString('es-PE')}`, 5, y);
+    y += 4;
+    doc.text('-'.repeat(32), 5, y);
+    y += 5;
+
+    for (const alloc of data.allocations) {
+      doc.text(`Compra #${alloc.purchaseId} (${new Date(alloc.purchaseDate).toLocaleDateString('es-PE')})`, 5, y);
+      doc.text(`$ ${alloc.amount.toFixed(2)}`, 75, y, { align: 'right' });
+      y += 4;
+      if (alloc.note) {
+        doc.setFontSize(6.5);
+        doc.text(`  Nota: ${alloc.note}`, 8, y);
+        doc.setFontSize(8);
+        y += 4;
+      }
+    }
+
+    doc.text('-'.repeat(32), 5, y + 1);
+    y += 6;
+    doc.setFont('helvetica', 'bold');
+    doc.text('TOTAL PAGADO:', 5, y);
+    doc.text(`$ ${data.totalPaid.toFixed(2)}`, 75, y, { align: 'right' });
+    doc.setFont('helvetica', 'normal');
+    y += 5;
+    doc.text('Saldo restante proveedor:', 5, y);
+    doc.text(`$ ${data.remainingDebt.toFixed(2)}`, 75, y, { align: 'right' });
+    y += 8;
+    doc.setFontSize(7);
+    doc.text('¡Gracias por su puntualidad!', 40, y, { align: 'center' });
 
     return new Uint8Array(doc.output('arraybuffer'));
   }

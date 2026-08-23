@@ -1,6 +1,6 @@
 import ExcelJS from 'exceljs';
 import { IReportGenerator } from '../../domain/ports/IReportGenerator.js';
-import { SaleReportRow, InventoryReportRow, SalesStatsDTO, SaleReceiptDTO, CashCloseDTO } from '../../domain/dtos.js';
+import { SaleReportRow, InventoryReportRow, SalesStatsDTO, SaleReceiptDTO, CashCloseDTO, PurchaseInvoiceDTO, PaymentReceiptDTO } from '../../domain/dtos.js';
 import { InventoryMetrics } from '../../domain/models.js';
 
 export class ExcelReportGenerator implements IReportGenerator {
@@ -287,5 +287,13 @@ export class ExcelReportGenerator implements IReportGenerator {
 
     const buffer = await workbook.xlsx.writeBuffer();
     return new Uint8Array(buffer);
+  }
+
+  async generatePurchaseInvoice(_data: PurchaseInvoiceDTO): Promise<Uint8Array> {
+    throw new Error('La factura de compra solo está disponible en formato PDF');
+  }
+
+  async generatePaymentReceipt(_data: PaymentReceiptDTO): Promise<Uint8Array> {
+    throw new Error('El recibo de pago solo está disponible en formato PDF');
   }
 }

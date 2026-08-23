@@ -42,6 +42,7 @@ const Suppliers = lazy(() => import('./pages/Suppliers.tsx'));
 const Purchases = lazy(() => import('./pages/Purchases.tsx'));
 const Reports = lazy(() => import('./pages/Reports.tsx'));
 const Discounts = lazy(() => import('./pages/Discounts.tsx'));
+const Accounting = lazy(() => import('./pages/Accounting.tsx'));
 
 function PageLoader() {
   return (
@@ -140,6 +141,7 @@ export default function App() {
                   <Route path="purchases" element={<Purchases />} />
                   <Route path="discounts" element={<Discounts />} />
                   <Route path="reports" element={<Reports />} />
+                  <Route path="accounting" element={<Accounting />} />
                 </Route>
               </Routes>
             </Suspense>

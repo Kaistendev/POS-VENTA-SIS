@@ -2,8 +2,8 @@ import { IPurchaseRepository } from '../../domain/ports/IPurchaseRepository.js';
 import { IAuditLogRepository } from '../../domain/ports/IAuditLogRepository.js';
 import { ISupplierRepository } from '../../domain/ports/ISupplierRepository.js';
 import { IProductRepository } from '../../domain/ports/IProductRepository.js';
-import { CreatePurchaseDTO } from '../../domain/dtos.js';
-import { NotFoundError, BusinessRuleError } from '../../shared/errors.js';
+import { CreatePurchaseDTO, PurchaseInvoiceDTO } from '../../domain/dtos.js';
+import { NotFoundError } from '../../shared/errors.js';
 import { logger } from '../../shared/logger.js';
 
 export class PurchaseService {
@@ -107,5 +107,46 @@ export class PurchaseService {
       if (error.code === 'P2025') throw new NotFoundError('Compra');
       throw error;
     }
+  }
+
+  /**
+   * Datos completos para la factura de compra a proveedor:
+   * qué se compró, cuándo y el estado de los pagos.
+   */
+  async getPurchaseInvoiceData(purchaseId: number): Promise<PurchaseInvoiceDTO> {
+    const purchase = await this.purchaseRepo.findById(purchaseId);
+    if (!purchase) throw new NotFoundError('Compra');
+
+    const supplier = purchase.supplier;
+    if (!supplier) throw new NotFoundError('Proveedor');
+
+    const payments = await this.supplierRepo.getPaymentsByPurchase(purchaseId);
+
+    const round = (n: number) => Math.round(n * 100) / 100;
+
+    return {
+      purchaseId: purchase.id,
+      supplierName: supplier.name,
+      supplierRuc: supplier.ruc ?? null,
+      supplierPhone: (supplier as any).phone ?? null,
+      supplierEmail: (supplier as any).email ?? null,
+      createdAt: purchase.created_at,
+      status: purchase.status,
+      items: (purchase.items || []).map((item) => ({
+        productName: item.product?.name ?? `Producto #${item.product_id}`,
+        sku: item.product?.sku ?? null,
+        quantity: item.quantity,
+        unitCost: Number(item.unit_cost),
+        totalPrice: round(item.quantity * Number(item.unit_cost)),
+      })),
+      totalAmount: round(Number(purchase.total_amount)),
+      paidAmount: round(Number(purchase.paid_amount ?? 0)),
+      remainingAmount: round(Number(purchase.total_amount) - Number(purchase.paid_amount ?? 0)),
+      payments: payments.map((p) => ({
+        date: p.created_at,
+        amount: Number(p.amount),
+        note: p.note,
+      })),
+    };
   }
 }

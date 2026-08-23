@@ -14,4 +14,5 @@ export interface IProductRepository {
   updateStock(id: number, delta: number): Promise<void>;
   createMovement(data: StockMovementDTO): Promise<void>;
   getMovements(productId: number, limit?: number): Promise<any[]>;
+  getInventoryValuation(): Promise<{ units_in_stock: number; cost_value: number; potential_revenue: number }>;
 }

@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import DataTable from '../components/ui/DataTable.tsx';
-import { PackagePlus, RefreshCw, Pencil, Trash2, PlusCircle, MinusCircle, AlertCircle, Package, Search } from 'lucide-react';
+import { RefreshCw, Pencil, Trash2, PlusCircle, MinusCircle, AlertCircle, Package, Search } from 'lucide-react';
 import { useToast } from '../hooks/useToast.ts';
-import { TableSkeleton, EmptyState } from '../components/ui/Skeleton.tsx';
 import Modal from '../components/ui/Modal.tsx';
 import { formatCurrency } from '../lib/utils.ts';
 
@@ -156,7 +155,12 @@ export default function Products() {
       }
 
       if (result.success) {
-        success('Inventario actualizado');
+        const payload: any = result as any;
+        if (payload.debt_created) {
+          success(`Inventario actualizado. Cuenta por pagar generada por $${(payload.debt_amount ?? 0).toFixed(2)} al proveedor`);
+        } else {
+          success('Inventario actualizado');
+        }
         setIsStockModalOpen(false);
         fetchData();
       } else {
@@ -452,6 +456,17 @@ export default function Products() {
               <option value="CADUCIDAD">Caducidad</option>
             </select>
           </div>
+
+          {stockAdjustment.type === 'ENTRADA' && stockAdjustment.reason === 'COMPRA' && selectedProduct?.supplier_id && (
+            <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-sm text-amber-300">
+              Se generará una cuenta por pagar con{' '}
+              <span className="font-semibold">
+                {suppliers.find((s: any) => s.id === selectedProduct.supplier_id)?.name ?? 'el proveedor'}
+              </span>{' '}
+              por <span className="font-semibold">${(((parseInt(stockAdjustment.amount) || 0) * (selectedProduct.price_purchase ?? 0))).toFixed(2)}</span>{' '}
+              ({stockAdjustment.amount || 0} × ${selectedProduct.price_purchase?.toFixed(2)})
+            </div>
+          )}
 
           <div className="flex justify-end space-x-3 pt-4">
             <button

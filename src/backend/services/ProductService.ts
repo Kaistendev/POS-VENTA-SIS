@@ -1,6 +1,7 @@
 import { IProductRepository } from '../../domain/ports/IProductRepository.js';
 import { IAuditLogRepository } from '../../domain/ports/IAuditLogRepository.js';
 import { ICategoryRepository } from '../../domain/ports/ICategoryRepository.js';
+import { IPurchaseRepository } from '../../domain/ports/IPurchaseRepository.js';
 import { CreateProductDTO, UpdateProductDTO } from '../../domain/dtos.js';
 import { NotFoundError, ConflictError, BusinessRuleError, ValidationError } from '../../shared/errors.js';
 import { productSchema } from '../../shared/schemas.js';
@@ -10,6 +11,7 @@ export class ProductService {
     private productRepo: IProductRepository,
     private categoryRepo: ICategoryRepository,
     private auditLogRepo: IAuditLogRepository,
+    private purchaseRepo?: IPurchaseRepository,
   ) {}
 
   async getAllProducts(search?: string, categoryId?: number) {
@@ -22,7 +24,7 @@ export class ProductService {
     return product;
   }
 
-  async getLowStockProducts(threshold?: number) {
+  async getLowStockProducts(_threshold?: number) {
     return this.productRepo.findLowStock();
   }
 
@@ -122,6 +124,20 @@ export class ProductService {
       reason,
     });
 
+    let debtCreated = false;
+    if (
+      reason === 'COMPRA' &&
+      product.supplier_id &&
+      product.price_purchase > 0 &&
+      this.purchaseRepo
+    ) {
+      await this.purchaseRepo.createReceivedWithoutStock({
+        supplier_id: product.supplier_id,
+        items: [{ product_id: productId, quantity, unit_cost: product.price_purchase }],
+      });
+      debtCreated = true;
+    }
+
     await this.auditLogRepo.create({
       userId,
       action: 'STOCK_ENTRADA',
@@ -129,7 +145,11 @@ export class ProductService {
       entity_id: productId,
     });
 
-    return { success: true };
+    return {
+      success: true,
+      debt_created: debtCreated,
+      debt_amount: debtCreated ? Math.round(quantity * product.price_purchase * 100) / 100 : 0,
+    };
   }
 
   async removeStock(productId: number, quantity: number, userId: number = 1, reason: string = 'AJUSTE') {

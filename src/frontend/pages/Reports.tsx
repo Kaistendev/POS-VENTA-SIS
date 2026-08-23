@@ -6,6 +6,23 @@ import { useToast } from '../hooks/useToast.ts';
 type ReportType = 'daily_sales' | 'sales_summary' | 'inventory' | 'low_stock' | 'top_products' | 'profit_summary' | 'sale_receipt' | 'cash_close';
 type ReportFormat = 'pdf' | 'xlsx';
 
+/**
+ * Convierte un input date ("YYYY-MM-DD") a Date en hora LOCAL.
+ * new Date("YYYY-MM-DD") se interpreta como medianoche UTC y desplaza
+ * el rango en zonas horarias detrás de UTC (ej: GMT-4), excluyendo las
+ * ventas del día actual. Aquí se construye explícitamente en local.
+ */
+function parseLocalDate(value: string, endOfDay = false): Date {
+  const [y, m, d] = value.split('-').map(Number);
+  if (endOfDay) return new Date(y, m - 1, d, 23, 59, 59, 999);
+  return new Date(y, m - 1, d, 0, 0, 0, 0);
+}
+
+function getLocalTodayStr(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 const reportTypes: { value: ReportType; label: string; description: string }[] = [
   { value: 'daily_sales', label: 'Ventas del Día', description: 'Listado detallado de todas las ventas realizadas' },
   { value: 'sales_summary', label: 'Resumen de Ventas', description: 'Resumen de ventas con totales por período' },
@@ -20,7 +37,7 @@ const reportTypes: { value: ReportType; label: string; description: string }[] =
 export default function Reports() {
   const [type, setType] = useState<ReportType>('daily_sales');
   const [format, setFormat] = useState<ReportFormat>('pdf');
-  const today = new Date().toISOString().split('T')[0];
+  const today = getLocalTodayStr();
   const [startDate, setStartDate] = useState(today);
   const [endDate, setEndDate] = useState(today);
 
@@ -41,12 +58,12 @@ export default function Reports() {
     setFetchedRegisters(false);
     const now = new Date();
     if (newType === 'daily_sales') {
-      const d = now.toISOString().split('T')[0];
+      const d = getLocalTodayStr();
       setStartDate(d);
-      setEndDate('');
+      setEndDate(d);
     } else if (newType === 'sales_summary' || newType === 'profit_summary') {
-      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-      const lastDay = now.toISOString().split('T')[0];
+      const firstDay = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+      const lastDay = getLocalTodayStr();
       setStartDate(firstDay);
       setEndDate(lastDay);
     } else {
@@ -74,8 +91,8 @@ export default function Reports() {
         const request: import('../../domain/dtos').ReportRequestDTO = {
           type,
           format,
-          startDate: startDate ? new Date(startDate) : undefined,
-          endDate: endDate ? new Date(endDate) : undefined,
+          startDate: startDate ? parseLocalDate(startDate) : undefined,
+          endDate: endDate ? parseLocalDate(endDate, true) : undefined,
           saleId: saleId ? parseInt(saleId) : undefined,
           registerId: registerId ? parseInt(registerId) : undefined,
         };

@@ -698,6 +698,45 @@ export function setupIpcHandlers() {
     $.supplierService.deleteSupplier(id, userId)
   )));
 
+  // Cuentas por pagar
+  ipcMain.handle("suppliers:getAccountsPayable", async () => {
+    try {
+      const user = getCurrentUser();
+      if (!user) throw new UnauthorizedError();
+      return await $.supplierService.getAccountsPayable();
+    } catch (error: any) {
+      logger.error('[Suppliers] getAccountsPayable error:', error);
+      return { payables: [], cashPosition: { total_inflow: 0, paid_to_suppliers: 0, available: 0 } };
+    }
+  });
+
+  ipcMain.handle("suppliers:getDebt", async (_, supplierId: number) => {
+    try {
+      const user = getCurrentUser();
+      if (!user) throw new UnauthorizedError();
+      return await $.supplierService.getSupplierDebt(supplierId);
+    } catch (error: any) {
+      logger.error('[Suppliers] getDebt error:', error);
+      return null;
+    }
+  });
+
+  ipcMain.handle("suppliers:getPayments", async (_, supplierId: number) => {
+    try {
+      const user = getCurrentUser();
+      if (!user) throw new UnauthorizedError();
+      return await $.supplierService.getSupplierPayments(supplierId);
+    } catch (error: any) {
+      logger.error('[Suppliers] getPayments error:', error);
+      return [];
+    }
+  });
+
+  ipcMain.handle("suppliers:pay", wrapIpc(requireRole('ADMIN')((supplierId: number, amount: number, note?: string) => {
+    const user = getCurrentUser();
+    return $.supplierService.paySupplier(supplierId, amount, user?.id ?? 1, note);
+  })));
+
   /**
    * PURCHASES
    */
@@ -732,6 +771,21 @@ export function setupIpcHandlers() {
   ipcMain.handle("purchases:updatePaymentStatus", wrapIpc(requireRole('ADMIN')((purchaseId, paymentStatus) =>
     $.purchaseService.updatePaymentStatus(purchaseId, paymentStatus)
   )));
+
+  /**
+   * ACCOUNTING (Contabilidad)
+   */
+  ipcMain.handle("accounting:getSummary", async () => {
+    try {
+      const user = getCurrentUser();
+      if (!user) throw new UnauthorizedError();
+      if (user.role !== 'ADMIN') throw new ForbiddenError(['ADMIN']);
+      return await $.accountingService.getSummary();
+    } catch (error: any) {
+      logger.error('[Accounting] getSummary error:', error);
+      return sanitizedCatch(error, 'Error al obtener resumen contable');
+    }
+  });
 
   // Backup & Restore
   ipcMain.handle("backup:create", wrapIpc(requireRole('ADMIN')((label?: string) =>
@@ -820,6 +874,32 @@ export function setupIpcHandlers() {
     const buffer = await $.reportService.generateReport(request);
     const { filePath, canceled } = await dialog.showSaveDialog({
       defaultPath: `comprobante-${saleId}-${Date.now()}.pdf`,
+      filters: [{ name: 'PDF', extensions: ['pdf'] }],
+    });
+    if (canceled || !filePath) {
+      return { success: false, message: 'Cancelado por el usuario' };
+    }
+    await fs.writeFile(filePath, buffer);
+    return { success: true, path: filePath };
+  })));
+
+  ipcMain.handle("reports:generatePurchaseInvoice", wrapIpc(requireRole('ADMIN')(async (purchaseId: number) => {
+    const buffer = await $.reportService.generateReport({ type: 'purchase_invoice', format: 'pdf', purchaseId });
+    const { filePath, canceled } = await dialog.showSaveDialog({
+      defaultPath: `factura-compra-${purchaseId}-${Date.now()}.pdf`,
+      filters: [{ name: 'PDF', extensions: ['pdf'] }],
+    });
+    if (canceled || !filePath) {
+      return { success: false, message: 'Cancelado por el usuario' };
+    }
+    await fs.writeFile(filePath, buffer);
+    return { success: true, path: filePath };
+  })));
+
+  ipcMain.handle("reports:generatePaymentReceipt", wrapIpc(requireRole('ADMIN')(async (paymentIds: number[]) => {
+    const buffer = await $.reportService.generateReport({ type: 'payment_receipt', format: 'pdf', paymentIds });
+    const { filePath, canceled } = await dialog.showSaveDialog({
+      defaultPath: `recibo-pago-${Date.now()}.pdf`,
       filters: [{ name: 'PDF', extensions: ['pdf'] }],
     });
     if (canceled || !filePath) {

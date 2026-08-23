@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS "purchases" (
   "id" INTEGER NOT NULL,
   "supplier_id" INTEGER NOT NULL,
   "total_amount" REAL NOT NULL,
+  "paid_amount" REAL NOT NULL DEFAULT 0,
   "status" TEXT NOT NULL DEFAULT 'PENDING',
   "payment_status" TEXT NOT NULL DEFAULT 'UNPAID',
   "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -51,6 +52,28 @@ CREATE INDEX IF NOT EXISTS "purchases_created_at_idx" ON "purchases" ("created_a
 CREATE INDEX IF NOT EXISTS "purchases_status_idx" ON "purchases" ("status");
 
 CREATE INDEX IF NOT EXISTS "purchases_supplier_id_idx" ON "purchases" ("supplier_id");
+
+CREATE INDEX IF NOT EXISTS "purchases_payment_status_idx" ON "purchases" ("payment_status");
+
+CREATE TABLE IF NOT EXISTS "supplier_payments" (
+  "id" INTEGER NOT NULL,
+  "supplier_id" INTEGER NOT NULL,
+  "purchase_id" INTEGER,
+  "amount" REAL NOT NULL,
+  "note" TEXT,
+  "created_by" INTEGER,
+  "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updated_at" DATETIME NOT NULL,
+  PRIMARY KEY ("id"),
+  CONSTRAINT "supplier_payments_supplier_id_fkey" FOREIGN KEY ("supplier_id") REFERENCES "suppliers" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT "supplier_payments_purchase_id_fkey" FOREIGN KEY ("purchase_id") REFERENCES "purchases" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS "supplier_payments_created_at_idx" ON "supplier_payments" ("created_at");
+
+CREATE INDEX IF NOT EXISTS "supplier_payments_purchase_id_idx" ON "supplier_payments" ("purchase_id");
+
+CREATE INDEX IF NOT EXISTS "supplier_payments_supplier_id_idx" ON "supplier_payments" ("supplier_id");
 
 CREATE TABLE IF NOT EXISTS "inventory_movements" (
   "id" INTEGER NOT NULL,

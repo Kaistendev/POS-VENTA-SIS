@@ -1,5 +1,6 @@
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { app } from 'electron';
 import { ReportService } from './ReportService.js';
 import { BackupService } from './BackupService.js';
 import { logger } from '../../shared/logger.js';
@@ -31,6 +32,27 @@ export class SchedulerService {
     logger.info('Stopped scheduled tasks');
   }
 
+  /**
+   * Carpeta donde se guardan los reportes automáticos.
+   * En desarrollo: <proyecto>/reports. En producción: userData/reports.
+   */
+  private getReportsDir(): string {
+    const isDev = !app.isPackaged;
+    const basePath = isDev ? process.cwd() : app.getPath('userData');
+    const reportsDir = join(basePath, 'reports');
+    if (!existsSync(reportsDir)) {
+      mkdirSync(reportsDir, { recursive: true });
+    }
+    return reportsDir;
+  }
+
+  private saveReportPdf(filename: string, buffer: Uint8Array): string {
+    const reportsDir = this.getReportsDir();
+    const filePath = join(reportsDir, filename);
+    writeFileSync(filePath, buffer);
+    return filePath;
+  }
+
   private scheduleDailyReport() {
     const runDaily = async () => {
       try {
@@ -39,13 +61,21 @@ export class SchedulerService {
         if (lastRun === today) return;
 
         logger.info('Generating daily report');
-        await this.reportService.generateReport({
+
+        // Solo las ventas de hoy
+        const startOfDay = new Date();
+        startOfDay.setHours(0, 0, 0, 0);
+
+        const pdf = await this.reportService.generateReport({
           type: 'daily_sales',
           format: 'pdf',
+          startDate: startOfDay,
+          endDate: new Date(),
           title: `Reporte Diario - ${new Date().toLocaleDateString('es-PE')}`,
         });
+        const filePath = this.saveReportPdf(`reporte-diario-${today}.pdf`, pdf);
         this.setLastRun('daily_report', today);
-        logger.info('Daily report saved');
+        logger.info({ filePath }, 'Daily report saved');
       } catch (err) {
         logger.error({ err }, 'Error generating daily report');
       }
@@ -68,15 +98,16 @@ export class SchedulerService {
         startOfWeek.setHours(0, 0, 0, 0);
 
         logger.info('Generating weekly report');
-        await this.reportService.generateReport({
+        const pdf = await this.reportService.generateReport({
           type: 'sales_summary',
           format: 'pdf',
           startDate: startOfWeek,
           endDate: now,
           title: `Reporte Semanal - Semana ${weekNum}`,
         });
+        const filePath = this.saveReportPdf(`reporte-semanal-semana-${weekNum}.pdf`, pdf);
         this.setLastRun('weekly_report', String(weekNum));
-        logger.info('Weekly report saved');
+        logger.info({ filePath }, 'Weekly report saved');
       } catch (err) {
         logger.error({ err }, 'Error generating weekly report');
       }

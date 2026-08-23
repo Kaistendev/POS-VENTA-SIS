@@ -176,6 +176,7 @@ model Supplier {
   
   products    Product[]
   purchases   Purchase[]
+  payments    SupplierPayment[]
   
   @@map("suppliers")
 }
@@ -185,17 +186,38 @@ model Purchase {
   supplier_id  Int
   supplier     Supplier      @relation(fields: [supplier_id], references: [id])
   total_amount Float         @map("total_amount")
+  paid_amount  Float         @default(0) @map("paid_amount")
   status       String        @default("PENDING") // PENDING, RECEIVED, CANCELLED
   payment_status String    @default("UNPAID") // UNPAID, PAID
   created_at   DateTime       @default(now()) @map("created_at")
   updated_at   DateTime       @updatedAt @map("updated_at")
-  
+
   items        PurchaseItem[]
-  
+  payments     SupplierPayment[]
+
   @@index([supplier_id])
   @@index([status])
+  @@index([payment_status])
   @@index([created_at])
   @@map("purchases")
+}
+
+model SupplierPayment {
+  id          Int       @id @default(autoincrement())
+  supplier_id Int
+  supplier    Supplier  @relation(fields: [supplier_id], references: [id])
+  purchase_id Int?
+  purchase    Purchase? @relation(fields: [purchase_id], references: [id])
+  amount      Float
+  note        String?
+  created_by  Int?
+  created_at  DateTime  @default(now()) @map("created_at")
+  updated_at  DateTime  @updatedAt @map("updated_at")
+
+  @@index([supplier_id])
+  @@index([purchase_id])
+  @@index([created_at])
+  @@map("supplier_payments")
 }
 
 model PurchaseItem {

@@ -9,4 +9,5 @@ export interface ICashRegisterRepository {
   updateTotalSales(id: number, delta: number): Promise<void>;
   getSalesCount(id: number, since: Date): Promise<number>;
   getDailySummary(registerId: number): Promise<any>;
+  getTotalInflow(): Promise<number>;
 }

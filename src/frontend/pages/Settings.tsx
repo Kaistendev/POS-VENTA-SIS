@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Store, Phone, MapPin, Save, TrendingUp, DollarSign, Calendar, RefreshCw, Database, Download, Upload, Trash2, Image as ImageIcon, X } from 'lucide-react';
+import { Store, Phone, MapPin, Save, DollarSign, Database, Download, Upload, Trash2, Image as ImageIcon, X } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useToast } from '../hooks/useToast.ts';
 
 export default function Settings() {
-  const [activeTab, setActiveTab] = useState<'business' | 'reports' | 'backup' | 'tax'>('business');
+  const [activeTab, setActiveTab] = useState<'business' | 'backup' | 'tax'>('business');
   const [settings, setSettings] = useState({
     business_name: 'INVENTARIO-POS',
     business_address: '',
@@ -14,9 +14,7 @@ export default function Settings() {
     business_logo: '',
     exchange_rate_usd_ves: '0',
   });
-  
-  const [reportData, setReportsData] = useState<any>(null);
-  const [loadingReport, setLoadingLoading] = useState(false);
+
   const [backups, setBackups] = useState<any[]>([]);
   const [loadingBackup, setLoadingBackup] = useState(false);
   const [taxSettings, setTaxSettings] = useState({ taxRate: 0, taxType: 'none', taxIncluded: false });
@@ -53,22 +51,7 @@ export default function Settings() {
     }
   };
 
-  const loadProfitReport = async () => {
-    setLoadingLoading(true);
-    try {
-      if (window.api) {
-        // Obtenemos estadísticas generales que ya tienen el profit calculado
-        const stats = await window.api.getDashboardStats();
-        setReportsData(stats);
-      }
-    } catch (err) {
-      toastError('Error al cargar reporte');
-    }
-    setLoadingLoading(false);
-  };
-
   useEffect(() => {
-    if (activeTab === 'reports') loadProfitReport();
     if (activeTab === 'backup') loadBackups();
   }, [activeTab]);
 
@@ -138,8 +121,8 @@ export default function Settings() {
     <div className="space-y-6 animate-in fade-in duration-500 h-full flex flex-col">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight text-white m-0">Ajustes y Reportes</h2>
-          <p className="text-gray-400 mt-1">Configuración del ticket y análisis de ganancias</p>
+          <h2 className="text-3xl font-bold tracking-tight text-white m-0">Ajustes</h2>
+          <p className="text-gray-400 mt-1">Configuración del negocio, impuestos y respaldos</p>
         </div>
       </div>
 
@@ -150,13 +133,7 @@ export default function Settings() {
         >
           Datos del Negocio
         </button>
-        <button 
-          onClick={() => setActiveTab('reports')}
-          className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'reports' ? 'bg-primary text-white shadow-lg' : 'text-gray-400 hover:text-white'}`}
-        >
-          Reporte de Ganancias
-        </button>
-        <button 
+        <button
           onClick={() => setActiveTab('backup')}
           className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'backup' ? 'bg-primary text-white shadow-lg' : 'text-gray-400 hover:text-white'}`}
         >
@@ -277,55 +254,6 @@ export default function Settings() {
                 <Save className="w-5 h-5" /> Guardar Configuración
               </button>
             </form>
-          </motion.div>
-        ) : activeTab === 'reports' ? (
-          <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
-             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="glass-panel p-6 rounded-3xl border border-white/5 space-y-2">
-                   <div className="p-3 bg-blue-500/10 rounded-2xl w-fit text-blue-400"><DollarSign className="w-6 h-6" /></div>
-                   <p className="text-gray-500 text-xs font-bold uppercase">Ventas Totales (Hoy)</p>
-                   <p className="text-3xl font-black text-white">${Number(reportData?.todayRevenue || 0).toFixed(2)}</p>
-                </div>
-                <div className="glass-panel p-6 rounded-3xl border border-white/5 space-y-2">
-                   <div className="p-3 bg-green-500/10 rounded-2xl w-fit text-green-400"><TrendingUp className="w-6 h-6" /></div>
-                   <p className="text-gray-500 text-xs font-bold uppercase">Ganancia Bruta (Hoy)</p>
-                   <p className="text-3xl font-black text-green-400">${Number(reportData?.todayProfit || 0).toFixed(2)}</p>
-                </div>
-                <div className="glass-panel p-6 rounded-3xl border border-white/5 space-y-2">
-                   <div className="p-3 bg-purple-500/10 rounded-2xl w-fit text-purple-400"><Calendar className="w-6 h-6" /></div>
-                   <p className="text-gray-500 text-xs font-bold uppercase">Promedio por Venta</p>
-                   <p className="text-3xl font-black text-white">${Number(reportData?.averageSale || 0).toFixed(2)}</p>
-                </div>
-             </div>
-
-             <div className="glass-panel p-8 rounded-3xl border border-white/5">
-                <div className="flex items-center justify-between mb-8">
-                  <h3 className="text-xl font-bold text-white">Análisis de Rentabilidad</h3>
-                  <button onClick={loadProfitReport} disabled={loadingReport} className="p-2 hover:bg-white/5 rounded-xl transition-all">
-                    <RefreshCw className={`w-5 h-5 text-gray-500 ${loadingReport ? 'animate-spin' : ''}`} />
-                  </button>
-                </div>
-
-                <div className="space-y-4">
-                   <div className="flex justify-between items-center p-4 rounded-2xl bg-white/5 border border-white/5">
-                        <div>
-                          <p className="text-white font-medium">Margen de Ganancia</p>
-                          <p className="text-xs text-gray-500">Porcentaje sobre el total de ventas</p>
-                        </div>
-                        <p className="text-2xl font-black text-primary">
-                          {reportData?.todayRevenue > 0 
-                            ? ((reportData.todayProfit / reportData.todayRevenue) * 100).toFixed(1) 
-                            : '0.0'}%
-                        </p>
-                   </div>
-                   
-                   <div className="p-6 bg-primary/5 border border-primary/10 rounded-3xl">
-                        <p className="text-sm text-gray-300 leading-relaxed italic">
-                          "La ganancia bruta se calcula restando el **precio de costo** registrado en cada producto al momento de la venta del **precio final pagado** por el cliente."
-                        </p>
-                   </div>
-                </div>
-             </div>
           </motion.div>
         ) : activeTab === 'backup' ? (
           /* Backup & Restore Tab */

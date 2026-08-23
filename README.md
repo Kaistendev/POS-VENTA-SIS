@@ -42,24 +42,48 @@
   - Reducir stock (SALIDA - Ventas, Roturas)
   - Alertas de stock bajo automáticas
   - Historial completo de movimientos con filtro por producto
+  - **Generación automática de deuda:** al aumentar stock con razón "Compra", si el producto tiene proveedor se crea una cuenta por pagar por `cantidad × precio de compra`
 - **Categorías:** Organización de productos por categorías.
 - **Búsqueda Avanzada:** Filtrar por nombre, SKU o descripción.
 - **Movimientos de Inventario:** Auditoría completa de entradas y salidas (Solo Admin).
 
-### 5. 👥 Gestión de Clientes
+### 5. 🏭 Proveedores, Compras y Cuentas por Pagar
+- **CRUD de Proveedores** con validación de RUC duplicado.
+- **Órdenes de Compra:** creación, recepción (incrementa stock automáticamente), cancelación.
+- **Cuentas por Pagar:**
+  - Columna de deuda por proveedor en el módulo Proveedores
+  - Pagos totales o parciales con aplicación **FIFO** (compras más antiguas primero)
+  - **Validación de saldo:** solo se puede pagar si la empresa tiene saldo positivo (ingresos por ventas/aperturas − pagos realizados)
+  - Historial completo de pagos en `supplier_payments`
+  - **Factura de compra en PDF:** qué se compró, cuándo y estado de los pagos con historial
+  - **Recibo de pago en PDF** generado automáticamente al registrar un pago
+
+### 6. 🧮 Módulo de Contabilidad (Admin)
+- **Saldo disponible de la empresa:** ingresos históricos (aperturas de caja + ventas) − pagos a proveedores.
+- **Deudas por pagar:** total consolidado y detalle por proveedor con pago directo desde el módulo.
+- **Proyección de ganancias brutas:** ingreso potencial del inventario actual − costo del inventario, con margen %.
+- **Referencia en bolívares:** todos los montos muestran su equivalente usando la tasa de cambio del día configurada en Ajustes (`exchange_rate_usd_ves`).
+
+### 7. 👥 Gestión de Clientes
 - **CRUD Completo:** Crear, leer, actualizar y eliminar clientes.
 - **Búsqueda Inteligente:** Por DNI, nombre, código o RUC.
 - **Validación de Datos:** Prevención de duplicados.
 - **Historial de Compras:** Seguimiento de ventas por cliente.
 
-### 6. 👤 Gestión de Usuarios y Seguridad
+### 8. 👤 Gestión de Usuarios y Seguridad
 - **Autenticación Segura:** Login con bcrypt.
 - **Control de Roles:** Administrador y Vendedor.
-- **Protección de Rutas:** Los vendedores no pueden acceder a módulos administrativos (Categorías, Usuarios, Movimientos, Cierres, Ajustes).
+- **Protección de Rutas:** Los vendedores no pueden acceder a módulos administrativos (Categorías, Usuarios, Movimientos, Cierres, Descuentos, Reportes, Contabilidad).
 - **Auditoría Completa:** Registro de todas las acciones críticas en `audit_logs`.
 - **Gestión de Usuarios:** Crear, editar, cambiar contraseña y eliminar usuarios (Solo Admin).
 
-### 7. ⚙️ UI/UX Moderna
+### 9. 📄 Reportes y Documentos PDF/Excel
+- **Reportes configurables:** ventas del día/resumen, ganancias, inventario, stock bajo, top productos, comprobantes y cierres de caja.
+- **Exportación PDF y Excel** con diálogo de guardado.
+- **Reportes automáticos programados:** diario y semanal guardados en la carpeta `reports/` del proyecto.
+- **Fechas correctas por zona horaria:** los rangos se calculan en hora local para no excluir ventas del día.
+
+### 10. ⚙️ UI/UX Moderna
 - **Temas Oscuros:** Interfaz elegante con colores suaves.
 - **Sidebar Colapsable:** Con atajo de teclado `Ctrl+B`.
 - **Skeleton Loaders:** Feedback visual durante la carga de datos.
@@ -75,10 +99,11 @@
 ### Backend (Electron Main Process)
 - **Runtime:** Electron (Node.js)
 - **Language:** TypeScript (strict mode)
-- **ORM:** Prisma 6.2.1
+- **ORM:** Prisma 7 (driver adapter `better-sqlite3`, versión fijada)
 - **Database:** SQLite (WAL mode optimizado)
 - **Validation:** Zod
 - **Authentication:** bcryptjs
+- **Logging:** Pino
 
 ### Frontend (Renderer Process)
 - **Framework:** React 19
@@ -117,6 +142,12 @@ cd POS-VENTA-SIS
 ```bash
 pnpm install
 ```
+
+> **Nota sobre `better-sqlite3`:** la versión está fijada en `package.json` y el `postinstall` recompila automáticamente el módulo nativo para **Electron** (necesario porque Electron usa un ABI distinto al de Node). Si ejecutas los tests con Node (vitest) justo después de instalar, corre antes:
+> ```bash
+> node scripts/rebuild-electron.mjs restore   # recompila para Node
+> node scripts/rebuild-electron.mjs electron  # recompila para Electron (para pnpm run dev)
+> ```
 
 ### 3. Configurar SQLite
 SQLite viene integrado con el proyecto, solo asegurate de que el archivo `dev.sqlite3` se genere en la carpeta `prisma/`.
@@ -172,41 +203,48 @@ pnpm run lint             # Ejecutar linter
 ```
 POS-VENTA-SIS/
 ├── src/
-│   ├── common/           # Tipos y esquemas compartidos (Zod)
-│   │   ├── types.ts      # Interfaces TypeScript
-│   │   └── schemas.ts    # Esquemas de validación Zod
-│   ├── main/             # Proceso principal de Electron
-│   │   ├── index.ts      # Punto de entrada
-│   │   ├── ipc.ts        # Manejadores IPC
-│   │   ├── services/     # Lógica de negocio
-│   │   ├── repositories/ # Capa de acceso a datos (Prisma)
-│   │   └── prisma/       # Cliente Prisma
-│   ├── preload/          # Scripts de precarga de Electron
-│   └── pages/           # Frontend React (Páginas)
-│       ├── Dashboard.tsx
-│       ├── Sales.tsx
-│       ├── SalesHistory.tsx
-│       ├── Products.tsx
-│       ├── Categories.tsx
-│       ├── Clients.tsx
-│       ├── Cash.tsx
-│       ├── CashHistory.tsx
-│       ├── InventoryMovements.tsx
-│       ├── Users.tsx
-│       └── Settings.tsx
+│   ├── backend/            # Proceso principal de Electron
+│   │   ├── index.ts        # Punto de entrada
+│   │   ├── ipc.ts          # Manejadores IPC (~85 canales)
+│   │   ├── auth/           # Sesión, autorización por rol, rate limiting
+│   │   ├── di/             # Inyección de dependencias manual (container/registry)
+│   │   ├── services/       # Lógica de negocio (17 servicios)
+│   │   └── utils/          # ipcWrapper, migrationRunner, pathValidation
+│   ├── domain/             # Capa de dominio (arquitectura hexagonal)
+│   │   ├── models.ts       # Entidades de dominio
+│   │   ├── dtos.ts         # DTOs de entrada/salida
+│   │   └── ports/          # Interfaces de repositorios y generadores
+│   ├── infrastructure/     # Implementaciones concretas
+│   │   ├── persistence/    # Repositorios Prisma
+│   │   ├── backup/         # ElectronBackupService
+│   │   └── reports/        # PDFReportGenerator, ExcelReportGenerator
+│   ├── frontend/           # Renderer (React)
+│   │   ├── pages/          # 17 páginas (Dashboard, POS, Contabilidad, etc.)
+│   │   ├── components/     # Componentes UI reutilizables
+│   │   ├── preload/        # contextBridge → window.api
+│   │   ├── store/          # Stores Zustand
+│   │   ├── hooks/          # Custom hooks
+│   │   └── lib/            # Utilidades (currency, formateo)
+│   ├── shared/             # Errores de dominio, helpers, logger, schemas Zod
+│   └── env.d.ts            # Tipado de window.api
 ├── prisma/
-│   ├── schema.prisma     # Esquema de base de datos
-│   ├── migrations/       # Migraciones
-│   └── seed.ts           # Datos de prueba
+│   ├── schema.prisma       # Modelo de datos (16 modelos)
+│   ├── schema.sql          # DDL para primera ejecución en producción
+│   ├── migrations/         # Migraciones
+│   └── seed*.ts            # Datos de prueba (productos, compras)
+├── scripts/                # generate-schema, rebuild-electron
+├── reports/                # Reportes automáticos diarios/semanales (PDF)
+├── backups/                # Respaldos comprimidos de la BD
 └── package.json
 ```
 
 ### Patrón de Diseño
-**Arquitectura en Capas:**
-1. **Capa IPC** (`ipc.ts`) - Comunicación Electron
-2. **Capa de Servicios** (`services/`) - Lógica de negocio y validación
-3. **Capa de Repositorios** (`repositories/`) - Acceso a datos con Prisma
-4. **Capa Común** (`common/`) - Tipos y esquemas compartidos
+**Arquitectura Hexagonal (Puertos-Adaptadores):**
+1. **Capa IPC** (`backend/ipc.ts`) - Comunicación Electron con validación Zod y control de roles
+2. **Capa de Servicios** (`backend/services/`) - Lógica de negocio
+3. **Capa de Dominio** (`domain/ports/`) - Interfaces (puertos) que definen qué necesita la app
+4. **Capa de Infraestructura** (`infrastructure/persistence/`) - Adaptadores Prisma que implementan los puertos
+5. **Capa Compartida** (`shared/`) - Errores tipados, helpers y esquemas
 
 ---
 
@@ -305,6 +343,44 @@ ipcRenderer.invoke('users:delete', id, deletedBy)
 ipcRenderer.invoke('users:changePassword', userId, newPassword, changedBy)
 ```
 
+### Suppliers
+```javascript
+ipcRenderer.invoke('suppliers:getAll', search)
+ipcRenderer.invoke('suppliers:getById', id)
+ipcRenderer.invoke('suppliers:create', data, userId)
+ipcRenderer.invoke('suppliers:update', id, data, userId)
+ipcRenderer.invoke('suppliers:delete', id, userId)
+// Cuentas por pagar
+ipcRenderer.invoke('suppliers:getAccountsPayable')
+ipcRenderer.invoke('suppliers:getDebt', supplierId)
+ipcRenderer.invoke('suppliers:getPayments', supplierId)
+ipcRenderer.invoke('suppliers:pay', supplierId, amount, note)
+```
+
+### Purchases
+```javascript
+ipcRenderer.invoke('purchases:getAll', supplierId, status)
+ipcRenderer.invoke('purchases:getById', id)
+ipcRenderer.invoke('purchases:create', data, userId)
+ipcRenderer.invoke('purchases:receive', purchaseId, userId)
+ipcRenderer.invoke('purchases:cancel', purchaseId, userId)
+ipcRenderer.invoke('purchases:updatePaymentStatus', purchaseId, paymentStatus)
+```
+
+### Accounting (Contabilidad)
+```javascript
+ipcRenderer.invoke('accounting:getSummary')  // saldo, deudas y proyección de ganancias
+```
+
+### Reports (Documentos PDF/Excel)
+```javascript
+ipcRenderer.invoke('reports:generate', request)
+ipcRenderer.invoke('reports:generateReceipt', saleId)              // ticket de venta
+ipcRenderer.invoke('reports:generateCashClose', registerId)        // cierre de caja
+ipcRenderer.invoke('reports:generatePurchaseInvoice', purchaseId)  // factura de compra
+ipcRenderer.invoke('reports:generatePaymentReceipt', paymentIds)   // recibo de pago a proveedor
+```
+
 ### Inventory Movements
 ```javascript
 ipcRenderer.invoke('movements:getAll')
@@ -318,13 +394,18 @@ ipcRenderer.invoke('movements:getAll')
 - **users** - Usuarios del sistema
 - **clients** - Clientes
 - **categories** - Categorías de productos
-- **products** - Productos
+- **products** - Productos (con `supplier_id` para asociación a proveedor)
 - **cash_registers** - Cajas registradoras
 - **sales** - Ventas
-- **sale_items** - Detalle de ventas
+- **sale_items** - Detalle de ventas (con datos de descuentos)
 - **inventory_movements** - Movimientos de inventario
+- **suppliers** - Proveedores
+- **purchases** - Compras (`total_amount`, `paid_amount`, `status`, `payment_status`)
+- **purchase_items** - Detalle de compras
+- **supplier_payments** - Pagos a proveedores (historial de cuentas por pagar)
+- **discounts / product_discounts** - Descuentos y su asociación con productos
 - **audit_logs** - Registro de auditoría
-- **settings** - Configuraciones del sistema
+- **settings** - Configuraciones del sistema (incluye tasa de cambio `exchange_rate_usd_ves`)
 
 ### Optimizaciones
 - ✅ Índices en columnas de búsqueda frecuente
@@ -335,46 +416,30 @@ ipcRenderer.invoke('movements:getAll')
 
 ---
 
-## 🚀 Próximas Mejoras (Roadmap)
+## 🎯 Roadmap
 
-### 1. **Módulo de Proveedores y Compras (Crítico)**
-   - Crear tabla `suppliers` (Proveedores)
-   - Crear tabla `purchases` (Compras/Órdenes)
-   - Al recibir compra, incrementar stock automáticamente
-   - Generar movimiento de inventario tipo `COMPRA`
-   - Cálculo de costo de mercancía vendida
+### ✅ Completado
+- ~~Módulo de Proveedores y Compras~~ (CRUD completo + recepción con incremento de stock)
+- ~~Cuentas por pagar~~ (pagos FIFO, validación de saldo, historial)
+- ~~Módulo de Contabilidad~~ (saldo, deudas, proyección de ganancias, referencia en Bs.)
+- ~~Exportación de Reportes~~ (PDF/Excel: ventas, inventario, cierres, facturas de compra, recibos de pago)
+- ~~Gestión de Impuestos~~ (IVA/IGV configurable con desglose en tickets)
+- ~~Respaldo de Seguridad~~ (manual + automático diario, restauración)
+- ~~Descuentos~~ (por producto/categoría/monto mínimo)
 
-### 2. **Exportación de Reportes**
-   - Botón para exportar Dashboard a PDF
-   - Reporte contable de cierre de caja en PDF
-   - Exportar historial de ventas a Excel/PDF
-   - Tickets personalizables para impresoras térmicas
-
-### 3. **Gestión de Impuestos (Fiscal)**
-   - Agregar campos de `tax_rate` en Settings
-   - Modificar ventas para desglosar: `subtotal`, `tax_amount`, `total`
-   - Mostrar desglose de impuestos en tickets
-
-### 4. **Módulo de Auditoría Visual (Admin)**
-   - Crear página `/audit-logs` (Solo Admin)
-   - Mostrar tabla: Usuario, Acción, Entidad, Fecha
+### Pendiente
+1. **Módulo de Cuentas por Cobrar**
+   - Ventas a crédito a clientes
+   - Registro de abonos y saldos por cliente
+2. **Módulo de Auditoría Visual (Admin)**
+   - Página `/audit-logs` con tabla de Usuario, Acción, Entidad, Fecha
    - Filtros por usuario y rango de fechas
-
-### 5. **Respaldo de Seguridad (Backup)**
-   - Botón en Ajustes para "Descargar Copia de Seguridad"
-   - Botón para "Restaurar Copia" (importar .sqlite3)
-   - Respaldo automático al iniciar el día o al cerrar caja
-
-### 6. **Frontend (UX)**
-   - Implementar validación Zod en todos los formularios
-   - Mejorar estados de carga y feedback visual
+3. **Frontend (UX)**
+   - Implementar validación Zod en todos los formularios del renderer
    - Optimizar diseño responsive para tablets
-   - Notificaciones push para alertas de stock
-
-### 7. **Backend (Performance)**
-   - Implementar caché para métricas de dashboard
-   - Agregar pagination en listas grandes
-   - Optimizar consultas con Prisma (select explícito ya implementado)
+   - Notificaciones para alertas de stock
+4. **Backend (Performance)**
+   - Agregar paginación server-side en listas grandes
    - Soporte para múltiples cajas simultáneas
 
 ---
@@ -387,12 +452,13 @@ El proyecto ha superado la fase de "Prototipo" y se encuentra en **Desarrollo Av
 
 | Área | Estado |
 |------|--------|
-| **Base Técnica** | ✅ Sólida (Electron, React, Prisma, SQLite) |
+| **Base Técnica** | ✅ Sólida (Electron, React 19, Prisma 7, SQLite) |
 | **UI/UX** | ✅ Moderna (MUI, Framer Motion, Skeletons) |
 | **Seguridad** | ✅ Roles (Admin/Vendedor), Auditoría, Rate Limiting, Validación de contraseñas |
-| **Ventas** | ✅ Funcional (POS, Historial, Caja) |
-| **Inventario** | ⚠️ Básico (Falta gestión de proveedores) |
-| **Reportes** | ⚠️ En progreso (Falta exportación PDF) |
+| **Ventas** | ✅ Funcional (POS, Historial, Caja, Impuestos, Descuentos) |
+| **Inventario** | ✅ Completo (Productos, Categorías, Proveedores, Compras) |
+| **Finanzas** | ✅ Cuentas por pagar + Contabilidad + Facturación de compras |
+| **Reportes** | ✅ PDF/Excel + automáticos programados |
 
 ---
 

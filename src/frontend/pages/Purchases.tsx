@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ShoppingBag, RefreshCw, X, PlusCircle, Truck, CheckCircle, XCircle, Clock, Search, DollarSign } from 'lucide-react';
+import { ShoppingBag, RefreshCw, X, PlusCircle, CheckCircle, XCircle, Clock, Search, DollarSign, Printer } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '../hooks/useToast.ts';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog.tsx';
@@ -111,14 +111,15 @@ export default function Purchases() {
       if (result.success) {
         success(`Producto creado${quickProduct.supplier_id ? ' y asociado al proveedor' : ''}`);
         setIsCreateProductModalOpen(false);
-        
+
         // Refresh products list
         const updatedProducts = await window.api.getAllProducts();
         setProducts(updatedProducts || []);
-        
+
         // Auto-select the new product in the form
-        if (creatingForIndex >= 0) {
-          updateItem(creatingForIndex, 'product_id', result.id);
+        const createdId = (result as any).data?.id ?? (result as any).id;
+        if (creatingForIndex >= 0 && createdId) {
+          updateItem(creatingForIndex, 'product_id', createdId);
           updateItem(creatingForIndex, 'unit_cost', quickProduct.price_purchase);
           setProductSearch(prev => ({
             ...prev,
@@ -188,7 +189,7 @@ export default function Purchases() {
 
   const handleOpenCreateModal = () => {
     setSelectedPurchase(null);
-    setFormData({ supplier_id: '', items: [] });
+    setFormData({ supplier_id: '', payment_status: 'UNPAID', items: [] });
     setIsModalOpen(true);
   };
 
@@ -318,6 +319,20 @@ export default function Purchases() {
     });
   };
 
+  const handlePrintInvoice = async (purchaseId: number) => {
+    try {
+      const result = await window.api.generatePurchaseInvoice(purchaseId);
+      if (result.success && result.path) {
+        success(`Factura guardada en: ${result.path}`);
+      } else if (!result.success && result.message !== 'Cancelado por el usuario') {
+        toastError(result.message || 'Error al generar la factura');
+      }
+    } catch (err) {
+      console.error(err);
+      toastError('Error de comunicación');
+    }
+  };
+
   const handleCancelPurchase = (id: number) => {
     setConfirmConfig({
       isOpen: true,
@@ -401,6 +416,9 @@ export default function Purchases() {
             <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
               <button onClick={() => handleOpenDetails(p)} className="p-2 text-blue-400 hover:bg-blue-400/10 rounded-lg" title="Ver detalles">
                 <ShoppingBag className="w-4 h-4" />
+              </button>
+              <button onClick={() => handlePrintInvoice(p.id)} className="p-2 text-primary hover:bg-primary/10 rounded-lg" title="Imprimir factura de compra">
+                <Printer className="w-4 h-4" />
               </button>
               {p.status === 'PENDING' && (
                 <>
@@ -533,6 +551,13 @@ export default function Purchases() {
                   </div>
 
                   <div className="mt-6 flex space-x-3">
+                    <button
+                      onClick={() => handlePrintInvoice(selectedPurchase.id)}
+                      className="flex-1 py-3 bg-[#2e303a] hover:bg-[#3e404a] text-white font-bold rounded-xl transition-all"
+                    >
+                      <Printer className="w-5 h-5 inline mr-2" />
+                      Imprimir Factura
+                    </button>
                     <button
                       onClick={async () => {
                         const newStatus = selectedPurchase.payment_status === 'PAID' ? 'UNPAID' : 'PAID';

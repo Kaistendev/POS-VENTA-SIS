@@ -114,4 +114,24 @@ export class PrismaProductRepository implements IProductRepository {
       orderBy: { created_at: 'desc' },
       take: limit,
     });
-  }}
+  }
+
+  async getInventoryValuation(): Promise<{ units_in_stock: number; cost_value: number; potential_revenue: number }> {
+    const products = await this.prisma.product.findMany({
+      select: { stock: true, price_purchase: true, price_sale: true },
+    });
+
+    const round = (n: number) => Math.round(n * 100) / 100;
+    let units = 0;
+    let costValue = 0;
+    let revenue = 0;
+    for (const p of products) {
+      if (p.stock <= 0) continue;
+      units += p.stock;
+      costValue += p.stock * p.price_purchase;
+      revenue += p.stock * p.price_sale;
+    }
+
+    return { units_in_stock: units, cost_value: round(costValue), potential_revenue: round(revenue) };
+  }
+}

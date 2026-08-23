@@ -60,6 +60,33 @@ export class PrismaPurchaseRepository implements IPurchaseRepository {
     }) as unknown as Purchase;
   }
 
+  async createReceivedWithoutStock(data: CreatePurchaseDTO): Promise<Purchase> {
+    const totalAmount = data.items.reduce(
+      (sum, item) => sum + item.quantity * item.unit_cost, 0,
+    );
+
+    return this.prisma.purchase.create({
+      data: {
+        supplier_id: data.supplier_id,
+        total_amount: totalAmount,
+        paid_amount: 0,
+        status: 'RECEIVED',
+        payment_status: 'UNPAID',
+        items: {
+          create: data.items.map((item) => ({
+            product_id: item.product_id,
+            quantity: item.quantity,
+            unit_cost: item.unit_cost,
+          })),
+        },
+      },
+      include: {
+        supplier: true,
+        items: { include: { product: true } },
+      },
+    }) as unknown as Purchase;
+  }
+
   async receive(purchaseId: number): Promise<void> {
     const purchase = await this.prisma.purchase.findUnique({
       where: { id: purchaseId },

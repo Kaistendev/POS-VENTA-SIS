@@ -1,11 +1,13 @@
 import { IReportGenerator } from '../../domain/ports/IReportGenerator.js';
-import { ReportRequestDTO, SaleReportRow, InventoryReportRow, SalesStatsDTO, SaleReceiptDTO, SaleReceiptItemDTO, CashCloseDTO } from '../../domain/dtos.js';
+import { ReportRequestDTO, SaleReportRow, InventoryReportRow, SalesStatsDTO, SaleReceiptDTO, SaleReceiptItemDTO, CashCloseDTO, PurchaseInvoiceDTO, PaymentReceiptDTO } from '../../domain/dtos.js';
 import { InventoryMetrics } from '../../domain/models.js';
 import { DashboardService } from './DashboardService.js';
 import { SaleService } from './SaleService.js';
 import { ProductService } from './ProductService.js';
 import { CashRegisterService } from './CashRegisterService.js';
 import { SettingsService } from './SettingsService.js';
+import { PurchaseService } from './PurchaseService.js';
+import { SupplierService } from './SupplierService.js';
 import { ValidationError } from '../../shared/errors.js';
 
 export class ReportService {
@@ -17,6 +19,8 @@ export class ReportService {
     private productService: ProductService,
     private cashRegisterService: CashRegisterService,
     private settingsService: SettingsService,
+    private purchaseService?: PurchaseService,
+    private supplierService?: SupplierService,
   ) {}
 
   async generateReport(request: ReportRequestDTO): Promise<Uint8Array> {
@@ -40,7 +44,58 @@ export class ReportService {
         return this.generateSaleReceipt(request);
       case 'cash_close':
         return this.generateCashCloseReport(generator, request, title);
+      case 'purchase_invoice':
+        return this.generatePurchaseInvoice(request);
+      case 'payment_receipt':
+        return this.generatePaymentReceipt(request);
     }
+  }
+
+  private async generatePurchaseInvoice(request: ReportRequestDTO): Promise<Uint8Array> {
+    if (!this.purchaseService) throw new ValidationError('Servicio de compras no disponible');
+    if (!request.purchaseId) throw new ValidationError('Se requiere purchaseId para generar la factura de compra');
+
+    const data = await this.purchaseService.getPurchaseInvoiceData(request.purchaseId);
+    const settings = await this.settingsService.getSettings();
+    const invoiceData: PurchaseInvoiceDTO = {
+      ...data,
+      businessName: settings.business_name || 'INVENTARIO-POS',
+      businessAddress: settings.business_address || undefined,
+      businessPhone: settings.business_phone || undefined,
+      businessTaxId: settings.business_tax_id || undefined,
+    };
+
+    return this.pdfGenerator.generatePurchaseInvoice(invoiceData);
+  }
+
+  private async generatePaymentReceipt(request: ReportRequestDTO): Promise<Uint8Array> {
+    if (!this.supplierService) throw new ValidationError('Servicio de proveedores no disponible');
+    if (!request.paymentIds?.length) throw new ValidationError('Se requieren paymentIds para generar el recibo de pago');
+
+    const payments = await this.supplierService.getPaymentsByIds(request.paymentIds);
+    if (payments.length === 0) throw new ValidationError('No se encontraron los pagos indicados');
+
+    const settings = await this.settingsService.getSettings();
+    const first = payments[0] as any;
+    const remainingDebt = await this.supplierService.getSupplierRemainingDebt(first.supplier_id);
+
+    const receiptData: PaymentReceiptDTO = {
+      businessName: settings.business_name || 'INVENTARIO-POS',
+      supplierName: first.supplier?.name ?? `Proveedor #${first.supplier_id}`,
+      supplierRuc: first.supplier?.ruc ?? null,
+      date: new Date(),
+      allocations: payments.map((p: any) => ({
+        paymentId: p.id,
+        purchaseId: p.purchase_id ?? 0,
+        purchaseDate: p.purchase?.created_at ?? p.created_at,
+        amount: Number(p.amount),
+        note: p.note,
+      })),
+      totalPaid: payments.reduce((sum: number, p: any) => sum + Number(p.amount), 0),
+      remainingDebt,
+    };
+
+    return this.pdfGenerator.generatePaymentReceipt(receiptData);
   }
 
   private async generateSalesReport(generator: IReportGenerator, request: ReportRequestDTO, title: string, showTable = true): Promise<Uint8Array> {
@@ -236,6 +291,8 @@ export class ReportService {
       top_products: 'Productos Más Vendidos',
       sale_receipt: 'Comprobante de Venta',
       cash_close: 'Reporte de Cierre de Caja',
+      purchase_invoice: 'Factura de Compra',
+      payment_receipt: 'Recibo de Pago a Proveedor',
     };
     return titles[type] ?? 'Reporte';
   }

@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, ShoppingCart, Package, Users, Wallet, Tags, LogOut, History, Settings as SettingsIcon, ChevronLeft, ChevronRight, Shield, RotateCcw, FolderOutput, Truck, ShoppingBag, FileText, Percent } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, Package, Users, Wallet, Tags, LogOut, History, Settings as SettingsIcon, ChevronLeft, ChevronRight, Shield, RotateCcw, FolderOutput, Truck, ShoppingBag, FileText, Percent, Calculator } from 'lucide-react';
 import { cn } from '../../lib/utils.ts';
 import { useAuthStore, useUIStore } from '../../store/useStore.ts';
 import { useEffect } from 'react';
@@ -43,6 +43,7 @@ export default function Sidebar() {
     ...(isAdmin ? [{ name: 'Cierres', path: '/cash-history', icon: FolderOutput }] : []),
     ...(isAdmin ? [{ name: 'Descuentos', path: '/discounts', icon: Percent }] : []),
     ...(isAdmin ? [{ name: 'Reportes', path: '/reports', icon: FileText }] : []),
+    ...(isAdmin ? [{ name: 'Contabilidad', path: '/accounting', icon: Calculator }] : []),
     { name: 'Ajustes', path: '/settings', icon: SettingsIcon },
   ];
 

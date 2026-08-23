@@ -66,6 +66,49 @@ export interface Supplier {
 export interface SupplierWithRelations extends Supplier {
   products?: Pick<Product, 'id' | 'name' | 'sku' | 'stock'>[];
   purchases?: Purchase[];
+  payments?: SupplierPayment[];
+}
+
+// ─── SupplierPayment ───
+export interface SupplierPayment {
+  id: number;
+  supplier_id: number;
+  purchase_id: number | null;
+  amount: number;
+  note: string | null;
+  created_by: number | null;
+  created_at: Date;
+  updated_at: Date;
+}
+
+// ─── Accounts Payable ───
+export interface SupplierAccountPayable {
+  supplier_id: number;
+  name: string;
+  ruc: string | null;
+  total_owed: number;
+  unpaid_purchases: number;
+}
+
+export interface CashPosition {
+  total_inflow: number;
+  paid_to_suppliers: number;
+  available: number;
+}
+
+// ─── Contabilidad ───
+export interface InventoryProjection {
+  units_in_stock: number;
+  inventory_cost_value: number;
+  potential_revenue: number;
+  projected_gross_profit: number;
+}
+
+export interface AccountingSummary {
+  cashPosition: CashPosition;
+  total_debt: number;
+  payables: SupplierAccountPayable[];
+  projection: InventoryProjection;
 }
 
 // ─── User ───
@@ -181,12 +224,14 @@ export interface Purchase {
   id: number;
   supplier_id: number;
   total_amount: number;
+  paid_amount: number;
   status: string;
   payment_status: string;
   created_at: Date;
   updated_at: Date;
   supplier?: Pick<Supplier, 'id' | 'name' | 'ruc'> | null;
   items?: PurchaseItemWithProduct[];
+  payments?: SupplierPayment[];
 }
 
 // ─── PurchaseItem ───

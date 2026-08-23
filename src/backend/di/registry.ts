@@ -18,6 +18,7 @@ export interface AppContainer {
   reportService: any;
   schedulerService: any;
   discountService: any;
+  accountingService: any;
   cacheService: any;
 }
 

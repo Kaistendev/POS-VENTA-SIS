@@ -22,10 +22,11 @@ interface Window {
       | { success: true; user: import('./domain/models').User }
       | { success: false; error: string; message?: string }
     >;
+    checkSession: () => Promise<{ authenticated: boolean; user?: import('./domain/models').User }>;
 
     // Settings
     getSettings: () => Promise<Record<string, string>>;
-    updateSettings: (settings: Record<string, string>) => Promise<{ success: boolean }>;
+    updateSettings: (settings: Record<string, string>) => Promise<{ success: boolean; message?: string }>;
 
     // Dashboard
     getDashboardStats: (startDate?: Date, endDate?: Date) => Promise<import('./domain/models').DashboardStats>;
@@ -69,9 +70,9 @@ interface Window {
     getLowStockProducts: () => Promise<import('./domain/models').ProductWithRelations[]>;
     createProduct: (productData: import('./domain/dtos').CreateProductDTO, userId?: number) => Promise<IpcResponse<{ id: number }>>;
     updateProduct: (id: number, productData: import('./domain/dtos').UpdateProductDTO, userId?: number) => Promise<IpcResponse<{ product: import('./domain/models').ProductWithRelations }>>;
-    deleteProduct: (id: number, userId?: number) => Promise<{ success: boolean }>;
-    addProductStock: (productId: number, quantity: number, userId?: number, reason?: string) => Promise<{ success: boolean }>;
-    removeProductStock: (productId: number, quantity: number, userId?: number, reason?: string) => Promise<{ success: boolean }>;
+    deleteProduct: (id: number, userId?: number) => Promise<{ success: boolean; message?: string }>;
+    addProductStock: (productId: number, quantity: number, userId?: number, reason?: string) => Promise<{ success: boolean; debt_created?: boolean; debt_amount?: number; message?: string }>;
+    removeProductStock: (productId: number, quantity: number, userId?: number, reason?: string) => Promise<{ success: boolean; message?: string }>;
     getProductMovements: (productId: number, limit?: number) => Promise<import('./domain/models').InventoryMovement[]>;
 
     // Categories
@@ -103,14 +104,23 @@ interface Window {
     getSupplierById: (id: number) => Promise<import('./domain/models').SupplierWithRelations>;
     createSupplier: (data: import('./domain/dtos').CreateSupplierDTO, userId?: number) => Promise<{ success: true; supplier: import('./domain/models').Supplier } | { success: false; message: string }>;
     updateSupplier: (id: number, data: import('./domain/dtos').UpdateSupplierDTO, userId?: number) => Promise<{ success: true; supplier: import('./domain/models').Supplier } | { success: false; message: string }>;
-    deleteSupplier: (id: number, userId?: number) => Promise<{ success: boolean }>;
+    deleteSupplier: (id: number, userId?: number) => Promise<{ success: boolean; message?: string }>;
+    getAccountsPayable: () => Promise<{ payables: import('./domain/models').SupplierAccountPayable[]; cashPosition: import('./domain/models').CashPosition }>;
+    getSupplierDebt: (supplierId: number) => Promise<{
+      supplier: import('./domain/models').Supplier;
+      purchases: { id: number; total_amount: number; paid_amount: number; remaining: number; created_at: Date }[];
+      total_owed: number;
+      cashPosition: import('./domain/models').CashPosition;
+    } | null>;
+    getSupplierPayments: (supplierId: number) => Promise<(import('./domain/models').SupplierPayment & { purchase?: { id: number; total_amount: number } | null })[]>;
+    paySupplier: (supplierId: number, amount: number, note?: string) => Promise<IpcResponse<{ paid: number; remaining_debt: number; payment_ids?: number[] }>>;
 
     // Purchases
     getAllPurchases: (supplierId?: number, status?: string) => Promise<import('./domain/models').Purchase[]>;
     getPurchaseById: (id: number) => Promise<import('./domain/models').Purchase>;
-    createPurchase: (data: import('./domain/dtos').CreatePurchaseDTO, userId?: number) => Promise<{ success: true; purchase: import('./domain/models').Purchase } | { success: false; message: string }>;
-    receivePurchase: (purchaseId: number, userId?: number) => Promise<{ success: boolean }>;
-    cancelPurchase: (purchaseId: number, userId?: number) => Promise<{ success: boolean }>;
+    createPurchase: (data: import('./domain/dtos').CreatePurchaseDTO, userId?: number) => Promise<IpcResponse<{ id: number }> & { id?: number; message?: string }>;
+    receivePurchase: (purchaseId: number, userId?: number) => Promise<{ success: boolean; message?: string }>;
+    cancelPurchase: (purchaseId: number, userId?: number) => Promise<{ success: boolean; message?: string }>;
     updatePurchasePaymentStatus: (purchaseId: number, paymentStatus: string) => Promise<{ success: boolean }>;
 
     // Inventory Movements
@@ -118,7 +128,10 @@ interface Window {
 
     // Tax Settings
     getTaxSettings: () => Promise<import('./domain/dtos').TaxSettingsDTO>;
-    updateTaxSettings: (taxRate: number, taxType: string, taxIncluded: boolean) => Promise<{ success: boolean }>;
+    updateTaxSettings: (taxRate: number, taxType: string, taxIncluded: boolean) => Promise<{ success: boolean; message?: string }>;
+
+    // Accounting (Contabilidad)
+    getAccountingSummary: () => Promise<import('./domain/models').AccountingSummary & IpcResponse>;
 
     // Backup & Restore
     createBackup: (label?: string) => Promise<import('./domain/models').BackupResult>;
@@ -141,6 +154,8 @@ interface Window {
     generateReport: (request: import('./domain/dtos').ReportRequestDTO) => Promise<{ success: boolean; path?: string; message?: string }>;
     generateReceipt: (saleId: number) => Promise<{ success: boolean; path?: string; message?: string }>;
     generateCashClose: (registerId: number) => Promise<{ success: boolean; path?: string; message?: string }>;
+    generatePurchaseInvoice: (purchaseId: number) => Promise<{ success: boolean; path?: string; message?: string }>;
+    generatePaymentReceipt: (paymentIds: number[]) => Promise<{ success: boolean; path?: string; message?: string }>;
 
     // Modal API
     modal: {

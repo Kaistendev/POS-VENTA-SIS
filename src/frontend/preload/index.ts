@@ -93,6 +93,12 @@ contextBridge.exposeInMainWorld('api', {
   updateSupplier: (id: number, data: any, userId?: number) => ipcRenderer.invoke('suppliers:update', id, data, userId),
   deleteSupplier: (id: number, userId?: number) => ipcRenderer.invoke('suppliers:delete', id, userId),
 
+  // Cuentas por pagar (proveedores)
+  getAccountsPayable: () => ipcRenderer.invoke('suppliers:getAccountsPayable'),
+  getSupplierDebt: (supplierId: number) => ipcRenderer.invoke('suppliers:getDebt', supplierId),
+  getSupplierPayments: (supplierId: number) => ipcRenderer.invoke('suppliers:getPayments', supplierId),
+  paySupplier: (supplierId: number, amount: number, note?: string) => ipcRenderer.invoke('suppliers:pay', supplierId, amount, note),
+
   // Purchases
   getAllPurchases: (supplierId?: number, status?: string) => ipcRenderer.invoke('purchases:getAll', supplierId, status),
   getPurchaseById: (id: number) => ipcRenderer.invoke('purchases:getById', id),
@@ -103,6 +109,9 @@ contextBridge.exposeInMainWorld('api', {
 
   // Inventory Movements
   getAllMovements: () => ipcRenderer.invoke('movements:getAll'),
+
+  // Contabilidad
+  getAccountingSummary: () => ipcRenderer.invoke('accounting:getSummary'),
 
   // Backup & Restore
   createBackup: (label?: string) => ipcRenderer.invoke('backup:create', label),
@@ -128,8 +137,12 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.invoke('reports:generate', request),
   generateReceipt: (saleId: number) => 
     ipcRenderer.invoke('reports:generateReceipt', saleId),
-  generateCashClose: (registerId: number) => 
+  generateCashClose: (registerId: number) =>
     ipcRenderer.invoke('reports:generateCashClose', registerId),
+  generatePurchaseInvoice: (purchaseId: number) =>
+    ipcRenderer.invoke('reports:generatePurchaseInvoice', purchaseId),
+  generatePaymentReceipt: (paymentIds: number[]) =>
+    ipcRenderer.invoke('reports:generatePaymentReceipt', paymentIds),
 
   // Window management (for focus fix)
   windowFocus: () => ipcRenderer.invoke('window:focus'),

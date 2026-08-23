@@ -34,6 +34,7 @@ import { CacheService } from '../services/CacheService.js';
 import { ReportService } from '../services/ReportService.js';
 import { SchedulerService } from '../services/SchedulerService.js';
 import { DiscountService } from '../services/DiscountService.js';
+import { AccountingService } from '../services/AccountingService.js';
 
 export function buildContainer(prisma: PrismaClient) {
   // --- Repositorios (adaptadores) ---
@@ -58,13 +59,13 @@ export function buildContainer(prisma: PrismaClient) {
 
   // --- Servicios de aplicación ---
   const dashboardService = new DashboardService(dashboardRepo, cacheService);
-  const productService = new ProductService(productRepo, categoryRepo, auditLogRepo);
+  const productService = new ProductService(productRepo, categoryRepo, auditLogRepo, purchaseRepo);
   const clientService = new ClientService(clientRepo, auditLogRepo);
   const cashRegisterService = new CashRegisterService(cashRegisterRepo, auditLogRepo);
   const settingsService = new SettingsService(settingsRepo);
   const userService = new UserService(userRepo, auditLogRepo);
   const authService = new AuthService(userRepo);
-  const supplierService = new SupplierService(supplierRepo, auditLogRepo);
+  const supplierService = new SupplierService(supplierRepo, auditLogRepo, cashRegisterRepo);
   const purchaseService = new PurchaseService(purchaseRepo, supplierRepo, productRepo, auditLogRepo);
   const discountService = new DiscountService(discountRepo);
   const saleService = new SaleService(
@@ -87,8 +88,11 @@ export function buildContainer(prisma: PrismaClient) {
     productService,
     cashRegisterService,
     settingsService,
+    purchaseService,
+    supplierService,
   );
   const schedulerService = new SchedulerService(reportService, backupService);
+  const accountingService = new AccountingService(productRepo, supplierRepo, cashRegisterRepo);
 
   return {
     prisma,
@@ -108,6 +112,7 @@ export function buildContainer(prisma: PrismaClient) {
     reportService,
     schedulerService,
     discountService,
+    accountingService,
     cacheService,
   };
 }
